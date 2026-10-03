@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<!-- data-build tiene que coincidir con VERSION en js/utils.js y con CACHE en sw.js.
+     Si no coinciden, el navegador puede estar sirviendo una mezcla de versiones. -->
+<html lang="es" data-build="1.0.1">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#F7F5F0">
+  <meta name="description" content="Planificador personal para un viaje a Japón: itinerario, Modo viaje, restaurantes cerca, gastos y más. Offline y sin dependencias.">
+  <title>Japón Travel</title>
+  <!-- El manifest lo enlaza app.js sólo en http/https: en file:// daría un error de CORS. -->
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Japón">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Saltar al contenido</a>
+
+  <main id="main" class="main" tabindex="-1">
+    <noscript><p style="padding:24px">Esta app necesita JavaScript.</p></noscript>
+  </main>
+
+  <!-- Botón (+): crear lo más habitual en dos toques -->
+  <button type="button" class="fab" data-act="quickAdd" aria-label="Añadir: gasto, actividad, restaurante, nota o reserva">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
+
+  <nav class="tabbar" aria-label="Secciones">
+    <a class="tabbar__item" href="#/" data-tab="home">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>
+      <span>Inicio</span>
+    </a>
+    <a class="tabbar__item" href="#/itinerary" data-tab="itinerary">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+      <span>Itinerario</span>
+    </a>
+    <a class="tabbar__item" href="#/map" data-tab="map">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>
+      <span>Mapa</span>
+    </a>
+    <a class="tabbar__item" href="#/food" data-tab="food">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M17 3c-2 0-3 2-3 6s1 4 3 4v8"/></svg>
+      <span>Comer</span>
+    </a>
+    <a class="tabbar__item" href="#/expenses" data-tab="expenses">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M16 15h2"/></svg>
+      <span>Gastos</span>
+    </a>
+    <a class="tabbar__item" href="#/more" data-tab="more">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+      <span>Más</span>
+    </a>
+  </nav>
+
+  <!-- Scripts clásicos (no módulos) para que funcione con doble clic en file://.
+       El orden importa: cada uno usa los anteriores. -->
+  <script src="js/utils.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/logic.js"></script>
+  <script src="js/services.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/views-common.js"></script>
+  <script src="js/views-trip.js"></script>
+  <script src="js/views-places.js"></script>
+  <script src="js/views-money.js"></script>
+  <script src="js/views-more.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

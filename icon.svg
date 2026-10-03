@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Japón Travel">
+  <rect width="512" height="512" rx="112" fill="#F7F5F0"/>
+  <!-- Margen amplio: en Android el icono maskable se recorta en círculo -->
+  <circle cx="256" cy="226" r="92" fill="#C8102E"/>
+  <!-- Torii -->
+  <g fill="#1C1C1E">
+    <rect x="132" y="300" width="248" height="22" rx="8"/>
+    <rect x="150" y="336" width="212" height="14" rx="6"/>
+    <rect x="178" y="314" width="20" height="96" rx="6"/>
+    <rect x="314" y="314" width="20" height="96" rx="6"/>
+  </g>
+</svg>
