@@ -10,7 +10,7 @@ JT.utils = (function () {
   'use strict';
 
   /* Tiene que coincidir con CACHE en sw.js y con data-build en index.html. */
-  const VERSION = '1.0.1';
+  const VERSION = '1.0.2';
 
   /* ── Texto y DOM ──────────────────────────────────────────── */
 

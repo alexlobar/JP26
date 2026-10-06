@@ -12,6 +12,7 @@ JT.services = (function () {
   'use strict';
 
   const U = JT.utils;
+  const D = JT.data;
   const S = JT.store;
 
   const RATES_KEY = 'japonTravel.rates';
@@ -45,30 +46,55 @@ JT.services = (function () {
      El último resultado se guarda con su fecha para usarlo offline.
      Los tipos manuales de Ajustes tienen prioridad. Nunca se inventan. */
 
+  /** perEur = unidades de cada moneda por 1 EUR (como las publica el BCE) → tabla en la base pedida. */
+  function tableFrom(perEur, base, date) {
+    const perUnit = {};
+    if (perEur[base] > 0) D.CURRENCIES.forEach((c) => { if (c !== base && perEur[c] > 0) perUnit[c] = perEur[base] / perEur[c]; });
+    return { base: base, perUnit: perUnit, date: date, source: 'api' };
+  }
+
   function cachedRates(base) {
-    try { const c = JSON.parse(lsGet(RATES_KEY) || 'null'); return c && c.table.base === base ? c : null; } catch (e) { return null; }
+    try {
+      const c = JSON.parse(lsGet(RATES_KEY) || 'null');
+      if (c && c.perEur) return { table: tableFrom(c.perEur, base, c.date), fetchedAt: c.fetchedAt };
+      return c && c.table && c.table.base === base ? c : null; // caché de la v1.0.1
+    } catch (e) { return null; }
   }
 
   async function fetchRates(base) {
-    const symbols = ['JPY', 'EUR', 'USD'].filter((c) => c !== base).join(',');
-    const j = await fetchJson('https://api.frankfurter.dev/v1/latest?base=' + base + '&symbols=' + symbols);
-    const perUnit = {};
-    Object.keys(j.rates || {}).forEach((c) => { if (j.rates[c] > 0) perUnit[c] = 1 / j.rates[c]; });
-    const c = { table: { base: base, perUnit: perUnit, date: j.date, source: 'api' }, fetchedAt: Date.now() };
-    lsSet(RATES_KEY, JSON.stringify(c));
-    return c;
+    // Siempre en base EUR: son las cifras exactas del BCE (p. ej. 1 EUR = 177,32 JPY), sin redondeos intermedios.
+    const j = await fetchJson('https://api.frankfurter.dev/v1/latest?base=EUR&symbols=JPY,USD');
+    const perEur = { EUR: 1 };
+    Object.keys(j.rates || {}).forEach((c) => { if (j.rates[c] > 0) perEur[c] = j.rates[c]; });
+    lsSet(RATES_KEY, JSON.stringify({ perEur: perEur, date: j.date, fetchedAt: Date.now() }));
+    return { table: tableFrom(perEur, base, j.date) };
   }
 
-  /** Tabla efectiva (API/caché + manuales) o null. */
+  /**
+   * Redondea al alza los yenes que vale cada moneda: 1 EUR = 177,32 ¥ → 178 ¥ ('up') o 179 ¥ ('up1').
+   * Sólo se aplica al tipo del BCE; los tipos manuales se usan tal cual.
+   */
+  function roundYen(perUnit, base, mode) {
+    if (mode === 'exact') return perUnit;
+    const up = (yen) => Math.ceil(yen - 1e-9) + (mode === 'up1' ? 1 : 0);
+    const out = Object.assign({}, perUnit);
+    if (base === 'JPY') Object.keys(out).forEach((c) => { out[c] = up(out[c]); });
+    else if (out.JPY) out.JPY = 1 / up(1 / out.JPY);
+    return out;
+  }
+
+  /** Tabla efectiva (API/caché redondeada + manuales) o null. `exact` guarda la del BCE sin redondear. */
   function rates() {
-    const s = S.get(), base = s.trip.mainCurrency;
+    const s = S.get(), base = s.trip.mainCurrency, mode = s.settings.yenRounding || 'up';
     const api = cachedRates(base);
     const manual = {};
     Object.keys(s.settings.manualRates || {}).forEach((c) => { const v = s.settings.manualRates[c]; if (c !== base && v > 0) manual[c] = v; });
     if (!api && !Object.keys(manual).length) return null;
     return {
       base: base,
-      perUnit: Object.assign({}, api ? api.table.perUnit : {}, manual),
+      perUnit: Object.assign({}, api ? roundYen(api.table.perUnit, base, mode) : {}, manual),
+      exact: api ? api.table.perUnit : undefined,
+      rounding: api && mode !== 'exact' ? mode : undefined,
       date: api ? api.table.date : undefined,
       source: api ? (Object.keys(manual).length ? 'mixed' : 'api') : 'manual'
     };

@@ -28,13 +28,25 @@
   A.shareExpenses = async () => { const r = await SV.share(L.shareExpenses(SV.rates()), 'Gastos'); if (r === 'copied') UI.toast('Copiado'); };
   A.exportCsv = () => SV.download('gastos-japon.csv', L.expensesCsv(), 'text/csv');
 
+  /** «1 EUR = ¥178 (BCE 177,32)»: el yen siempre como yenes por unidad, que es como se lee en las casas de cambio. */
+  function rateText(c, main, rates) {
+    const yen = c === 'JPY' && main !== 'JPY';
+    const from = yen ? main : c, to = yen ? 'JPY' : main;
+    const v = U.convert(1, from, to, rates);
+    if (!v) return c + ': sin tipo';
+    const manual = (S.get().settings.manualRates || {})[c] > 0;
+    const ex = rates.rounding && to === 'JPY' && !manual ? U.convert(1, from, to, { base: rates.base, perUnit: rates.exact }) : null;
+    return '1 ' + from + ' = ' + U.money(v, to) + (ex && Math.abs(ex - v) > 0.005 ? ' (BCE ' + ex.toFixed(2).replace('.', ',') + ')' : '');
+  }
+
   function ratesInfo(list) {
     const s = S.get(), main = s.trip.mainCurrency, rates = SV.rates();
     const foreign = Array.from(new Set(list.map((e) => e.currency).filter((c) => c !== main)));
     if (!foreign.length) return '';
-    const line = foreign.map((c) => { const v = U.convert(1, c, main, rates); return v ? '1 ' + c + ' = ' + U.money(v, main) : c + ': sin tipo'; }).join(' · ');
+    const line = rates ? foreign.map((c) => rateText(c, main, rates)).join(' · ') : foreign.join(', ') + ': sin tipo';
     const msg = rates
-      ? (rates.source === 'manual' ? 'Tipo manual' : 'BCE vía Frankfurter' + (rates.date ? ', ' + rates.date : '')) + (rates.source === 'mixed' ? ' + manual' : '') + (SV.online() ? '' : ' · sin conexión (último guardado)')
+      ? (rates.source === 'manual' ? 'Tipo manual' : 'BCE vía Frankfurter' + (rates.date ? ', ' + rates.date : '')) + (rates.source === 'mixed' ? ' + manual' : '') +
+        (rates.rounding ? ' · yen redondeado al alza' + (rates.rounding === 'up1' ? ' +1' : '') : '') + (SV.online() ? '' : ' · sin conexión (último guardado)')
       : 'Conéctate para obtener el tipo de cambio o defínelo en Ajustes.';
     return UI.banner(rates ? 'neutral' : 'warn', 'swap', line, msg, { action: SV.online() ? UI.btn('Actualizar', { size: 'sm', variant: 'ghost', data: { act: 'refreshRates' } }) : '' });
   }

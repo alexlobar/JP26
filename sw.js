@@ -5,7 +5,7 @@
    Sube el número de CACHE al cambiar cualquier archivo; tiene
    que coincidir con VERSION en js/utils.js.
    ============================================================ */
-const CACHE = 'japon-travel-v1.0.1';
+const CACHE = 'japon-travel-v1.0.2';
 const RUNTIME = 'japon-travel-runtime';
 const MAX_RUNTIME = 400;
 

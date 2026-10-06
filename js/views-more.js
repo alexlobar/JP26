@@ -132,31 +132,98 @@
         : UI.empty('🚄', 'Sin trayectos', 'Apunta vuelos y trenes con hora, número y asiento.', UI.btn('Añadir trayecto', { data: { act: 'newTransport' } }))) };
   };
 
+  /* Escalas: cada una con aeropuerto/estación, llegada, salida y el nº del siguiente vuelo.
+     Las horas son locales de la escala, así que la espera (salida − llegada) es exacta. */
+  function stopBlock(st, i) {
+    const dt = (d, t) => (d && t ? d + 'T' + t : '');
+    return '<fieldset class="stop card stack-sm" data-stop>' +
+      '<div class="row row--between"><strong class="small">Escala <span data-stop-n>' + (i + 1) + '</span></strong>' +
+      '<button type="button" class="btn btn--ghost btn--sm" data-stop-del>' + U.icon('trash', 16) + '<span>Quitar</span></button></div>' +
+      UI.field('Aeropuerto o estación', UI.input('stop_place', st.place || '', { placeholder: 'Doha (DOH)' })) +
+      // Una debajo de otra: en el móvil, fecha + hora no caben en media fila.
+      UI.field('Llegas', UI.input('stop_arr', dt(st.arriveDate, st.arriveTime), { type: 'datetime-local' })) +
+      UI.field('Sales', UI.input('stop_dep', dt(st.departDate, st.departTime), { type: 'datetime-local' })) +
+      '<small class="muted" data-stop-wait></small>' +
+      UI.field('Nº del siguiente vuelo / tren', UI.input('stop_num', st.number || ''), { optional: true }) + '</fieldset>';
+  }
+
+  /** Lee las escalas del formulario (campos repetidos → listas alineadas). Devuelve { stops } o { error }. */
+  function readStops(f) {
+    const all = (k) => (f[k] === undefined ? [] : [].concat(f[k]));
+    const places = all('stop_place'), arr = all('stop_arr'), dep = all('stop_dep'), num = all('stop_num');
+    const stops = [];
+    for (let i = 0; i < places.length; i++) {
+      const place = places[i];
+      if (!place && !arr[i] && !dep[i]) continue;
+      if (!place) return { error: 'Indica el aeropuerto o estación de la escala ' + (i + 1) };
+      if (!arr[i] || !dep[i]) return { error: 'Indica cuándo llegas y cuándo sales de ' + place };
+      const a = arr[i].split('T'), d = dep[i].split('T');
+      const st = { place: place, arriveDate: a[0], arriveTime: a[1].slice(0, 5), departDate: d[0], departTime: d[1].slice(0, 5), number: num[i] || undefined };
+      if (L.stopWait(st) < 0) return { error: 'En ' + place + ' sales antes de llegar: revisa las fechas' };
+      stops.push(st);
+    }
+    return { stops: stops };
+  }
+
   F.transport = function (id) {
     const s = S.get(), ex = id ? s.transports[id] : null;
     const t = ex || { kind: 'shinkansen', date: s.trip.startDate, currency: 'JPY' };
     return formSheet({
       id: 'fTr', title: ex ? 'Editar trayecto' : 'Nuevo trayecto',
       body: UI.chips('kind', D.options(D.TRANSPORT), t.kind) +
-        '<div class="row row--top">' + UI.field('Origen', UI.input('origin', t.origin || '', { placeholder: 'Tokyo', autofocus: !ex })) + UI.field('Destino', UI.input('destination', t.destination || '', { placeholder: 'Kyoto' })) + '</div>' +
-        UI.field('Fecha', UI.input('date', t.date, { type: 'date' })) +
-        '<div class="row row--top">' + UI.field('Salida', UI.input('departTime', t.departTime || '', { type: 'time' }), { optional: true }) + UI.field('Llegada', UI.input('arriveTime', t.arriveTime || '', { type: 'time' }), { optional: true }) + '</div>' +
-        '<div class="row row--top">' + UI.field('Nº tren / vuelo', UI.input('number', t.number || ''), { optional: true }) + UI.field('Asiento', UI.input('seat', t.seat || ''), { optional: true }) + '</div>' +
+        '<div class="row row--top">' + UI.field('Origen', UI.input('origin', t.origin || '', { placeholder: 'Tokyo', autofocus: !ex })) + UI.field('Destino final', UI.input('destination', t.destination || '', { placeholder: 'Kyoto' })) + '</div>' +
+        '<div class="row row--top">' + UI.field('Fecha de salida', UI.input('date', t.date, { type: 'date' })) + UI.field('Fecha de llegada', UI.input('arriveDate', t.arriveDate || '', { type: 'date' }), { optional: true, hint: 'Sólo si llegas otro día.' }) + '</div>' +
+        '<div class="row row--top">' + UI.field('Salida', UI.input('departTime', t.departTime || '', { type: 'time' }), { optional: true }) + UI.field('Llegada final', UI.input('arriveTime', t.arriveTime || '', { type: 'time' }), { optional: true }) + '</div>' +
+        '<div class="row row--top">' + UI.field('Nº tren / vuelo', UI.input('number', t.number || ''), { optional: true, hint: 'El del primer tramo.' }) + UI.field('Asiento', UI.input('seat', t.seat || ''), { optional: true }) + '</div>' +
+        '<div class="stack-sm"><span class="field__label">Escalas / transbordos <em>· opcional</em></span><div class="stack-sm" data-stops>' + (t.stops || []).map(stopBlock).join('') + '</div>' +
+        '<button type="button" class="btn btn--secondary btn--sm" data-stop-add>' + U.icon('plus', 16) + '<span>Añadir escala</span></button>' +
+        '<small class="faint">Pon las horas locales de cada aeropuerto, como salen en la tarjeta de embarque: la app calcula cuánto esperas.</small></div>' +
         UI.details('Más detalles',
           UI.field('Reserva', UI.input('bookingCode', t.bookingCode || ''), { optional: true }) +
-          UI.field('Duración (min)', UI.input('durationMinutes', t.durationMinutes || '', { inputmode: 'numeric' }), { optional: true, hint: 'Si lo dejas vacío se calcula con salida y llegada.' }) +
+          UI.field('Duración total (min)', UI.input('durationMinutes', t.durationMinutes || '', { inputmode: 'numeric' }), { optional: true, hint: 'Trenes: si lo dejas vacío se calcula. Vuelos: escríbela tú (cada hora es local de su aeropuerto).' }) +
           '<div class="row row--top">' + UI.field('Coste', UI.input('cost', t.cost || '', { inputmode: 'decimal' }), { optional: true }) + UI.field('Moneda', UI.chips('currency', D.CURRENCIES.map((c) => ({ value: c, label: c })), t.currency || 'JPY')) + '</div>' +
           UI.field('Notas', UI.textarea('notes', t.notes), { optional: true }), !!ex),
       onDelete: ex ? async () => { if (!(await UI.confirm('¿Eliminar trayecto?'))) return false; S.remove('transports', ex.id); return true; } : null,
+      onMount: function (form) {
+        const box = form.querySelector('[data-stops]');
+        const refresh = function () {
+          box.querySelectorAll('[data-stop]').forEach(function (el, i) {
+            el.querySelector('[data-stop-n]').textContent = i + 1;
+            const a = el.querySelector('[name="stop_arr"]').value.split('T'), d = el.querySelector('[name="stop_dep"]').value.split('T');
+            const w = a[1] && d[1] ? L.stopWait({ arriveDate: a[0], arriveTime: a[1], departDate: d[0], departTime: d[1] }) : null;
+            el.querySelector('[data-stop-wait]').textContent = w === null ? '' : w < 0 ? '⚠️ Sales antes de llegar: revisa las fechas' : '⏳ Espera: ' + U.fmtDur(w);
+          });
+        };
+        form.querySelector('[data-stop-add]').addEventListener('click', function () {
+          box.insertAdjacentHTML('beforeend', stopBlock({}, box.children.length));
+          refresh();
+          box.lastElementChild.querySelector('input').focus();
+        });
+        box.addEventListener('click', function (ev) {
+          const del = ev.target.closest('[data-stop-del]');
+          if (del) { del.closest('[data-stop]').remove(); refresh(); }
+        });
+        box.addEventListener('input', refresh);
+        refresh();
+      },
       onSave: function (f) {
         if (!f.origin || !f.destination) return 'Indica origen y destino';
         if (!U.isISODate(f.date)) return 'Fecha no válida';
+        const arriveDate = f.arriveDate && f.arriveDate !== f.date ? f.arriveDate : undefined;
+        if (arriveDate && arriveDate < f.date) return 'La llegada no puede ser antes de la salida';
+        const st = readStops(f);
+        if (st.error) return st.error;
         const cost = f.cost ? U.parseAmount(f.cost) : undefined;
         if (cost === null) return 'Coste no válido';
         let dur = f.durationMinutes ? Number(f.durationMinutes) : undefined;
         if (dur !== undefined && !(dur > 0)) return 'Duración no válida';
-        if (!dur && f.departTime && f.arriveTime) dur = ((U.toMin(f.arriveTime) - U.toMin(f.departTime) + 1440) % 1440) || undefined;
-        const data = { kind: f.kind, origin: f.origin, destination: f.destination, date: f.date, departTime: f.departTime || undefined, arriveTime: f.arriveTime || undefined, durationMinutes: dur, number: f.number || undefined, seat: f.seat || undefined, bookingCode: f.bookingCode || undefined, cost: cost || undefined, currency: cost ? f.currency : undefined, notes: f.notes || undefined };
+        // Sólo se calcula sin husos horarios de por medio: en un vuelo cada hora es local de su aeropuerto.
+        if (!dur && f.kind !== 'flight' && f.departTime && f.arriveTime) {
+          dur = L.minutesBetween(f.date, f.departTime, arriveDate || f.date, f.arriveTime);
+          if (!arriveDate && dur < 0) dur += 1440;
+          dur = dur > 0 ? dur : undefined;
+        }
+        const data = { kind: f.kind, origin: f.origin, destination: f.destination, date: f.date, arriveDate: arriveDate, departTime: f.departTime || undefined, arriveTime: f.arriveTime || undefined, durationMinutes: dur, number: f.number || undefined, seat: f.seat || undefined, stops: st.stops.length ? st.stops : undefined, bookingCode: f.bookingCode || undefined, cost: cost || undefined, currency: cost ? f.currency : undefined, notes: f.notes || undefined };
         if (ex) S.update('transports', ex.id, data); else S.create('transports', data);
         UI.toast('Trayecto guardado');
       }
@@ -259,7 +326,7 @@
     const s = S.get(), list = Object.values(s.infoArticles).sort((a, b) => a.order - b.order), rates = SV.rates();
     const jpyEur = U.convert(1, 'JPY', 'EUR', rates);
     const conv = UI.card('<small class="eyebrow muted">💱 CONVERSOR JPY → EUR</small>' + (jpyEur
-      ? '<input class="input" inputmode="decimal" value="1000" data-input="convJpy" data-rate="' + jpyEur + '" aria-label="Yenes"><h2 class="title" id="convOut">' + U.money(1000, 'JPY') + ' ≈ ' + U.money(1000 * jpyEur, 'EUR') + '</h2><small class="faint">' + (rates.source === 'manual' ? 'Tipo manual' : 'BCE' + (rates.date ? ' · ' + rates.date : '')) + '</small>'
+      ? '<input class="input" inputmode="decimal" value="1000" data-input="convJpy" data-rate="' + jpyEur + '" aria-label="Yenes"><h2 class="title" id="convOut">' + U.money(1000, 'JPY') + ' ≈ ' + U.money(1000 * jpyEur, 'EUR') + '</h2><small class="faint">' + (rates.source === 'manual' ? 'Tipo manual' : 'BCE' + (rates.date ? ' · ' + rates.date : '') + (rates.rounding ? ' · yen redondeado al alza' : '')) + '</small>'
       : '<p class="muted">Sin tipo de cambio: conéctate una vez para descargarlo (se guarda para usarlo sin conexión) o defínelo en Ajustes.</p>'), { tone: 'muted', cls: 'stack-sm' });
     return { html: UI.header({ back: true, title: 'Información útil', actions: UI.iconBtn('plus', 'Nueva ficha', { act: 'newInfo' }) }) +
       UI.banner('neutral', 'info', 'Orientativo, no oficial', 'Verifica normativa y datos vigentes en fuentes oficiales (JNTO, embajada, aerolínea). Puedes editar cada ficha.') + conv +
@@ -486,6 +553,9 @@
       '<small class="muted">Automático usa Google Places si hay clave; si no, OpenStreetMap (gratis, sin clave, sin valoraciones). Mock genera datos inventados y etiquetados, sólo para desarrollo.</small>' +
       '<form id="fKey" class="stack">' + UI.field('Clave de Google Places API (New)', '<input class="input" name="key" type="password" autocomplete="off" placeholder="' + (SV.getPlacesKey() ? '•••••••• (guardada)' : 'AIza…') + '">', { optional: true, hint: 'Se guarda sólo en este navegador; no va en el código ni en las exportaciones. Restríngela en Google Cloud a tu dominio de GitHub Pages.' }) +
       '<div class="row">' + UI.btn('Guardar clave', { type: 'submit', size: 'sm' }) + (SV.getPlacesKey() ? UI.btn('Borrar clave', { size: 'sm', variant: 'danger', data: { act: 'delKey' } }) : '') + '</div></form>' +
+      '<hr><span class="field__label">Redondeo del yen</span>' +
+      UI.filterChips([{ value: 'up', label: 'Al alza' }, { value: 'up1', label: 'Al alza +1 ¥' }, { value: 'exact', label: 'Exacto' }], st.yenRounding, 'setYenRounding', { scroll: false }) +
+      '<small class="muted">' + esc(yenRoundingExample(rates, t.mainCurrency)) + ' Se aplica al tipo del BCE, no a los manuales.</small>' +
       '<hr><span class="field__label">Tipo de cambio manual (opcional)</span><small class="muted">Por defecto: tipo de referencia del BCE (Frankfurter, sin clave)' + (rates && rates.date ? ', último ' + rates.date : '') + '. Un valor manual tiene prioridad.</small>' +
       '<form id="fRates" class="stack">' + D.CURRENCIES.filter((c) => c !== t.mainCurrency).map((c) => UI.field('1 ' + c + ' = ? ' + t.mainCurrency, UI.input('rate_' + c, st.manualRates[c] || '', { inputmode: 'decimal', placeholder: 'Automático' }), { optional: true })).join('') +
       '<div class="row">' + UI.btn('Guardar tipos', { type: 'submit', size: 'sm', variant: 'secondary' }) + (SV.online() ? UI.btn('Actualizar BCE', { size: 'sm', variant: 'ghost', icon: 'refresh', data: { act: 'refreshRates' } }) : '') + '</div></form>', { cls: 'stack' }));
@@ -558,6 +628,16 @@
     };
   };
 
+  /** «Hoy: 1 EUR = 177,32 ¥ en el BCE → la app usa 178 ¥.» con el tipo guardado. */
+  function yenRoundingExample(rates, main) {
+    const other = main === 'JPY' ? 'EUR' : main;
+    const ex = rates && rates.exact ? U.convert(1, other, 'JPY', { base: rates.base, perUnit: rates.exact }) : null;
+    if (!ex) return 'Ejemplo: si el BCE da 1 EUR = 177,32 ¥, «Al alza» usa 178 ¥ y «+1» usa 179 ¥.';
+    const used = U.convert(1, other, 'JPY', rates);
+    return 'Hoy: 1 ' + other + ' = ' + ex.toFixed(2).replace('.', ',') + ' ¥ en el BCE → la app usa ' + U.money(used, 'JPY').replace('¥', '') + ' ¥.';
+  }
+
+  A.setYenRounding = (el) => S.setSettings({ yenRounding: el.dataset.value });
   A.setTheme = (el) => S.setSettings({ theme: el.dataset.value });
   A.setUnits = (el) => S.setSettings({ units: el.dataset.value });
   A.setTravel = (el) => S.setSettings({ travelMode: el.dataset.value });

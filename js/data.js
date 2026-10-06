@@ -134,7 +134,7 @@ JT.data = (function () {
 
   const DEFAULT_SETTINGS = {
     theme: 'system', units: 'km', notificationsEnabled: false, notifyLeadMinutes: 30, travelMode: 'auto',
-    placesProvider: 'auto', manualRates: {}, simulatedDate: '', simulatedTime: ''
+    placesProvider: 'auto', manualRates: {}, yenRounding: 'up', simulatedDate: '', simulatedTime: ''
   };
 
   /** Frases, información útil y checklists: no son "de ejemplo" y sobreviven al borrarlo. */
@@ -365,14 +365,15 @@ JT.data = (function () {
     act(14, '14:00', 'Vuelo de vuelta', 'transport', Object.assign({ reservationId: RV.flightBack, priority: 'high', location: loc('Aeropuerto de Narita', 35.772, 140.3929) }, m('train')));
 
     const tr = (kind, origin, destination, date, extra) => put('transports', 'tr', Object.assign({ kind: kind, origin: origin, destination: destination, date: date }, extra || {}));
-    tr('flight', 'Madrid', 'Tokyo Narita', U.addDays(START, -1), { departTime: '12:30', arriveTime: '09:00', durationMinutes: 870, number: 'EJ 123', bookingCode: 'EJ7Q2X', notes: 'Llega al día siguiente (+1). Vuelo ficticio.' });
+    tr('flight', 'Madrid', 'Tokyo Narita', U.addDays(START, -1), { arriveDate: START, departTime: '12:30', arriveTime: '09:00', durationMinutes: 870, number: 'EJ 123', bookingCode: 'EJ7Q2X', notes: 'Vuelo ficticio.' });
     tr('train', 'Narita', 'Shinjuku', date(0), { departTime: '10:15', arriveTime: '11:35', durationMinutes: 80, number: "N'EX", cost: 9750, currency: 'JPY' });
     tr('shinkansen', 'Tokyo', 'Kyoto', date(5), { departTime: '08:33', arriveTime: '10:45', durationMinutes: 132, number: 'Nozomi (ej.)', seat: 'Coche 7', bookingCode: 'EJ-JR-5521', cost: 14000, currency: 'JPY' });
     tr('train', 'Kyoto', 'Nara', date(9), { departTime: '09:00', arriveTime: '09:45', durationMinutes: 45, number: 'Kintetsu', cost: 760, currency: 'JPY' });
     tr('train', 'Nara', 'Osaka Namba', date(9), { departTime: '17:30', arriveTime: '18:10', durationMinutes: 40, cost: 680, currency: 'JPY' });
     tr('shinkansen', 'Shin-Osaka', 'Tokyo', date(12), { departTime: '10:00', arriveTime: '12:30', durationMinutes: 150, bookingCode: 'EJ-JR-8830', cost: 14500, currency: 'JPY' });
     tr('train', 'Ueno', 'Narita', date(14), { departTime: '10:30', arriveTime: '11:30', durationMinutes: 60, number: 'Skyliner', cost: 2580, currency: 'JPY' });
-    tr('flight', 'Tokyo Narita', 'Madrid', date(14), { departTime: '14:00', arriveTime: '20:30', durationMinutes: 870, number: 'EJ 124', bookingCode: 'EJ7Q2X' });
+    tr('flight', 'Tokyo Narita', 'Madrid', date(14), { arriveDate: U.addDays(date(14), 1), departTime: '14:00', arriveTime: '06:50', durationMinutes: 1490, number: 'EJ 124', bookingCode: 'EJ7Q2X', notes: 'Vuelo y escala ficticios.',
+      stops: [{ place: 'Doha (DOH)', arriveDate: date(14), arriveTime: '18:50', departDate: U.addDays(date(14), 1), departTime: '01:30', number: 'EJ 458' }] });
 
     const ex = (amount, currency, category, date, description, paidById, splitWithIds, extra) => put('expenses', 'e', Object.assign({ amount: amount, currency: currency, category: category, date: date, description: description, paidById: paidById, splitWithIds: splitWithIds }, extra || {}));
     ex(2550, 'EUR', 'flights', '2026-09-15', 'Vuelos ida y vuelta (3 personas)', carlos, all, { paymentMethod: 'card' });

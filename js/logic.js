@@ -205,7 +205,7 @@ JT.logic = (function () {
     Object.values(s.reservations).forEach((r) => push({ kind: 'reservation', id: r.id, title: r.name, emoji: D.RESERVATION[r.type][1], sub: [D.RESERVATION[r.type][0], U.fmtShort(r.date), r.time, r.confirmationCode].filter(Boolean).join(' · ') }, [r.name, r.location && r.location.name, r.location && r.location.address, r.notes, r.confirmationCode, city(r.cityId)]));
     Object.values(s.expenses).forEach((e) => push({ kind: 'expense', id: e.id, title: e.description || D.EXPENSE[e.category][0], emoji: D.EXPENSE[e.category][1], sub: U.money(e.amount, e.currency) + ' · ' + U.fmtShort(e.date) }, [e.description, e.placeName, e.notes, D.EXPENSE[e.category][0], city(e.cityId)]));
     Object.values(s.cities).forEach((c) => push({ kind: 'city', id: c.id, title: c.name, emoji: '🏙️', sub: c.nameJa }, [c.name, c.nameJa]));
-    Object.values(s.transports).forEach((t) => push({ kind: 'transport', id: t.id, title: t.origin + ' → ' + t.destination, emoji: D.TRANSPORT[t.kind][1], sub: [D.TRANSPORT[t.kind][0], U.fmtShort(t.date), t.departTime].filter(Boolean).join(' · ') }, [t.origin, t.destination, t.number, t.notes, t.bookingCode]));
+    Object.values(s.transports).forEach((t) => push({ kind: 'transport', id: t.id, title: t.origin + ' → ' + t.destination, emoji: D.TRANSPORT[t.kind][1], sub: [D.TRANSPORT[t.kind][0], U.fmtShort(t.date), t.departTime].filter(Boolean).join(' · ') }, [t.origin, t.destination, t.number, t.notes, t.bookingCode].concat((t.stops || []).map((st) => st.place + ' ' + (st.number || '')))));
     return hits.sort((a, b) => b.score - a.score).slice(0, 60);
   }
 
@@ -428,8 +428,21 @@ JT.logic = (function () {
     return out;
   }
 
+  /* ── Escalas ──────────────────────────────────────────────────
+     Llegada y salida de una escala están en la misma hora local,
+     así que la espera se calcula sin saber el huso horario. */
+
+  function minutesBetween(d1, t1, d2, t2) {
+    return Math.round((U.localToTs(d2, t2, 0) - U.localToTs(d1, t1, 0)) / 60000);
+  }
+
+  function stopWait(st) { return minutesBetween(st.arriveDate, st.arriveTime, st.departDate, st.departTime); }
+
+  function totalWait(t) { return (t.stops || []).reduce((sum, st) => sum + Math.max(0, stopWait(st)), 0); }
+
   return {
     planDay, balances, search, parseImport, parseImportLines, matchCity, reminders,
-    shareDay, shareReservation, sharePlace, shareExpenses, expensesCsv, markers
+    shareDay, shareReservation, sharePlace, shareExpenses, expensesCsv, markers,
+    minutesBetween, stopWait, totalWait
   };
 })();

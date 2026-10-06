@@ -88,10 +88,10 @@ Si no lo haces, el móvil seguirá usando la copia antigua de la caché. *Ajuste
 | **Lugares / Restaurantes** | Categorías, horario con «abierto ahora» (en hora de Japón), precio, URL, notas, prioridad, visitado / quiero ir / probado, valoración y favoritos. |
 | **Restaurantes cerca** 🍜 | Primero tus guardados (sin conexión); después «Descubrir», con datos reales de OpenStreetMap o de Google Places. Muestra distancia, tipo, precio, valoración, horario, si está abierto, dirección, «Ir» y «Guardar». |
 | **Mapa** | Mapa real (Leaflet + OpenStreetMap) con itinerario, lugares, restaurantes, hoteles y favoritos, filtro por día con la ruta numerada, y «Ver detalles» / «Cómo llegar». Sin conexión pasa a un plano esquemático. |
-| **Gastos** | JPY/EUR/USD con tipo de cambio del BCE, total, hoy, media diaria y presupuesto, y gráficos por categoría, ciudad y día. Desliza para duplicar o borrar. Exporta a CSV. |
+| **Gastos** | JPY/EUR/USD con tipo de cambio del BCE (el yen se redondea al alza por defecto: 177,32 → 178; configurable en Ajustes), total, hoy, media diaria y presupuesto, y gráficos por categoría, ciudad y día. Desliza para duplicar o borrar. Exporta a CSV. |
 | **Reparto** | Quién pagó y entre quién se divide; balances y transferencias mínimas para quedar en paz. |
 | **Ciudades** | Las fechas salen de los días asignados (Tokyo puede aparecer dos veces). Incluye noches, alojamiento, lugares, restaurantes, notas y presupuesto frente a gasto. |
-| **Reservas / Transporte** | Código que se copia con un toque, teléfono, ubicación, horas, duración automática, asiento y coste. |
+| **Reservas / Transporte** | Código que se copia con un toque, teléfono, ubicación, horas, duración automática (trenes), asiento y coste. Los trayectos admiten escalas o transbordos con llegada, salida y siguiente vuelo; la app calcula la espera en cada una. |
 | **Notas / Checklist** | Notas generales, o de una ciudad, un día, un lugar o un restaurante, que se pueden fijar. Checklists de antes del viaje, maleta, durante el viaje y personalizadas. |
 | **Documentos** | Los datos **sensibles** se cifran con un PIN (AES-GCM, Web Crypto) y no se exportan. |
 | **Info / Frases** | Fichas editables (enchufes, emergencias, propinas, tax free…), conversor JPY→EUR y 43 frases offline con romaji, favoritas y vista en grande para enseñarla. |

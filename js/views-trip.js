@@ -25,8 +25,10 @@
       '<div class="next"><span class="next__emoji" aria-hidden="true">' + D.ACTIVITY[a.category][1] + '</span><div><h2 class="title">' + esc(a.title) + '</h2>' +
       '<p class="muted">' + esc((a.startTime || 'Sin hora') + (a.endTime ? ' – ' + a.endTime : '') + (loc.name && loc.name !== a.title ? ' · ' + loc.name : '')) + '</p></div></div>' +
       (est ? '<p class="muted small">' + D.MODE[est.mode][1] + ' ~' + U.fmtDur(est.minutes) + ' · ' + U.fmtKm(est.routeKm, S.get().settings.units) + (fromLabel ? ' desde ' + esc(fromLabel) : '') + ' (estimado)</p>' : '') +
-      (dirUrl || loc.coords ? '<div class="row">' + (dirUrl ? '<a class="btn btn--primary btn--sm" href="' + esc(dirUrl) + '" target="_blank" rel="noopener">' + U.icon('nav', 16) + '<span>Cómo llegar</span></a>' : '') +
-        (loc.coords ? UI.btn('Comer cerca', { emoji: '🍜', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'nearby?' + C.q({ lat: loc.coords.lat, lng: loc.coords.lng, label: loc.name || a.title }) } }) : '') + '</div>' : ''),
+      '<div class="row row--wrap">' + (dirUrl ? '<a class="btn btn--primary btn--sm" href="' + esc(dirUrl) + '" target="_blank" rel="noopener">' + U.icon('nav', 16) + '<span>Cómo llegar</span></a>' : '') +
+        (loc.coords ? UI.btn('Comer cerca', { emoji: '🍜', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'nearby?' + C.q({ lat: loc.coords.lat, lng: loc.coords.lng, label: loc.name || a.title }) } }) : '') +
+        // Marcarla como hecha (o saltarla) hace que la siguiente pase a primer plano.
+        UI.btn('Hecha', { icon: 'check', size: 'sm', variant: 'ghost', data: { act: 'doneNext', id: a.id } }) + '</div>',
       { tone: item.inProgress ? 'accent' : '', data: { act: 'go', to: 'activity/' + a.id }, cls: 'stack' }
     );
   }
@@ -225,6 +227,7 @@
   };
 
   A.toggleDone = (el) => S.toggleDone(el.dataset.id);
+  A.doneNext = (el) => { S.toggleDone(el.dataset.id); UI.toast('Hecha. Se deshace tocando su círculo en el día'); };
   A.sortDay = (el) => { S.sortDayByTime(el.dataset.id); UI.toast('Ordenado por hora'); };
   A.shareDay = async (el) => { const r = await SV.share(L.shareDay(el.dataset.id), 'Día'); if (r === 'copied') UI.toast('Copiado al portapapeles'); };
 
@@ -292,8 +295,9 @@
       { icon: 'edit', label: 'Editar', run: () => F.activity(a.id) },
       { icon: 'copy', label: 'Duplicar', run: () => { S.duplicateActivity(a.id); UI.toast('Actividad duplicada'); } },
       { icon: 'calendar', label: 'Mover a otro día', run: () => moveToDay(a) },
-      { icon: 'up', label: 'Subir', run: () => S.shiftActivity(a.id, -1) },
-      { icon: 'down', label: 'Bajar', run: () => S.shiftActivity(a.id, 1) }
+      // Con hora, el orden lo marca la hora (al cambiarla se recoloca sola); subir/bajar es para las que no tienen.
+      { icon: 'up', label: 'Subir', hint: a.startTime ? 'Tiene hora: mejor cámbiala en Editar y se recoloca sola' : '', run: () => S.shiftActivity(a.id, -1) },
+      { icon: 'down', label: 'Bajar', hint: a.startTime ? 'Tiene hora: mejor cámbiala en Editar y se recoloca sola' : '', run: () => S.shiftActivity(a.id, 1) }
     ];
     if (loc.coords) items.push({ emoji: '🍜', label: 'Restaurantes cerca', run: () => JT.go('nearby?' + C.q({ lat: loc.coords.lat, lng: loc.coords.lng, label: loc.name || a.title })) });
     const dir = U.directionsUrl(loc, null, a.transportMode);
