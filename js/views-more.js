@@ -568,7 +568,7 @@
       UI.btn('Empezar un viaje nuevo', { icon: 'plus', variant: 'soft', block: true, data: { act: 'newTrip' } }) +
       UI.btn('Borrar todos los datos', { icon: 'trash', variant: 'danger', block: true, data: { act: 'wipe' } }), { cls: 'stack' }));
 
-    html += UI.section('Esta instalación', UI.card('<small class="muted">Japón Travel v' + U.VERSION + ' · ' + esc(location.protocol === 'file:' ? 'Archivo local' : location.host) + ' · datos en el localStorage de este navegador' + (S.isWritable() ? '' : ' (BLOQUEADO: no se guardan cambios)') + '.<br>Funciona sin conexión; mapa base, restaurantes cercanos, geocodificación y tipos de cambio requieren Internet.</small><small class="muted" id="swStatus"></small>', { tone: 'muted', cls: 'stack-sm' }));
+    html += UI.section('Esta instalación', UI.card((JT.uiState.installPrompt ? UI.btn('Instalar la app en este dispositivo', { icon: 'download', variant: 'secondary', block: true, data: { act: 'installApp' } }) : '') + '<small class="muted">Japón Travel v' + U.VERSION + ' · ' + esc(location.protocol === 'file:' ? 'Archivo local' : location.host) + ' · datos en el localStorage de este navegador' + (S.isWritable() ? '' : ' (BLOQUEADO: no se guardan cambios)') + '.<br>Funciona sin conexión; mapa base, restaurantes cercanos, geocodificación y tipos de cambio requieren Internet.</small><small class="muted" id="swStatus"></small>', { tone: 'muted', cls: 'stack-sm' }));
 
     return {
       html: html,
@@ -637,7 +637,20 @@
     return 'Hoy: 1 ' + other + ' = ' + ex.toFixed(2).replace('.', ',') + ' ¥ en el BCE → la app usa ' + U.money(used, 'JPY').replace('¥', '') + ' ¥.';
   }
 
-  A.setYenRounding = (el) => S.setSettings({ yenRounding: el.dataset.value });
+  /** Abre el diálogo de instalación guardado por app.js (sólo se puede usar una vez). */
+  A.installApp = async function () {
+    const ev = JT.uiState.installPrompt;
+    if (!ev) return UI.alert('Instalar la app', 'Ahora mismo el navegador no ofrece instalarla. Recarga la página en Chrome y vuelve a intentarlo.');
+    JT.uiState.installPrompt = null;
+    try {
+      ev.prompt();
+      const r = await ev.userChoice;
+      if (r.outcome !== 'accepted') UI.toast('Instalación cancelada');
+    } catch (e) { UI.toast('El navegador no ha podido instalarla'); }
+    JT.app.render();
+  };
+
+  A.setYenRounding =(el) => S.setSettings({ yenRounding: el.dataset.value });
   A.setTheme = (el) => S.setSettings({ theme: el.dataset.value });
   A.setUnits = (el) => S.setSettings({ units: el.dataset.value });
   A.setTravel = (el) => S.setSettings({ travelMode: el.dataset.value });

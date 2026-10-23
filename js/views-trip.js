@@ -64,7 +64,8 @@
     const seg = '<div class="seg" role="tablist">' +
       '<button type="button" role="tab" class="seg__item' + (!travel ? ' is-on' : '') + '" aria-selected="' + !travel + '" data-act="travelMode" data-value="off">Resumen</button>' +
       '<button type="button" role="tab" class="seg__item' + (travel ? ' is-on' : '') + '" aria-selected="' + travel + '" data-act="travelMode" data-value="on">🧭 Modo viaje</button></div>';
-    return { html: head + C.sampleBanner() + seg + (travel ? travelMode(t) : overview(t)) };
+    const install = JT.uiState.installPrompt ? UI.banner('info', 'download', 'Instala Japón Travel', 'Tenla como app en el móvil, también sin conexión.', { action: UI.btn('Instalar', { size: 'sm', data: { act: 'installApp' } }) }) : '';
+    return { html: head + install + C.sampleBanner() + seg + (travel ? travelMode(t) : overview(t)) };
   };
 
   function overview(t) {

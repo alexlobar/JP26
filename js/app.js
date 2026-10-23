@@ -254,6 +254,15 @@ JT.app = (function () {
     navigator.serviceWorker.register('sw.js').catch((e) => console.warn('Service worker no registrado:', e));
   }
 
+  /* Instalar desde la propia app. En Chrome para Android (hasta la v157) el menú ⋮ → «Instalar app»
+     responde «ya está instalada» si hay OTRA app instalada en el mismo dominio (alexlobar.github.io),
+     aunque esté en otra carpeta. El aviso beforeinstallprompt sí mira la carpeta: lo guardamos y lo
+     ofrecemos con un botón propio en Inicio y en Ajustes. */
+  function listenInstall() {
+    window.addEventListener('beforeinstallprompt', function (ev) { ev.preventDefault(); JT.uiState.installPrompt = ev; scheduleRender(); });
+    window.addEventListener('appinstalled', function () { JT.uiState.installPrompt = null; UI.toast('App instalada: búscala entre tus aplicaciones'); scheduleRender(); });
+  }
+
   /* ── Arranque ─────────────────────────────────────────────── */
 
   function init() {
@@ -280,6 +289,7 @@ JT.app = (function () {
     document.addEventListener('touchmove', onTouchMove, { passive: true });
     document.addEventListener('touchend', onTouchEnd);
     render();
+    listenInstall();
     linkManifest();
     registerServiceWorker();
     SV.refreshRatesIfStale().then((changed) => changed && scheduleRender()).catch(() => {});
