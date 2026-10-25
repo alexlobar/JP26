@@ -10,7 +10,7 @@ JT.utils = (function () {
   'use strict';
 
   /* Tiene que coincidir con CACHE en sw.js y con data-build en index.html. */
-  const VERSION = '1.0.3';
+  const VERSION = '1.0.4';
 
   /* ── Texto y DOM ──────────────────────────────────────────── */
 
@@ -331,7 +331,6 @@ JT.utils = (function () {
     sparkle: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/>',
     download: '<path d="M12 3v12M7 10l5 5 5-5M4 21h16"/>',
     upload: '<path d="M12 21V9M7 14l5-5 5 5M4 3h16"/>',
-    locate: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7"/>',
     phone: '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/>',
     link: '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
     flag: '<path d="M4 22V4M4 4h13l-2 4 2 4H4"/>',

@@ -2,7 +2,7 @@
    services.js — Todo lo que sale a la red o usa APIs del
    navegador: restaurantes cercanos (OpenStreetMap / Google
    Places / mock), tipos de cambio (BCE), geocodificación,
-   ubicación, cofre cifrado, avisos, compartir y ficheros.
+   cofre cifrado, avisos, compartir y ficheros.
    Ninguna clave va en el código: la de Google Places la
    introduce el usuario en Ajustes y queda en su navegador.
    ============================================================ */
@@ -224,19 +224,6 @@ JT.services = (function () {
     return j.map((r) => ({ name: r.name || r.display_name.split(',')[0], display: r.display_name, coords: { lat: Number(r.lat), lng: Number(r.lon) } }));
   }
 
-  /* ── Ubicación ────────────────────────────────────────────── */
-
-  function locate() {
-    return new Promise(function (resolve, reject) {
-      if (!navigator.geolocation) return reject(new Error('Este navegador no da la ubicación'));
-      navigator.geolocation.getCurrentPosition(
-        (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
-        (e) => reject(new Error(e.code === 1 ? 'Permiso de ubicación denegado' : 'No se pudo obtener la ubicación')),
-        { enableHighAccuracy: false, timeout: 12000, maximumAge: 120000 }
-      );
-    });
-  }
-
   /* ── Cofre cifrado para datos sensibles ───────────────────────
      AES-GCM con clave derivada de un PIN (PBKDF2, 200.000 iteraciones).
      El PIN no se guarda: sin él, los valores no se pueden leer.
@@ -368,35 +355,10 @@ JT.services = (function () {
     window.open(/^[a-z]+:/i.test(url) ? url : 'https://' + url, '_blank', 'noopener');
   }
 
-  /* ── Mapa: Leaflet bajo demanda (opcional) ────────────────────
-     Se carga de unpkg sólo al abrir el mapa. Si no hay conexión o no
-     carga, la app usa su plano esquemático propio. */
-
-  let leafletPromise = null;
-  function loadLeaflet() {
-    if (window.L) return Promise.resolve(window.L);
-    if (leafletPromise) return leafletPromise;
-    leafletPromise = new Promise(function (resolve, reject) {
-      if (!online()) return reject(new Error('offline'));
-      const css = document.createElement('link');
-      css.rel = 'stylesheet'; css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      css.integrity = 'sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY='; css.crossOrigin = '';
-      document.head.appendChild(css);
-      const js = document.createElement('script');
-      js.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-      js.integrity = 'sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo='; js.crossOrigin = '';
-      js.onload = () => resolve(window.L);
-      js.onerror = () => { leafletPromise = null; reject(new Error('No se pudo cargar el mapa')); };
-      document.head.appendChild(js);
-      setTimeout(() => { if (!window.L) { leafletPromise = null; reject(new Error('timeout')); } }, 12000);
-    });
-    return leafletPromise;
-  }
-
   return {
-    online, rates, refreshRatesIfStale, fetchRates, nearby, geocode, locate, getPlacesKey, setPlacesKey,
+    online, rates, refreshRatesIfStale, fetchRates, nearby, geocode, getPlacesKey, setPlacesKey,
     vaultAvailable, vaultExists, vaultUnlocked, vaultUnlock, vaultLock, vaultGet, vaultSet, vaultReset,
     notificationsSupported, requestNotifications, dueReminders, showSystemNotification,
-    copy, share, download, pickFile, openUrl, loadLeaflet
+    copy, share, download, pickFile, openUrl
   };
 })();

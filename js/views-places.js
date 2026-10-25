@@ -1,6 +1,6 @@
 /* ============================================================
-   views-places.js — Lugares, restaurantes (pestaña Comer),
-   restaurantes cerca, mapa y ciudades.
+   views-places.js — Pestaña Sitios (lugares para visitar +
+   restaurantes), restaurantes cerca y ciudades.
    ============================================================ */
 (function () {
   'use strict';
@@ -34,7 +34,23 @@
   JT.searchBox = searchBox;
   JT.changes.filterText = (el) => { JT.uiState[el.dataset.view].q = el.value; JT.app.render({ keepFocus: true }); };
 
-  /* ══ LUGARES ═════════════════════════════════════════════════ */
+  /* ══ SITIOS ══════════════════════════════════════════════════
+     Una pestaña con dos listas: «Para visitar» (#/places) y
+     «Para comer» (#/food). #/sites abre la última que usaste. */
+
+  V.sites = (p, q) => (JT.uiState.sites.kind === 'food' ? V.food : V.places)(p, q);
+
+  function sitesHeader(kind) {
+    const s = S.get();
+    JT.uiState.sites.kind = kind;
+    const tabs = [['visit', 'places', '📍 Para visitar', Object.keys(s.places).length], ['food', 'food', '🍜 Para comer', Object.keys(s.restaurants).length]];
+    const seg = '<div class="seg" role="tablist">' + tabs.map((t) => '<button type="button" role="tab" class="seg__item' + (t[0] === kind ? ' is-on' : '') + '" aria-selected="' + (t[0] === kind) + '" data-act="go" data-to="' + t[1] + '">' + t[2] + ' · ' + t[3] + '</button>').join('') + '</div>';
+    const add = kind === 'food' ? UI.iconBtn('plus', 'Nuevo restaurante', { act: 'newRestaurant', city: JT.uiState.food.city })
+      : UI.iconBtn('plus', 'Nuevo lugar', { act: 'newPlace', city: JT.uiState.places.city });
+    return UI.header({ title: 'Sitios', subtitle: 'Qué ver y dónde comer', actions: UI.iconBtn('clipboard', 'Importar texto o enlace', { act: 'go', to: 'import' }) + add }) + C.sampleBanner() + seg;
+  }
+
+  /* ── Para visitar ── */
 
   V.places = function () {
     const s = S.get(), st = JT.uiState.places, nq = U.normalize(st.q || '');
@@ -46,7 +62,7 @@
       .sort((a, b) => b.favorite - a.favorite || (a.priority === 'high' ? -1 : 0) - (b.priority === 'high' ? -1 : 0) || a.name.localeCompare(b.name));
     const groups = {};
     list.forEach((p) => (groups[p.cityId || ''] = (groups[p.cityId || ''] || []).concat(p)));
-    let html = UI.header({ back: true, title: 'Lugares', subtitle: Object.keys(s.places).length + ' guardados', actions: UI.iconBtn('clipboard', 'Importar texto o enlace', { act: 'go', to: 'import' }) + UI.iconBtn('plus', 'Nuevo lugar', { act: 'newPlace', city: st.city }) });
+    let html = sitesHeader('visit');
     html += searchBox('places', 'Buscar lugares…') +
       fchips('places', 'status', [{ value: 'pending', label: 'Pendientes' }, { value: 'visited', label: 'Visitados' }, { value: 'fav', label: '♥ Favoritos' }]) +
       fchips('places', 'city', C.cityOptions(), 'Todas las ciudades') +
@@ -73,7 +89,7 @@
       UI.btn('Al itinerario', { icon: 'calendar', size: 'sm', variant: 'secondary', data: { act: 'newActivity', place: x.id, title: x.name } }) + '</div>';
     html += UI.card('<div class="pills">' + UI.pill('Prioridad ' + D.PRIORITY[x.priority][0].toLowerCase(), x.priority === 'high' ? 'accent' : 'neutral') + UI.openBadge(x.hours) + (x.priceApprox ? UI.pill(x.priceApprox) : '') + '</div>' +
       (x.hours ? UI.listRow({ icon: 'clock', title: 'Horario', sub: x.hours }) : '') +
-      (x.address || x.coords ? UI.listRow({ icon: 'pin', title: x.address || 'Ubicación', sub: x.coords ? x.coords.lat.toFixed(5) + ', ' + x.coords.lng.toFixed(5) : '' }) : '<small class="faint">Sin ubicación: edítalo para buscar coordenadas y verlo en el mapa.</small>') +
+      (x.address || x.coords ? UI.listRow({ icon: 'pin', title: x.address || 'Ubicación', sub: x.coords ? x.coords.lat.toFixed(5) + ', ' + x.coords.lng.toFixed(5) : '' }) : '<small class="faint">Sin ubicación: edítalo para buscar coordenadas y tener «Cómo llegar».</small>') +
       (x.url ? UI.listRow({ icon: 'link', title: 'Web', sub: x.url, data: { act: 'openUrl', url: x.url } }) : ''), { cls: 'stack' });
     if (x.description) html += UI.section('Descripción', '<p class="pre">' + esc(x.description) + '</p>');
     if (x.notes) html += UI.section('Notas personales', UI.card('<p class="pre">' + esc(x.notes) + '</p>', { tone: 'warn' }));
@@ -140,7 +156,7 @@
   A.newPlace = (el) => F.place(null, { cityId: el.dataset.city || undefined });
   A.editPlace = (el) => F.place(el.dataset.id);
 
-  /* ══ COMER (restaurantes guardados) ══════════════════════════ */
+  /* ── Para comer (restaurantes guardados) ── */
 
   V.food = function () {
     const s = S.get(), st = JT.uiState.food, t = S.today(), nq = U.normalize(st.q || '');
@@ -150,8 +166,8 @@
       .filter((r) => !st.status || (st.status === 'fav' ? r.favorite : r.status === st.status))
       .filter((r) => !nq || U.normalize(r.name + ' ' + (r.neighborhood || '') + ' ' + D.CUISINE[r.cuisine][0] + ' ' + (r.notes || '')).indexOf(nq) > -1)
       .sort((a, b) => b.favorite - a.favorite || a.name.localeCompare(b.name));
-    let html = UI.header({ title: 'Comer', subtitle: Object.keys(s.restaurants).length + ' restaurantes guardados', actions: UI.iconBtn('plus', 'Nuevo restaurante', { act: 'newRestaurant', city: st.city }) }) + C.sampleBanner();
-    html += '<div class="row">' + UI.btn('Cerca de mí', { icon: 'locate', block: true, data: { act: 'nearMe' } }) + UI.btn('Cerca del plan', { icon: 'calendar', variant: 'secondary', block: true, data: { act: 'nearPlan' } }) + '</div>';
+    let html = sitesHeader('food');
+    html += UI.btn('Restaurantes cerca de tu próximo plan', { icon: 'calendar', variant: 'secondary', block: true, data: { act: 'nearPlan' } });
     html += searchBox('food', 'Buscar restaurantes…') +
       fchips('food', 'status', [{ value: 'want', label: 'Quiero ir' }, { value: 'tried', label: 'Probados' }, { value: 'fav', label: '♥ Favoritos' }]) +
       fchips('food', 'city', C.cityOptions(), 'Todas las ciudades') + fchips('food', 'cuisine', D.options(D.CUISINE), 'Toda la comida');
@@ -160,10 +176,6 @@
     return { html: html };
   };
 
-  A.nearMe = async function () {
-    UI.toast('Buscando tu ubicación…');
-    try { const g = await SV.locate(); JT.uiState.gps = g; JT.go('nearby?' + C.q({ lat: g.lat, lng: g.lng, label: 'Tu ubicación' })); } catch (e) { UI.toast(e.message); }
-  };
   A.nearPlan = function () {
     const t = S.today(), nx = S.upcoming(t.now, 1)[0], loc = nx && S.resolveLocation(nx.activity);
     const c = (loc && loc.coords) || S.inferArea(t.day, t.now) || (t.city && t.city.coords);
@@ -311,84 +323,6 @@
     F.restaurant(null, { name: r.name, cuisine: r.cuisine, coords: r.coords, address: r.address, hours: r.hours, url: r.website || r.mapsUrl, priceLevel: r.priceLevel, cityId: city && city.id, openAfter: true,
       notes: r.source === 'mock' ? 'Creado desde datos MOCK' : 'Guardado desde ' + (r.source === 'google' ? 'Google Places' : 'OpenStreetMap') });
   };
-
-  /* ══ MAPA ════════════════════════════════════════════════════
-     Mapa real con Leaflet + OpenStreetMap si hay conexión; si no,
-     plano esquemático propio (funciona offline). */
-
-  const LAYERS = [['itinerary', '🗓️ Itinerario'], ['places', '📍 Lugares'], ['restaurants', '🍜 Restaurantes'], ['hotels', '🏨 Hoteles'], ['favorites', '♥ Favoritos']];
-
-  V.map = function (p, q) {
-    const s = S.get(), st = JT.uiState.map, days = S.sortedDays(), t = S.today();
-    if (q.day && q.day !== st.lastParam) { st.lastParam = q.day; st.day = q.day; st.sel = null; }
-    if (st.day === undefined) st.day = t.phase === 'during' && t.day ? t.day.id : '';
-    const marks = L.markers(st.day || null, st.layers);
-    st.marks = marks;
-    const sel = marks.find((m) => m.key === st.sel);
-    let html = '<div class="map-top"><div class="row row--between"><h1 class="title">Mapa</h1><small class="muted">' + marks.length + ' puntos</small></div>' +
-      UI.filterChips([{ value: '', label: 'Todo el viaje' }].concat(days.map((d, i) => ({ value: d.id, label: 'Día ' + (i + 1) + (d.cityId && s.cities[d.cityId] ? ' · ' + s.cities[d.cityId].name : '') }))), st.day, 'mapDay') +
-      (!st.day ? '<div class="chips chips--scroll">' + LAYERS.map((l) => '<button type="button" class="chip chip--btn' + (st.layers.indexOf(l[0]) > -1 ? ' is-on' : '') + '" aria-pressed="' + (st.layers.indexOf(l[0]) > -1) + '" data-act="mapLayer" data-value="' + l[0] + '"><span>' + l[1] + '</span></button>').join('') + '</div>' : '') + '</div>';
-    html += '<div class="map-wrap"><div id="map" class="map" role="application" aria-label="Mapa del viaje"></div>' +
-      (marks.length ? '' : '<div class="map-empty card">No hay puntos con coordenadas para este filtro.</div>') +
-      (sel ? '<div class="map-callout card"><div class="row"><span class="item__emoji" aria-hidden="true">' + sel.emoji + '</span><div class="grow"><strong>' + esc(sel.title) + '</strong><small class="muted block">' + esc(sel.sub || '') + '</small></div>' + UI.iconBtn('x', 'Cerrar', { act: 'mapSelect', key: '' }) + '</div>' +
-        '<div class="row">' + UI.btn('Ver detalles', { size: 'sm', variant: 'secondary', block: true, data: { act: 'go', to: (sel.kind === 'activity' ? 'activity/' : sel.kind === 'place' ? 'place/' : sel.kind === 'restaurant' ? 'restaurant/' : 'reservation/') + sel.id } }) +
-        '<a class="btn btn--primary btn--sm btn--block" href="' + esc(U.directionsUrl({ coords: sel.coords, name: sel.title })) + '" target="_blank" rel="noopener">' + U.icon('nav', 16) + '<span>Cómo llegar</span></a></div></div>' : '') + '</div>';
-    return { html: html, mount: mountMap, fullBleed: true };
-  };
-
-  A.mapDay = (el) => { const st = JT.uiState.map; st.day = el.dataset.value; st.sel = null; st.fitKey = ''; JT.app.render(); };
-  A.mapLayer = (el) => { const st = JT.uiState.map, v = el.dataset.value, i = st.layers.indexOf(v); if (i > -1) st.layers.splice(i, 1); else st.layers.push(v); st.fitKey = ''; JT.app.render(); };
-  A.mapSelect = (el) => { JT.uiState.map.sel = el.dataset.key || null; JT.app.render(); };
-
-  let leafletMap = null;
-
-  function mountMap(root) {
-    const st = JT.uiState.map, el = root.querySelector('#map');
-    const marks = st.marks || [];
-    SV.loadLeaflet().then(function (Lf) {
-      if (!document.body.contains(el)) return;
-      if (leafletMap) { try { leafletMap.remove(); } catch (e) { /* contenedor ya sustituido */ } }
-      leafletMap = Lf.map(el, { zoomControl: false, attributionControl: true });
-      Lf.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(leafletMap);
-      Lf.control.zoom({ position: 'topright' }).addTo(leafletMap);
-      const ordered = marks.filter((m) => m.order).sort((a, b) => a.order - b.order);
-      if (ordered.length > 1) Lf.polyline(ordered.map((m) => [m.coords.lat, m.coords.lng]), { color: '#C8102E', weight: 3, opacity: 0.5, dashArray: '6 6' }).addTo(leafletMap);
-      marks.forEach(function (m) {
-        const html = '<div class="pin' + (m.key === st.sel ? ' is-sel' : '') + '" style="border-color:' + m.color + (m.key === st.sel ? ';background:' + m.color : '') + '">' + (m.order ? '<b style="color:' + (m.key === st.sel ? '#fff' : m.color) + '">' + m.order + '</b>' : m.emoji) + '</div>';
-        Lf.marker([m.coords.lat, m.coords.lng], { icon: Lf.divIcon({ html: html, className: 'pin-wrap', iconSize: [34, 34], iconAnchor: [17, 17] }), title: m.title, keyboard: true })
-          .on('click', () => { st.sel = m.key; JT.app.render(); }).addTo(leafletMap);
-      });
-      if (st.view && st.viewKey === (st.day || '') + st.layers.join()) leafletMap.setView(st.view.center, st.view.zoom, { animate: false });
-      else if (marks.length) leafletMap.fitBounds(marks.map((m) => [m.coords.lat, m.coords.lng]), { padding: [40, 40], maxZoom: 15 });
-      else leafletMap.setView([35.68, 139.76], 11);
-      st.viewKey = (st.day || '') + st.layers.join();
-      leafletMap.on('moveend', () => { st.view = { center: leafletMap.getCenter(), zoom: leafletMap.getZoom() }; });
-      leafletMap.on('click', () => { if (st.sel) { st.sel = null; JT.app.render(); } });
-    }).catch(function () { schematic(el, marks, st); });
-  }
-
-  /** Plano esquemático sin teselas: proyecta las coordenadas en el recuadro (offline). */
-  function schematic(el, marks, st) {
-    el.classList.add('map--schematic');
-    const w = el.clientWidth, h = el.clientHeight, pad = 44;
-    if (!marks.length) return;
-    let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
-    marks.forEach((m) => { minLat = Math.min(minLat, m.coords.lat); maxLat = Math.max(maxLat, m.coords.lat); minLng = Math.min(minLng, m.coords.lng); maxLng = Math.max(maxLng, m.coords.lng); });
-    const cLat = (minLat + maxLat) / 2, cLng = (minLng + maxLng) / 2, k = Math.cos((cLat * Math.PI) / 180);
-    const sc = Math.min((w - pad * 2) / Math.max((maxLng - minLng) * k, 0.002), (h - pad * 2) / Math.max(maxLat - minLat, 0.002));
-    const proj = (c) => ({ x: w / 2 + (c.lng - cLng) * k * sc, y: h / 2 - (c.lat - cLat) * sc });
-    let out = '<div class="schem-note">Plano esquemático (sin conexión al mapa base)</div>';
-    const ordered = marks.filter((m) => m.order).sort((a, b) => a.order - b.order);
-    for (let i = 1; i < ordered.length; i++) {
-      const a = proj(ordered[i - 1].coords), b = proj(ordered[i].coords), len = Math.hypot(b.x - a.x, b.y - a.y), ang = Math.atan2(b.y - a.y, b.x - a.x);
-      out += '<span class="schem-seg" style="left:' + ((a.x + b.x) / 2 - len / 2) + 'px;top:' + ((a.y + b.y) / 2 - 1) + 'px;width:' + len + 'px;transform:rotate(' + ang + 'rad)"></span>';
-    }
-    marks.forEach(function (m) {
-      const p = proj(m.coords), on = m.key === st.sel;
-      out += '<button type="button" class="pin pin--abs' + (on ? ' is-sel' : '') + '" style="left:' + (p.x - 17) + 'px;top:' + (p.y - 17) + 'px;border-color:' + m.color + (on ? ';background:' + m.color : '') + '" aria-label="' + esc(m.title) + '" data-act="mapSelect" data-key="' + m.key + '">' + (m.order ? '<b style="color:' + (on ? '#fff' : m.color) + '">' + m.order + '</b>' : m.emoji) + '</button>';
-    });
-    el.innerHTML = out;
-  }
 
   /* ══ CIUDADES ════════════════════════════════════════════════
      Las fechas de una ciudad se derivan de los días asignados. */

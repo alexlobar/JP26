@@ -41,7 +41,7 @@
     const group = (rows) => UI.card(rows.map((r) => UI.listRow({ emoji: r[0], title: r[1], sub: r[2], data: { act: 'go', to: r[3] } })).join(''), { cls: 'card--list' });
     return { html: UI.header({ title: 'Más' }) +
       group([['✨', 'Planificar día', 'Ordena 4-6 sitios por cercanía y horarios', 'planner'], ['🔎', 'Buscar', 'En todo el viaje', 'search'], ['📋', 'Importar enlace o texto', 'Google Maps, webs, confirmaciones', 'import']]) +
-      group([['📍', 'Lugares', n('places') + ' guardados', 'places'], ['🏙️', 'Ciudades', n('cities') + ' ciudades', 'cities'], ['🎫', 'Reservas', n('reservations') + ' reservas', 'reservations'],
+      group([['🏙️', 'Ciudades', n('cities') + ' ciudades', 'cities'], ['🎫', 'Reservas', n('reservations') + ' reservas', 'reservations'],
         ['🚄', 'Transporte', n('transports') + ' trayectos', 'transport'], ['🗒️', 'Notas', n('notes') + ' notas', 'notes'], ['✅', 'Checklist', pending ? pending + ' pendientes' : 'Todo listo', 'checklist'], ['📄', 'Documentos', n('docs') + ' datos importantes', 'documents']]) +
       group([['🗾', 'Información útil', 'Enchufes, emergencias, propinas…', 'info'], ['🗣️', 'Frases', 'Japonés básico offline', 'phrases'], ['⚙️', 'Configuración', 'Viaje, viajeros, APIs, datos', 'settings']]) };
   };
@@ -568,7 +568,7 @@
       UI.btn('Empezar un viaje nuevo', { icon: 'plus', variant: 'soft', block: true, data: { act: 'newTrip' } }) +
       UI.btn('Borrar todos los datos', { icon: 'trash', variant: 'danger', block: true, data: { act: 'wipe' } }), { cls: 'stack' }));
 
-    html += UI.section('Esta instalación', UI.card((JT.uiState.installPrompt ? UI.btn('Instalar la app en este dispositivo', { icon: 'download', variant: 'secondary', block: true, data: { act: 'installApp' } }) : '') + '<small class="muted">Japón Travel v' + U.VERSION + ' · ' + esc(location.protocol === 'file:' ? 'Archivo local' : location.host) + ' · datos en el localStorage de este navegador' + (S.isWritable() ? '' : ' (BLOQUEADO: no se guardan cambios)') + '.<br>Funciona sin conexión; mapa base, restaurantes cercanos, geocodificación y tipos de cambio requieren Internet.</small><small class="muted" id="swStatus"></small>', { tone: 'muted', cls: 'stack-sm' }));
+    html += UI.section('Esta instalación', UI.card((JT.uiState.installPrompt ? UI.btn('Instalar la app en este dispositivo', { icon: 'download', variant: 'secondary', block: true, data: { act: 'installApp' } }) : '') + '<small class="muted">Japón Travel v' + U.VERSION + ' · ' + esc(location.protocol === 'file:' ? 'Archivo local' : location.host) + ' · datos en el localStorage de este navegador' + (S.isWritable() ? '' : ' (BLOQUEADO: no se guardan cambios)') + '.<br>Funciona sin conexión; restaurantes cercanos, búsqueda de coordenadas y tipos de cambio requieren Internet.</small><small class="muted" id="swStatus"></small>', { tone: 'muted', cls: 'stack-sm' }));
 
     return {
       html: html,

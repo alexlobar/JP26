@@ -390,44 +390,6 @@ JT.logic = (function () {
     return '﻿' + rows.map((r) => r.map(cell).join(';')).join('\r\n');
   }
 
-  /* ── Marcadores del mapa ──────────────────────────────────── */
-
-  function markers(dayId, layers) {
-    const s = S.get(), out = [], seenP = new Set(), seenR = new Set();
-    const has = (l) => layers.indexOf(l) > -1;
-    const days = S.sortedDays(), target = dayId ? days.filter((d) => d.id === dayId) : days;
-    if (has('itinerary')) target.forEach(function (day) {
-      const dn = days.indexOf(day) + 1;
-      S.dayActivities(day.id).forEach(function (a, i) {
-        const l = S.resolveLocation(a);
-        if (!l.coords) return;
-        if (a.placeId) seenP.add(a.placeId);
-        if (a.restaurantId) seenR.add(a.restaurantId);
-        out.push({ key: 'a' + a.id, kind: 'activity', id: a.id, coords: l.coords, title: a.title, emoji: D.ACTIVITY[a.category][1], order: dayId ? i + 1 : undefined,
-          sub: 'Día ' + dn + (a.startTime ? ' · ' + a.startTime : '') + (l.name && l.name !== a.title ? ' · ' + l.name : ''), color: a.status === 'done' ? '#97979C' : '#C8102E' });
-      });
-    });
-    if (has('hotels')) {
-      const seen = new Set();
-      (dayId ? target.flatMap((d) => S.reservationsOn(d.date)) : Object.values(s.reservations)).forEach(function (r) {
-        if (r.type !== 'hotel' || !r.location || !r.location.coords || seen.has(r.id)) return;
-        seen.add(r.id);
-        out.push({ key: 'h' + r.id, kind: 'hotel', id: r.id, coords: r.location.coords, title: r.name, emoji: '🏨', sub: 'Alojamiento', color: '#2F6F73' });
-      });
-    }
-    if (dayId) return out;
-    const favOnly = has('favorites') && !has('places') && !has('restaurants');
-    if (has('places') || has('favorites')) Object.values(s.places).forEach(function (p) {
-      if (!p.coords || seenP.has(p.id) || ((favOnly || !has('places')) && !p.favorite)) return;
-      out.push({ key: 'p' + p.id, kind: 'place', id: p.id, coords: p.coords, title: p.name, emoji: D.PLACE[p.category][1], sub: D.PLACE[p.category][0] + (p.favorite ? ' · ♥' : ''), color: '#1C1C1E' });
-    });
-    if (has('restaurants') || has('favorites')) Object.values(s.restaurants).forEach(function (r) {
-      if (!r.coords || seenR.has(r.id) || ((favOnly || !has('restaurants')) && !r.favorite)) return;
-      out.push({ key: 'r' + r.id, kind: 'restaurant', id: r.id, coords: r.coords, title: r.name, emoji: D.CUISINE[r.cuisine][1], sub: D.CUISINE[r.cuisine][0] + (r.favorite ? ' · ♥' : ''), color: '#B0893E' });
-    });
-    return out;
-  }
-
   /* ── Escalas ──────────────────────────────────────────────────
      Llegada y salida de una escala están en la misma hora local,
      así que la espera se calcula sin saber el huso horario. */
@@ -442,7 +404,7 @@ JT.logic = (function () {
 
   return {
     planDay, balances, search, parseImport, parseImportLines, matchCity, reminders,
-    shareDay, shareReservation, sharePlace, shareExpenses, expensesCsv, markers,
+    shareDay, shareReservation, sharePlace, shareExpenses, expensesCsv,
     minutesBetween, stopWait, totalWait
   };
 })();

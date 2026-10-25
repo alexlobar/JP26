@@ -1,13 +1,10 @@
 /* ============================================================
    sw.js — Service worker: precarga la app y la sirve desde
-   caché para que funcione sin conexión. Las teselas del mapa y
-   Leaflet se guardan al usarse (caché aparte, con límite).
+   caché para que funcione sin conexión.
    Sube el número de CACHE al cambiar cualquier archivo; tiene
    que coincidir con VERSION en js/utils.js.
    ============================================================ */
-const CACHE = 'japon-travel-v1.0.3';
-const RUNTIME = 'japon-travel-runtime';
-const MAX_RUNTIME = 400;
+const CACHE = 'japon-travel-v1.0.4';
 
 const ASSETS = [
   './',
@@ -42,65 +39,36 @@ self.addEventListener('activate', function (event) {
     caches.keys()
       .then(function (keys) {
         return Promise.all(keys
-          .filter(function (k) { return k !== CACHE && k !== RUNTIME; })
+          // Borra versiones viejas y la caché del mapa que usaban hasta la v1.0.3.
+          .filter(function (k) { return k !== CACHE; })
           .map(function (k) { return caches.delete(k); }));
       })
       .then(function () { return self.clients.claim(); })
   );
 });
 
-/* Recursos de terceros que merece la pena tener offline una vez vistos. */
-function isRuntimeCacheable(url) {
-  return url.hostname === 'unpkg.com' || /(^|\.)tile\.openstreetmap\.org$/.test(url.hostname);
-}
-
-async function trimRuntime() {
-  const cache = await caches.open(RUNTIME);
-  const keys = await cache.keys();
-  for (let i = 0; i < keys.length - MAX_RUNTIME; i++) await cache.delete(keys[i]);
-}
-
 self.addEventListener('fetch', function (event) {
   const request = event.request;
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
 
-  if (url.origin === self.location.origin) {
-    event.respondWith(
-      caches.match(request).then(function (cached) {
-        if (cached) return cached;
-        return fetch(request).then(function (response) {
-          if (response && response.status === 200 && response.type === 'basic') {
-            const copy = response.clone();
-            caches.open(CACHE).then(function (cache) { cache.put(request, copy); });
-          }
-          return response;
-        }).catch(function () {
-          if (request.mode === 'navigate') return caches.match('./index.html');
-          throw new Error('Recurso no disponible sin conexión');
-        });
-      })
-    );
-    return;
-  }
-
-  // Mapa: primero caché (funciona offline en zonas ya vistas), si no, red.
-  if (isRuntimeCacheable(url)) {
-    event.respondWith(
-      caches.open(RUNTIME).then(function (cache) {
-        return cache.match(request).then(function (cached) {
-          if (cached) return cached;
-          return fetch(request).then(function (response) {
-            if (response && (response.status === 200 || response.type === 'opaque')) {
-              cache.put(request, response.clone());
-              trimRuntime();
-            }
-            return response;
-          });
-        });
-      })
-    );
-  }
   // Las APIs (Overpass, Google, Frankfurter, Nominatim) van siempre a la red:
   // la app ya guarda lo que necesita offline (p. ej. el último tipo de cambio).
+  if (url.origin !== self.location.origin) return;
+
+  event.respondWith(
+    caches.match(request).then(function (cached) {
+      if (cached) return cached;
+      return fetch(request).then(function (response) {
+        if (response && response.status === 200 && response.type === 'basic') {
+          const copy = response.clone();
+          caches.open(CACHE).then(function (cache) { cache.put(request, copy); });
+        }
+        return response;
+      }).catch(function () {
+        if (request.mode === 'navigate') return caches.match('./index.html');
+        throw new Error('Recurso no disponible sin conexión');
+      });
+    })
+  );
 });

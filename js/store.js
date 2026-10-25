@@ -32,8 +32,20 @@ JT.store = (function () {
     COLLECTIONS.forEach(function (c) { if (!out[c] || typeof out[c] !== 'object') out[c] = {}; });
     out.settings = Object.assign({}, D.DEFAULT_SETTINGS, data.settings || {});
     out.trip = Object.assign({ timezoneOffsetMinutes: 540, mainCurrency: 'JPY', emoji: '🇯🇵' }, data.trip || {});
+    addMissingPhrases(out.phrases);
     out.schema = SCHEMA;
     return out;
+  }
+
+  /** Las frases de serie nuevas llegan también a los viajes ya guardados (no se pueden borrar, así que no se duplican). */
+  function addMissingPhrases(phrases) {
+    const known = new Set(Object.values(phrases).map((p) => p.ja));
+    const ts = Date.now();
+    D.PHRASES.forEach(function (p) {
+      if (known.has(p[2])) return;
+      const id = U.uid('ph');
+      phrases[id] = { id: id, category: p[0], es: p[1], ja: p[2], romaji: p[3], favorite: false, createdAt: ts, updatedAt: ts };
+    });
   }
 
   function load() {

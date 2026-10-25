@@ -9,7 +9,7 @@ JT.views = {};
 JT.forms = {};
 JT.actions = {};
 /* Estado efímero de la interfaz (filtros, pestañas). No se guarda. */
-JT.uiState = { places: {}, food: {}, expenses: { tab: 'summary' }, map: { layers: ['itinerary', 'hotels', 'favorites'] }, notes: {}, reservations: {}, phrases: {}, planner: {} };
+JT.uiState = { sites: { kind: 'visit' }, places: {}, food: {}, expenses: { tab: 'summary' }, notes: {}, reservations: {}, phrases: {}, planner: {} };
 
 JT.go = function (path) {
   const target = '#/' + String(path || '').replace(/^#?\/?/, '');
@@ -187,7 +187,7 @@ JT.cards = (function () {
 
   function coordsField(coords) {
     return '<div class="stack coords">' +
-      UI.field('Coordenadas', UI.input('coords', coords ? coords.lat + ', ' + coords.lng : '', { placeholder: '34.9671, 135.7727', inputmode: 'decimal' }), { optional: true, hint: 'Para el mapa, las distancias y «restaurantes cerca». Pégalas de Google Maps o búscalas.' }) +
+      UI.field('Coordenadas', UI.input('coords', coords ? coords.lat + ', ' + coords.lng : '', { placeholder: '34.9671, 135.7727', inputmode: 'decimal' }), { optional: true, hint: 'Para «Cómo llegar», las distancias y «restaurantes cerca». Pégalas de Google Maps o búscalas.' }) +
       '<div class="row">' + UI.btn('Buscar por nombre', { icon: 'search', size: 'sm', variant: 'secondary', data: { geocode: '1' } }) + '<small class="muted geo-status"></small></div>' +
       '<div class="geo-results"></div></div>';
   }

@@ -14,8 +14,10 @@ JT.app = (function () {
   const ROUTES = [
     [/^$/, 'home', 'home'], [/^itinerary$/, 'itinerary', 'itinerary'], [/^day\/([\w-]+)$/, 'day', 'itinerary'],
     [/^activity\/([\w-]+)$/, 'activity', 'itinerary'], [/^planner$/, 'planner', 'itinerary'],
-    [/^map$/, 'map', 'map'], [/^food$/, 'food', 'food'], [/^restaurant\/([\w-]+)$/, 'restaurant', 'food'], [/^nearby$/, 'nearby', 'food'],
-    [/^expenses$/, 'expenses', 'expenses'], [/^more$/, 'more', 'more'], [/^places$/, 'places', 'more'], [/^place\/([\w-]+)$/, 'place', 'more'],
+    // Sitios = lugares para visitar + restaurantes, en una sola pestaña.
+    [/^sites$/, 'sites', 'sites'], [/^places$/, 'places', 'sites'], [/^place\/([\w-]+)$/, 'place', 'sites'],
+    [/^food$/, 'food', 'sites'], [/^restaurant\/([\w-]+)$/, 'restaurant', 'sites'], [/^nearby$/, 'nearby', 'sites'],
+    [/^expenses$/, 'expenses', 'expenses'], [/^more$/, 'more', 'more'],
     [/^cities$/, 'cities', 'more'], [/^city\/([\w-]+)$/, 'city', 'more'], [/^reservations$/, 'reservations', 'more'], [/^reservation\/([\w-]+)$/, 'reservation', 'more'],
     [/^transport$/, 'transport', 'more'], [/^notes$/, 'notes', 'more'], [/^checklist$/, 'checklist', 'more'], [/^info$/, 'info', 'more'],
     [/^phrases$/, 'phrases', 'more'], [/^documents$/, 'documents', 'more'], [/^search$/, 'search', 'more'], [/^import$/, 'import', 'more'], [/^settings$/, 'settings', 'more']
@@ -57,7 +59,6 @@ JT.app = (function () {
       res = { html: UI.header({ title: 'Algo ha fallado', back: true }) + UI.empty('⚠️', 'No se pudo mostrar esta pantalla', String(e && e.message)) };
     }
     main.innerHTML = res.html;
-    main.classList.toggle('main--bleed', !!res.fullBleed);
     document.body.dataset.view = r.view;
     document.querySelectorAll('.tabbar__item').forEach((t) => {
       const on = t.dataset.tab === r.tab;

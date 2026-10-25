@@ -107,23 +107,21 @@
   function travelMode(t) {
     const s = S.get(), n = t.now, day = t.day, city = t.city;
     const up = S.upcoming(n, 4);
-    const gps = JT.uiState.gps;
-    const here = gps || S.inferArea(day, n);
-    const hereLabel = gps ? 'tu ubicación' : undefined;
+    // «Dónde estás» sale del plan (última parada de hoy o el hotel), no del GPS: para moverse se usa Google Maps.
+    const here = S.inferArea(day, n);
     const current = up.find((u) => u.inProgress), next = up.find((u) => !u.inProgress);
     let html = '';
     if (n.simulated) html += UI.banner('warn', 'clock', 'Simulando ' + n.date + ' a las ' + n.time, 'Cámbialo o desactívalo en Ajustes → Modo viaje.', { data: { act: 'go', to: 'settings' } });
     if (current) html += nextUpCard(current, 'AHORA');
-    if (next) html += nextUpCard(next, 'SIGUIENTE', here, hereLabel || (current ? 'la actividad actual' : 'tu última parada'));
+    if (next) html += nextUpCard(next, 'SIGUIENTE', here, current ? 'la actividad actual' : 'tu última parada');
     else if (!current) html += UI.empty('🍵', 'Nada más por hoy', 'Disfruta. Puedes buscar dónde cenar cerca o planificar mañana.');
     const nearTo = here || (city && city.coords);
     html += C.quick([
       ['💴', 'Gasto', { act: 'newExpense' }],
-      ['🍜', 'Comer cerca', nearTo ? { act: 'go', to: 'nearby?' + C.q({ lat: nearTo.lat, lng: nearTo.lng, label: hereLabel || (city && city.name) }) } : { act: 'go', to: 'food' }],
-      ['🗺️', 'Mapa hoy', { act: 'go', to: 'map' + (day ? '?day=' + day.id : '') }],
+      ['🍜', 'Comer cerca', nearTo ? { act: 'go', to: 'nearby?' + C.q({ lat: nearTo.lat, lng: nearTo.lng, label: city && city.name }) } : { act: 'go', to: 'food' }],
+      ['🗓️', 'Día de hoy', day ? { act: 'go', to: 'day/' + day.id } : { act: 'go', to: 'itinerary' }],
       ['🗣️', 'Frases', { act: 'go', to: 'phrases' }]
     ]);
-    html += '<div class="row">' + UI.btn(gps ? 'Ubicación actualizada' : 'Usar mi ubicación', { icon: 'locate', size: 'sm', variant: 'soft', data: { act: 'locate' } }) + '</div>';
     const spentToday = C.moneySum(Object.values(s.expenses).filter((e) => e.date === n.date));
     const spentAll = C.moneySum(Object.values(s.expenses));
     const budget = s.trip.totalBudget;
@@ -131,9 +129,9 @@
     const resv = day ? S.reservationsOn(day.date) : [];
     if (resv.length) html += UI.section('Reservas de hoy', resv.map(C.reservationCard).join(''), UI.btn('Todas', { size: 'sm', variant: 'ghost', data: { act: 'go', to: 'reservations' } }));
     const near = here ? S.savedNear(here, 1.5).slice(0, 3) : [];
-    html += UI.section(hereLabel ? 'Comer cerca de ti' : 'Comer cerca',
+    html += UI.section('Comer cerca',
       near.length ? near.map((x) => C.restaurantCard(x.restaurant, x.km)).join('') : '<p class="muted small">Ningún restaurante guardado a menos de 1,5 km. Pulsa «Buscar más» para ver opciones cercanas (requiere conexión).</p>',
-      nearTo ? UI.btn('Buscar más', { size: 'sm', variant: 'ghost', icon: 'search', data: { act: 'go', to: 'nearby?' + C.q({ lat: nearTo.lat, lng: nearTo.lng, label: hereLabel || (city && city.name) }) } }) : '');
+      nearTo ? UI.btn('Buscar más', { size: 'sm', variant: 'ghost', icon: 'search', data: { act: 'go', to: 'nearby?' + C.q({ lat: nearTo.lat, lng: nearTo.lng, label: city && city.name }) } }) : '');
     const later = day ? S.dayActivities(day.id).filter((a) => a.status !== 'done' && a !== (current && current.activity) && a !== (next && next.activity) && (!a.startTime || U.toMin(a.startTime) >= n.minutes)) : [];
     if (later.length) html += UI.section('Más tarde hoy', UI.card('<div class="mini-tl">' + later.map((a) => '<button type="button" class="mini-tl__row" data-act="go" data-to="activity/' + a.id + '"><span class="mono">' + (a.startTime || '··:··') + '</span><span>' + D.ACTIVITY[a.category][1] + ' ' + esc(a.title) + '</span></button>').join('') + '</div>'),
       UI.btn('Día completo', { size: 'sm', variant: 'ghost', data: { act: 'go', to: 'day/' + day.id } }));
@@ -156,13 +154,6 @@
     UI.toast('Simulando el ' + U.fmtDay(date) + ' a las 11:45 (desactívalo en Ajustes)');
   };
 
-  A.locate = async function () {
-    UI.toast('Buscando tu ubicación…');
-    try {
-      JT.uiState.gps = await SV.locate();
-      JT.app.render();
-    } catch (e) { UI.toast(e.message); }
-  };
 
   /* ══ ITINERARIO ══════════════════════════════════════════════ */
 
@@ -212,7 +203,7 @@
     const firstLoc = locs.find((l) => l.coords);
 
     let html = UI.header({ back: true, eyebrow: 'DÍA ' + num + (city ? ' · ' + city.name.toUpperCase() : '') + (n.date === day.date ? ' · HOY' : ''), title: U.fmtLong(day.date), subtitle: day.title,
-      actions: UI.iconBtn('share', 'Compartir día', { act: 'shareDay', id: day.id }) + UI.iconBtn('map', 'Ver en el mapa', { act: 'go', to: 'map?day=' + day.id }) + UI.iconBtn('edit', 'Editar día', { act: 'editDay', id: day.id }) });
+      actions: UI.iconBtn('share', 'Compartir día', { act: 'shareDay', id: day.id }) + UI.iconBtn('edit', 'Editar día', { act: 'editDay', id: day.id }) });
     html += UI.card('<div class="stats">' + UI.stat('Actividades', list.filter((a) => a.status === 'done').length + '/' + list.length) + UI.stat('Gastado', spent.text) + UI.stat('Estimado', est.total ? est.text : '—') + '</div>');
     html += '<div class="row row--wrap">' + UI.btn('Actividad', { icon: 'plus', size: 'sm', data: { act: 'newActivity', day: day.id } }) +
       UI.btn('Planificar', { icon: 'sparkle', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'planner?day=' + day.id } }) +
@@ -424,7 +415,7 @@
       UI.btn(st.allCities ? 'Todas las ciudades' : 'Ciudad del día', { size: 'sm', variant: 'ghost', data: { act: 'plannerCities' } }));
     html += UI.section('2 · Preferencias', UI.card(
       UI.field('Empezar a las', '<input class="input" type="time" value="' + esc(st.start) + '" data-change="plannerStart">') +
-      UI.field('Salida desde', UI.filterChips([].concat(hotel ? [{ value: 'hotel', label: '🏨 ' + hotel.name.replace(/ \(ficticio\)/, '') }] : [], [{ value: 'gps', label: '📍 Mi ubicación' }, { value: 'first', label: 'Primera parada' }]), st.from, 'plannerFrom', { scroll: false })) +
+      UI.field('Salida desde', UI.filterChips([].concat(hotel ? [{ value: 'hotel', label: '🏨 ' + hotel.name.replace(/ \(ficticio\)/, '') }] : [], [{ value: 'first', label: 'Primera parada' }]), st.from, 'plannerFrom', { scroll: false })) +
       '<div class="chips">' + [['lunch', '🍜 Hueco para comer (12-14 h)'], ['dinner', '🏮 Cena (19-21 h)']].concat(hotel ? [['back', '↩️ Volver al hotel']] : []).map((o) => '<button type="button" class="chip chip--btn' + (st[o[0]] ? ' is-on' : '') + '" aria-pressed="' + !!st[o[0]] + '" data-act="plannerFlag" data-value="' + o[0] + '"><span>' + o[1] + '</span></button>').join('') + '</div>', { cls: 'stack' }));
     html += UI.btn(st.result ? 'Recalcular' : 'Planificar', { icon: 'sparkle', size: 'lg', block: true, disabled: st.selected.length < 2, data: { act: 'plannerRun' } });
     if (st.selected.length < 2) html += '<p class="faint small center">Elige al menos 2 sitios.</p>';
@@ -470,9 +461,6 @@
     let start;
     const hotel = S.reservationsOn(day.date).find((r) => r.type === 'hotel' && r.location && r.location.coords);
     if (st.from === 'hotel' && hotel) start = { name: hotel.name, coords: hotel.location.coords };
-    if (st.from === 'gps') {
-      try { const g = JT.uiState.gps || await SV.locate(); JT.uiState.gps = g; start = { name: 'Tu ubicación', coords: g }; } catch (e) { UI.toast('Sin ubicación: se empieza por la primera parada'); }
-    }
     const restaurants = Object.values(s.restaurants).filter((r) => r.coords && r.cuisine !== 'dessert').map((r) => ({
       id: r.id, name: r.name, coords: r.coords,
       preference: (r.status === 'want' ? 2 : r.status === 'tried' && (r.rating || 0) >= 4 ? 1 : 0) + (r.favorite ? 1 : 0),
