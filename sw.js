@@ -4,7 +4,9 @@
    Sube el número de CACHE al cambiar cualquier archivo; tiene
    que coincidir con VERSION en js/utils.js.
    ============================================================ */
-const CACHE = 'japon-travel-v1.0.4';
+const CACHE = 'japon-travel-v1.0.6';
+// Todas las apps de alexlobar.github.io comparten el almacén de cachés: sólo se tocan las nuestras.
+const PREFIX = 'japon-travel-';
 
 const ASSETS = [
   './',
@@ -39,8 +41,9 @@ self.addEventListener('activate', function (event) {
     caches.keys()
       .then(function (keys) {
         return Promise.all(keys
-          // Borra versiones viejas y la caché del mapa que usaban hasta la v1.0.3.
-          .filter(function (k) { return k !== CACHE; })
+          // Borra versiones viejas de ESTA app (y la caché del mapa de hasta la v1.0.3),
+          // nunca las de Hábitos u otras apps del mismo dominio.
+          .filter(function (k) { return k.indexOf(PREFIX) === 0 && k !== CACHE; })
           .map(function (k) { return caches.delete(k); }));
       })
       .then(function () { return self.clients.claim(); })
@@ -56,11 +59,13 @@ self.addEventListener('fetch', function (event) {
   // la app ya guarda lo que necesita offline (p. ej. el último tipo de cambio).
   if (url.origin !== self.location.origin) return;
 
+  // Al compartir desde Google Maps se abre index.html?title=…&text=…: es la misma página.
+  const page = request.mode === 'navigate';
   event.respondWith(
-    caches.match(request).then(function (cached) {
+    caches.match(request, { ignoreSearch: page }).then(function (cached) {
       if (cached) return cached;
       return fetch(request).then(function (response) {
-        if (response && response.status === 200 && response.type === 'basic') {
+        if (response && response.status === 200 && response.type === 'basic' && !(page && url.search)) {
           const copy = response.clone();
           caches.open(CACHE).then(function (cache) { cache.put(request, copy); });
         }

@@ -68,7 +68,7 @@ Queda con su icono, a pantalla completa y funcionando sin conexión.
 ### Al cambiar el código
 
 Sube la versión en **tres sitios**, que deben coincidir:
-- `VERSION` en `js/utils.js`;
+- `VERSION` (y `BUILD_DATE`) en `js/utils.js`;
 - `CACHE` en `sw.js`;
 - `data-build` en `index.html`.
 
@@ -82,20 +82,22 @@ Si no lo haces, el móvil seguirá usando la copia antigua de la caché. *Ajuste
 |---|---|
 | **Inicio** | Cuenta atrás, ciudad actual y siguiente, próxima actividad con «Cómo llegar», resumen del día, gasto y presupuesto restante, próximos planes, alertas (checklist pendiente, tren de mañana, reserva en menos de 3 h, falta tipo de cambio) y accesos rápidos. |
 | **Modo viaje** | Se activa solo durante el viaje. Muestra la actividad actual y la siguiente, cuánto falta y cuánto se tarda en llegar, restaurantes guardados cerca de tu última parada (o del hotel), gasto de hoy, reservas de hoy, el resto del día y las notas de la ciudad. Para probarlo antes: *Ajustes → Simular un día con plan a las 11:45*. |
+| **Todo en el itinerario** 🔗 | Cada reserva y cada trayecto con fecha dentro del viaje sale solo en el itinerario de su día, en Inicio y en el Modo viaje. Si cambias la reserva, cambia su actividad; si mueves la actividad de día u hora, se mueve la reserva. Si ya tenías planificada esa actividad (mismo día, hora y sitio), se enlaza en vez de duplicarse. Y al revés: si pones un «Nº de reserva» en una actividad, aparece en *Más → Reservas*. Para que una reserva no salga en el día: desmarca «Mostrar en el itinerario del día». |
 | **Itinerario** | Días agrupados por ciudad. Cada actividad guarda: título, descripción, día, inicio/fin, ubicación (enlazada a un lugar o restaurante, o libre), categoría, notas, coste, reserva, URL, prioridad, estado y transporte. Se puede crear, editar, eliminar, duplicar, marcar como hecha, mover de día y reordenar (pulsación larga → subir/bajar, u «Ordenar por hora»). |
 | **Vista del día** | Timeline vertical con el «ahora» marcado y la distancia, tiempo y medio entre actividades; tocarlo abre la ruta real en Google Maps. También muestra reservas del día, restaurantes guardados cerca, notas, gasto y la opción de compartir. |
 | **Planificar día** ✨ | Eliges de 2 a 8 sitios y la app propone el orden: minimiza desplazamientos y esperas, respeta los horarios, deja huecos para comer con un restaurante guardado cerca y lo añade al itinerario. |
 | **Sitios** 📍 | Una pestaña con dos listas: *Para visitar* (lugares) y *Para comer* (restaurantes). Categorías, horario con «abierto ahora» (en hora de Japón), precio, URL, notas, prioridad, visitado / quiero ir / probado, valoración y favoritos. |
 | **Restaurantes cerca** 🍜 | Primero tus guardados (sin conexión); después «Descubrir», con datos reales de OpenStreetMap o de Google Places. Muestra distancia, tipo, precio, valoración, horario, si está abierto, dirección, «Ir» y «Guardar». |
-| **Gastos** | JPY/EUR/USD con tipo de cambio del BCE (el yen se redondea al alza por defecto: 177,32 → 178; configurable en Ajustes), total, hoy, media diaria y presupuesto, y gráficos por categoría, ciudad y día. Desliza para duplicar o borrar. Exporta a CSV. |
+| **Gastos** | JPY/EUR/USD con tipo de cambio del BCE (el yen se redondea al alza por defecto: 177,32 → 178; configurable en Ajustes), total, hoy, media diaria y presupuesto, y gráficos por categoría, ciudad y día. Cada gasto indica con qué se pagó (efectivo, tarjeta, Suica…); el total es uno solo. Desliza para duplicar o borrar. Exporta a CSV. |
 | **Reparto** | Quién pagó y entre quién se divide; balances y transferencias mínimas para quedar en paz. |
 | **Ciudades** | Las fechas salen de los días asignados (Tokyo puede aparecer dos veces). Incluye noches, alojamiento, lugares, restaurantes, notas y presupuesto frente a gasto. |
-| **Reservas / Transporte** | Código que se copia con un toque, teléfono, ubicación, horas, duración automática (trenes), asiento y coste. Los trayectos admiten escalas o transbordos con llegada, salida y siguiente vuelo; la app calcula la espera en cada una. |
+| **Reservas / Transporte** | Código que se copia con un toque, teléfono, ubicación, horas, duración automática (trenes), asiento y coste. Los trayectos admiten escalas o transbordos con llegada, salida y siguiente vuelo; la app calcula la espera en cada una. Botón **«Añadir a Google Calendar»** con el evento ya relleno (hora de Japón; los trayectos anteriores al viaje, hora de España). |
 | **Notas / Checklist** | Notas generales, o de una ciudad, un día, un lugar o un restaurante, que se pueden fijar. Checklists de antes del viaje, maleta, durante el viaje y personalizadas. |
 | **Documentos** | Los datos **sensibles** se cifran con un PIN (AES-GCM, Web Crypto) y no se exportan. |
 | **Info / Frases** | Fichas editables (enchufes, emergencias, propinas, tax free…), conversor JPY→EUR y 127 frases offline con romaji (básicas, conversación, transporte, hotel, restaurante, compras, templos y onsen, emergencias, números y carteles), favoritas y vista en grande para enseñarla. |
-| **Buscar / Importar / Compartir** | Búsqueda global sin tildes ni macrones. Importa enlaces de Google Maps (lee las coordenadas), webs, texto libre o confirmaciones de reserva. Comparte un día, una reserva, un lugar o el resumen de gastos. |
-| **Ajustes** | Nombre y fechas del viaje, moneda, presupuesto, viajeros, tema claro/oscuro, km o millas, Modo viaje y simulación, recordatorios, APIs, exportar/importar, viaje nuevo, quitar el ejemplo y borrar todo. |
+| **Buscar / Importar / Compartir** | Búsqueda global sin tildes ni macrones. **Desde Google Maps: Compartir → Japón Travel** (con la app instalada) y el sitio llega a Importar; como el enlace corto no se puede leer, la app busca su ubicación por nombre y dirección. También importa enlaces largos de Google Maps (lee las coordenadas), webs, texto libre o confirmaciones de reserva. Comparte un día, una reserva, un lugar o el resumen de gastos. |
+| **Ajustes** | Nombre y fechas del viaje, moneda, presupuesto, viajeros, tema claro/oscuro, km o millas, Modo viaje y simulación, recordatorios, APIs, exportar/importar, viaje nuevo, quitar el ejemplo y borrar todo. En *Esta instalación*: versión y fecha, lo que ocupa, el espacio que queda (5 MB compartidos con las demás apps de `alexlobar.github.io`) y si el navegador protege los datos contra el borrado. |
+| **Copias de seguridad** | La app pide al navegador que no borre sus datos y, si llevas 7 días sin exportar, Inicio te avisa con un botón para hacerlo. |
 
 **Datos de ejemplo:** «Japón 2026», del 19 de noviembre al 16 de diciembre (28 días), recorre Tokyo → Kyoto → Nara → Osaka → Tokyo. Tiene 15 días con plan y el resto libres. Si los borras sin querer: *Ajustes → Cargar viaje de ejemplo*.
 - Los 32 lugares son reales, con coordenadas aproximadas.

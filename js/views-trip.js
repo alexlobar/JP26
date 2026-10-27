@@ -48,6 +48,12 @@
       const diff = U.toMin(r.time) - n.minutes;
       if (diff > 0 && diff <= 180) out.push(UI.banner('accent', 'bell', 'En ' + diff + ' min: ' + r.name, r.confirmationCode ? 'Reserva ' + r.confirmationCode : '', { data: { act: 'go', to: 'reservation/' + r.id } }));
     });
+    // Copia de seguridad: los datos sólo viven en este navegador.
+    const last = SV.lastExport(), daysAgo = last ? Math.floor((Date.now() - last) / 86400000) : null;
+    const own = ['activities', 'reservations', 'transports', 'expenses', 'places', 'restaurants', 'notes'].some((c) => Object.values(s[c]).some((x) => !x.isSample));
+    if (own && (daysAgo === null || daysAgo >= 7))
+      out.push(UI.banner('warn', 'download', 'Haz una copia de seguridad', daysAgo === null ? 'Aún no has exportado ninguna. Tus datos sólo están en este móvil.' : 'La última es de hace ' + daysAgo + ' días.',
+        { action: UI.btn('Exportar', { size: 'sm', variant: 'secondary', data: { act: 'exportJson' } }) }));
     if (Object.values(s.expenses).some((e) => e.currency !== s.trip.mainCurrency) && !SV.rates())
       out.push(UI.banner('neutral', 'swap', 'Sin tipo de cambio', 'Conéctate o define un tipo manual en Ajustes para sumar gastos en otras monedas.', { data: { act: 'go', to: 'settings' } }));
     const err = S.lastError();
@@ -126,7 +132,7 @@
     const spentAll = C.moneySum(Object.values(s.expenses));
     const budget = s.trip.totalBudget;
     html += UI.card('<div class="stats">' + UI.stat('Hoy', spentToday.text, '', true) + UI.stat('Total viaje', spentAll.text, budget ? 'de ' + U.money(budget, spentAll.main) : '') + '</div>' + (budget ? UI.progress(spentAll.total / budget, spentAll.total > budget ? 'accent' : 'info') : ''), { cls: 'stack' });
-    const resv = day ? S.reservationsOn(day.date) : [];
+    const resv = day ? S.reservationsOffTimeline(day) : [];
     if (resv.length) html += UI.section('Reservas de hoy', resv.map(C.reservationCard).join(''), UI.btn('Todas', { size: 'sm', variant: 'ghost', data: { act: 'go', to: 'reservations' } }));
     const near = here ? S.savedNear(here, 1.5).slice(0, 3) : [];
     html += UI.section('Comer cerca',
@@ -193,7 +199,7 @@
     const list = S.dayActivities(day.id), locs = list.map(S.resolveLocation);
     const spent = C.moneySum(Object.values(s.expenses).filter((e) => e.date === day.date));
     const est = C.moneySum(list.filter((a) => a.estimatedCost).map((a) => ({ amount: a.estimatedCost, currency: a.costCurrency || 'JPY' })));
-    const resv = S.reservationsOn(day.date);
+    const resv = S.reservationsOffTimeline(day);
     const notes = Object.values(s.notes).filter((x) => (x.scope === 'day' && x.refId === day.id) || (city && x.scope === 'city' && x.refId === city.id));
     // Restaurantes guardados a menos de 1 km de alguna actividad del día (offline).
     const near = {};
@@ -326,6 +332,7 @@
     const selLoc = a.placeId ? 'p:' + a.placeId : a.restaurantId ? 'r:' + a.restaurantId : a.location ? 'free' : '';
     const fl = a.location || {};
     const resv = Object.values(s.reservations);
+    const linkedRes = a.reservationId && s.reservations[a.reservationId];
     const body = '<form id="fAct" class="stack" novalidate>' +
       UI.field('Título', UI.input('title', a.title, { placeholder: 'p.ej. Fushimi Inari', autofocus: !ex && !def.title, required: true })) +
       UI.field('Día', '<select class="input" name="dayId">' + days.map((d, i) => '<option value="' + d.id + '"' + (d.id === dayId ? ' selected' : '') + '>Día ' + (i + 1) + ' · ' + esc(U.fmtDay(d.date)) + (d.cityId && s.cities[d.cityId] ? ' · ' + esc(s.cities[d.cityId].name) : '') + '</option>').join('') + '</select>') +
@@ -337,6 +344,7 @@
         UI.field('Cómo llegar desde la actividad anterior', UI.chips('transportMode', D.options(D.MODE), a.transportMode, { allowNone: true, noneLabel: 'Auto' }), { optional: true }) +
         UI.field('Prioridad', UI.chips('priority', D.options(D.PRIORITY), a.priority)) +
         '<div class="row row--top">' + UI.field('Coste estimado', UI.input('cost', a.estimatedCost || '', { inputmode: 'decimal', placeholder: '0' }), { optional: true }) + UI.field('Moneda', UI.chips('costCurrency', D.CURRENCIES.map((c) => ({ value: c, label: c })), a.costCurrency || 'JPY')) + '</div>' +
+        UI.field('Nº de reserva', UI.input('bookingCode', (linkedRes && linkedRes.confirmationCode) || '', { placeholder: 'ABC123' }), { optional: true, hint: 'Si lo pones, la actividad aparece también en Más → Reservas.' }) +
         (resv.length ? UI.field('Reserva vinculada', '<select class="input" name="reservationId"><option value="">Ninguna</option>' + resv.sort((x, y) => x.date.localeCompare(y.date)).map((r) => '<option value="' + r.id + '"' + (r.id === a.reservationId ? ' selected' : '') + '>' + esc(U.fmtShort(r.date) + ' · ' + r.name) + '</option>').join('') + '</select>', { optional: true }) : '') +
         UI.field('Descripción', UI.textarea('description', a.description), { optional: true }) +
         UI.field('Notas', UI.textarea('notes', a.notes), { optional: true }) +
@@ -371,13 +379,30 @@
             transportMode: f.transportMode || undefined, priority: f.priority || 'medium', estimatedCost: cost || undefined, costCurrency: cost ? f.costCurrency : undefined,
             reservationId: f.reservationId || undefined, description: f.description || undefined, notes: f.notes || undefined, url: f.url || undefined
           };
-          if (ex) { S.updateActivity(ex.id, data); UI.toast('Actividad guardada'); }
-          else { S.addActivity(data); UI.toast('Actividad creada'); }
+          let id;
+          if (ex) { S.updateActivity(ex.id, data); id = ex.id; } else id = S.addActivity(data);
+          const resMsg = saveBookingCode(id, f);
+          const d = S.get().days[data.dayId];
+          UI.toast((ex ? 'Actividad guardada' : 'Actividad creada') + ' · Día ' + S.dayNumber(d.id) + ' · ' + U.fmtShort(d.date) + resMsg);
           close();
         });
       }
     });
   };
+
+  /* Nº de reserva escrito en la actividad: actualiza su reserva o crea una en Más → Reservas, enlazada. */
+  const RES_TYPE = { hotel: 'hotel', restaurant: 'restaurant', cafe: 'restaurant', transport: 'train', activity: 'activity', visit: 'activity' };
+
+  function saveBookingCode(activityId, f) {
+    const code = (f.bookingCode || '').trim().toUpperCase();
+    if (!code) return '';
+    const s = S.get(), a = s.activities[activityId], r = a.reservationId && s.reservations[a.reservationId];
+    if (r) { if (r.confirmationCode !== code) S.update('reservations', r.id, { confirmationCode: code }); return ''; }
+    const day = s.days[a.dayId], loc = S.resolveLocation(a);
+    S.addReservationFor(activityId, { type: RES_TYPE[a.category] || 'other', name: a.title, date: day.date, time: a.startTime, confirmationCode: code, cityId: day.cityId,
+      location: loc.name || loc.coords ? { name: loc.name, address: loc.address, coords: loc.coords } : undefined });
+    return ' · reserva añadida en Más → Reservas';
+  }
 
   A.newActivity = (el) => F.activity(null, { dayId: el.dataset.day || undefined, placeId: el.dataset.place, restaurantId: el.dataset.restaurant, title: el.dataset.title, category: el.dataset.category });
   A.editActivity = (el) => F.activity(el.dataset.id);

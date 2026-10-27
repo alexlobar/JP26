@@ -9,8 +9,10 @@ window.JT = window.JT || {};
 JT.utils = (function () {
   'use strict';
 
-  /* Tiene que coincidir con CACHE en sw.js y con data-build en index.html. */
-  const VERSION = '1.0.4';
+  /* Tiene que coincidir con CACHE en sw.js y con data-build en index.html.
+     BUILD_DATE es la fecha de esta versión (se ve en Ajustes → Esta instalación). */
+  const VERSION = '1.0.6';
+  const BUILD_DATE = '2026-10-27';
 
   /* ── Texto y DOM ──────────────────────────────────────────── */
 
@@ -349,7 +351,7 @@ JT.utils = (function () {
   }
 
   return {
-    VERSION, esc, $, $$, uid, normalize, clamp, debounce,
+    VERSION, BUILD_DATE, esc, $, $$, uid, normalize, clamp, debounce,
     parseDate, toISO, isISODate, isTime, addDays, diffDays, dateRange, weekday,
     fmtShort, fmtDay, fmtLong, fmtRange, toMin, toTime, fmtDur, cmpTime, tripNow, localToTs,
     money, parseAmount, convert, sumIn,

@@ -59,6 +59,8 @@ JT.store = (function () {
     if (raw) {
       try {
         state = normalize(JSON.parse(raw));
+        syncAllLinks(); // reservas y trayectos guardados antes de la v1.0.5 entran también en el itinerario
+        save();
         return;
       } catch (e) {
         // Datos corruptos: se guarda una copia para no perderlos y se arranca con el ejemplo.
@@ -67,6 +69,7 @@ JT.store = (function () {
       }
     }
     state = normalize(D.sampleTrip());
+    syncAllLinks();
     save();
   }
 
@@ -75,7 +78,7 @@ JT.store = (function () {
     try {
       localStorage.setItem(KEY, JSON.stringify(state));
     } catch (e) {
-      lastError = 'No se pudo guardar (almacenamiento lleno o bloqueado). Exporta una copia desde Ajustes.';
+      lastError = 'No se pudo guardar (almacenamiento lleno o bloqueado). Mira el espacio en Ajustes → Esta instalación y exporta una copia.';
       emit();
     }
   }
@@ -91,6 +94,7 @@ JT.store = (function () {
     const id = data.id || U.uid(col.slice(0, 2));
     const ts = Date.now();
     state[col][id] = Object.assign({}, data, { id: id, createdAt: ts, updatedAt: ts });
+    if (LINKED[col]) syncLinked(col, id);
     commit();
     return id;
   }
@@ -99,6 +103,7 @@ JT.store = (function () {
     const cur = state[col][id];
     if (!cur) return;
     state[col][id] = Object.assign({}, cur, patch, { id: id, updatedAt: Date.now() });
+    if (LINKED[col]) syncLinked(col, id);
     commit();
   }
 
@@ -124,11 +129,19 @@ JT.store = (function () {
         }
       });
       dropNotes(col === 'places' ? 'place' : 'restaurant');
-    } else if (col === 'reservations') {
-      Object.values(s.activities).forEach((a) => { if (a.reservationId === id) delete a.reservationId; });
+    } else if (LINKED[col]) {
+      // La actividad creada para la reserva/trayecto se va con él; las que enlazaste tú se quedan, sin enlace.
+      const field = LINKED[col];
+      Object.values(s.activities).forEach((a) => {
+        if (a[field] !== id) return;
+        if (a.auto === col) dropActivity(a.id); else delete a[field];
+      });
     } else if (col === 'activities') {
       if (entity) reindex(dayActivities(entity.dayId));
       Object.values(s.expenses).forEach((e) => { if (e.activityId === id) delete e.activityId; });
+      // Si era la actividad de una reserva/trayecto, no se vuelve a crear: el usuario la quitó del itinerario.
+      const src = entity && entity.auto && s[entity.auto] && s[entity.auto][entity[LINKED[entity.auto]]];
+      if (src) src.inItinerary = false;
     } else if (col === 'travelers') {
       Object.values(s.expenses).forEach((e) => {
         if (e.paidById === id) delete e.paidById;
@@ -153,7 +166,8 @@ JT.store = (function () {
     if (dates.length > 120) return { ok: false, error: 'Máximo 120 días' };
     const keep = new Set(dates);
     const lost = Object.values(state.days).filter((d) => !keep.has(d.date));
-    const blocked = lost.filter((d) => Object.values(state.activities).some((a) => a.dayId === d.id));
+    // Las actividades de reservas/trayectos no bloquean: siguen a su reserva (y salen del itinerario si queda fuera).
+    const blocked = lost.filter((d) => Object.values(state.activities).some((a) => a.dayId === d.id && !a.auto));
     if (blocked.length) return { ok: false, error: 'Hay actividades en ' + blocked.length + ' día(s) que quedarían fuera. Muévelas primero.' };
     const byDate = {};
     Object.values(state.days).forEach((d) => (byDate[d.date] = d));
@@ -166,6 +180,7 @@ JT.store = (function () {
     });
     state.days = days;
     state.trip = Object.assign({}, state.trip, { startDate: start, endDate: end });
+    syncAllLinks();
     commit();
     return { ok: true };
   }
@@ -186,7 +201,9 @@ JT.store = (function () {
     return i === -1 ? list.length : i;
   }
 
-  function addActivity(data) {
+  /* Versiones sin guardar (las usan también las reservas y trayectos); las públicas hacen commit. */
+
+  function insertActivity(data) {
     const id = U.uid('a');
     const ts = Date.now();
     const list = dayActivities(data.dayId);
@@ -194,13 +211,11 @@ JT.store = (function () {
     state.activities[id] = a;
     list.splice(data.order !== undefined ? data.order : insertIndex(list, data.startTime), 0, a);
     reindex(list);
-    commit();
     return id;
   }
 
-  function updateActivity(id, patch) {
+  function placeActivity(id, patch) {
     const cur = state.activities[id];
-    if (!cur) return;
     const upd = Object.assign({}, cur, patch, { id: id, updatedAt: Date.now() });
     state.activities[id] = upd;
     const timeChanged = 'startTime' in patch && patch.startTime !== cur.startTime;
@@ -211,7 +226,132 @@ JT.store = (function () {
       list.splice(insertIndex(list, upd.startTime), 0, upd);
       reindex(list);
     }
+    return { cur: cur, upd: upd, moved: timeChanged || dayChanged };
+  }
+
+  function dropActivity(id) {
+    const a = state.activities[id];
+    if (!a) return;
+    delete state.activities[id];
+    reindex(dayActivities(a.dayId));
+    Object.values(state.expenses).forEach((e) => { if (e.activityId === id) delete e.activityId; });
+  }
+
+  function addActivity(data) {
+    const id = insertActivity(data);
     commit();
+    return id;
+  }
+
+  function updateActivity(id, patch) {
+    if (!state.activities[id]) return;
+    const r = placeActivity(id, patch);
+    // Mover la actividad de una reserva/trayecto (de día u hora) mueve también la reserva/trayecto.
+    if (r.moved && r.upd.auto) pushToSource(r.upd);
+    commit();
+  }
+
+  /* ── Reservas y trayectos en el itinerario ────────────────────
+     Cada reserva o trayecto con fecha dentro del viaje tiene su
+     actividad en ese día (marcada `auto` con la colección de la que
+     sale), así aparece en el día, en Inicio y en el Modo viaje.
+     - Si ya había una actividad igual (mismo día, hora y tipo), se
+       enlaza esa en vez de duplicarla.
+     - Al editar la reserva/trayecto se actualiza su actividad; al
+       mover la actividad, se mueve la reserva/trayecto.
+     - Si quitas la actividad del itinerario, la reserva sigue y no
+       se vuelve a crear (`inItinerary: false`). */
+
+  const LINKED = { reservations: 'reservationId', transports: 'transportId' };
+  const RES_CATEGORY = { hotel: 'hotel', restaurant: 'restaurant', train: 'transport', flight: 'transport', activity: 'activity', other: 'other' };
+
+  function linkSpec(col, x) {
+    if (col === 'reservations') {
+      return { date: x.date, startTime: x.time, category: RES_CATEGORY[x.type] || 'other',
+        title: x.type === 'hotel' ? 'Check-in · ' + x.name : x.name, location: x.location };
+    }
+    const k = D.TRANSPORT[x.kind] || ['Trayecto'];
+    const sameDay = !x.arriveDate || x.arriveDate === x.date;
+    const end = sameDay && x.departTime && x.arriveTime && U.toMin(x.arriveTime) > U.toMin(x.departTime) ? x.arriveTime : undefined;
+    return { date: x.date, startTime: x.departTime, endTime: end, category: 'transport',
+      title: k[0] + ' ' + x.origin + ' → ' + x.destination, location: x.origin ? { name: x.origin } : undefined };
+  }
+
+  /** ¿La actividad habla del mismo sitio que la reserva? Comparte alguna palabra con sustancia (no «cena», «hotel»…). */
+  const GENERIC = ['cena', 'comida', 'almuerzo', 'reserva', 'hotel', 'entrada', 'entradas', 'visita', 'ficticio', 'restaurante'];
+  function sameName(name, a) {
+    const words = (t) => U.normalize(t).split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && GENERIC.indexOf(w) === -1);
+    const mine = words(name), theirs = words(a.title + ' ' + (resolveLocation(a).name || ''));
+    return mine.some((w) => theirs.indexOf(w) > -1);
+  }
+
+  /** Crea, actualiza o quita la actividad de una reserva/trayecto. No guarda. */
+  function syncLinked(col, id) {
+    const x = state[col][id], field = LINKED[col];
+    if (!x) return;
+    const spec = linkSpec(col, x);
+    const day = Object.values(state.days).find((d) => d.date === spec.date);
+    const linked = Object.values(state.activities).filter((a) => a[field] === id);
+    const own = linked.filter((a) => a.auto === col);
+    if (x.inItinerary === false || !day) { own.forEach((a) => dropActivity(a.id)); return; }
+    if (!linked.length) {
+      const twin = spec.startTime && dayActivities(day.id).find((a) => !a[field] && a.startTime === spec.startTime && a.category === spec.category &&
+        (col === 'transports' || sameName(x.name, a)));
+      if (twin) { twin[field] = id; return; }
+      const data = { dayId: day.id, title: spec.title, category: spec.category, startTime: spec.startTime || undefined, endTime: spec.endTime,
+        location: spec.location, auto: col, autoTitle: spec.title, isSample: x.isSample || undefined };
+      data[field] = id;
+      insertActivity(data);
+      return;
+    }
+    own.forEach(function (a) {
+      const patch = { dayId: day.id, startTime: spec.startTime || undefined, endTime: spec.endTime, autoTitle: spec.title };
+      if (a.title === a.autoTitle) patch.title = spec.title; // si le cambiaste el título, se respeta
+      if (!a.placeId && !a.restaurantId && spec.location) patch.location = spec.location;
+      placeActivity(a.id, patch);
+    });
+  }
+
+  /** La actividad de una reserva/trayecto cambió de día u hora: se lleva el cambio a la reserva/trayecto. */
+  function pushToSource(a) {
+    const src = state[a.auto] && state[a.auto][a[LINKED[a.auto]]];
+    const day = state.days[a.dayId];
+    if (!src || !day) return;
+    // Una estancia de hotel o un vuelo que llega otro día se desplazan enteros.
+    const shift = U.diffDays(src.date, day.date);
+    const endKey = a.auto === 'reservations' ? 'endDate' : 'arriveDate';
+    if (src[endKey] && shift) src[endKey] = U.addDays(src[endKey], shift);
+    src.date = day.date;
+    src[a.auto === 'reservations' ? 'time' : 'departTime'] = a.startTime;
+    src.updatedAt = Date.now();
+  }
+
+  /** Repasa todas las reservas y trayectos (al cargar, importar o cambiar fechas). No guarda. */
+  function syncAllLinks() {
+    Object.keys(LINKED).forEach((col) => Object.keys(state[col]).forEach((id) => syncLinked(col, id)));
+    // Actividades automáticas cuya reserva/trayecto ya no existe.
+    Object.values(state.activities).forEach((a) => {
+      if (a.auto && !(state[a.auto] && state[a.auto][a[LINKED[a.auto]]])) dropActivity(a.id);
+    });
+  }
+
+  /** Crea una reserva para una actividad que ya existe y las deja enlazadas (sin duplicar la actividad). */
+  function addReservationFor(activityId, data) {
+    const a = state.activities[activityId];
+    if (!a) return null;
+    const id = U.uid('re');
+    const ts = Date.now();
+    state.reservations[id] = Object.assign({}, data, { id: id, createdAt: ts, updatedAt: ts });
+    a.reservationId = id;
+    commit();
+    return id;
+  }
+
+  /** «Día 3 · jue 21 nov» del día en que quedó la actividad de una reserva/trayecto, o '' si no está en el itinerario. */
+  function linkedDayLabel(col, id) {
+    const a = Object.values(state.activities).find((x) => x[LINKED[col]] === id);
+    const d = a && state.days[a.dayId];
+    return d ? 'Día ' + dayNumber(d.id) + ' · ' + U.fmtShort(d.date) : '';
   }
 
   function toggleDone(id) {
@@ -223,7 +363,8 @@ JT.store = (function () {
     const a = state.activities[id];
     if (!a) return null;
     const copy = Object.assign({}, a, { title: a.title + ' (copia)', status: 'pending', order: a.order + 1 });
-    delete copy.id; delete copy.isSample;
+    // La copia es una actividad normal: no pertenece a la reserva/trayecto del original.
+    delete copy.id; delete copy.isSample; delete copy.auto; delete copy.autoTitle; delete copy.reservationId; delete copy.transportId;
     return addActivity(copy);
   }
 
@@ -247,8 +388,8 @@ JT.store = (function () {
 
   /* ── Datos completos ──────────────────────────────────────── */
 
-  function replaceAll(data) { state = normalize(data); commit(); }
-  function loadSample() { state = normalize(D.sampleTrip()); commit(); }
+  function replaceAll(data) { state = normalize(data); syncAllLinks(); commit(); }
+  function loadSample() { state = normalize(D.sampleTrip()); syncAllLinks(); commit(); }
 
   function startEmptyTrip(input) {
     const ts = Date.now();
@@ -277,6 +418,7 @@ JT.store = (function () {
       if (d.cityId && !state.cities[d.cityId]) { delete d.cityId; delete d.title; }
       delete d.isSample;
     });
+    syncAllLinks(); // quita las actividades automáticas de las reservas/trayectos de ejemplo
     state.trip = Object.assign({}, state.trip, { isSample: false });
     commit();
   }
@@ -378,6 +520,12 @@ JT.store = (function () {
       .sort((a, b) => U.cmpTime(a.time, b.time));
   }
 
+  /** Las reservas de ese día que NO salen ya en su timeline (p. ej. el hotel las noches sin check-in). */
+  function reservationsOffTimeline(day) {
+    const inDay = new Set(dayActivities(day.id).map((a) => a.reservationId).filter(Boolean));
+    return reservationsOn(day.date).filter((r) => !inDay.has(r.id));
+  }
+
   /** "Dónde estoy" sin GPS: la última actividad empezada de hoy, o el hotel. */
   function inferArea(day, n) {
     if (!day) return undefined;
@@ -401,10 +549,10 @@ JT.store = (function () {
 
   return {
     load, get, subscribe, create, update, remove, setTrip, setSettings, setTripDates,
-    addActivity, updateActivity, toggleDone, duplicateActivity, shiftActivity, sortDayByTime,
+    addActivity, updateActivity, toggleDone, duplicateActivity, shiftActivity, sortDayByTime, addReservationFor, linkedDayLabel,
     replaceAll, loadSample, startEmptyTrip, removeSample, exportJson, parseImport,
     sortedDays, dayNumber, dayActivities, cityStays, resolveLocation, now, today, travelModeActive,
-    upcoming, reservationsOn, inferArea, savedNear,
+    upcoming, reservationsOn, reservationsOffTimeline, inferArea, savedNear,
     isWritable: () => writable, lastError: () => lastError, clearError: () => { lastError = null; }
   };
 })();

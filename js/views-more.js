@@ -33,6 +33,17 @@
     return close;
   }
 
+  /* Reservas y trayectos aparecen solos en el itinerario de su día (lo hace store.js). */
+
+  function itineraryToggle(x) {
+    return UI.chipsMulti('inItinerary', [{ value: '1', label: '🗓️ Mostrar en el itinerario del día' }], x.inItinerary === false ? [] : ['1']);
+  }
+
+  function savedToast(msg, col, id) {
+    const where = S.linkedDayLabel(col, id);
+    UI.toast(where ? msg + ' · está en el ' + where : msg);
+  }
+
   /* ══ MÁS ═════════════════════════════════════════════════════ */
 
   V.more = function () {
@@ -74,14 +85,19 @@
     if (r.confirmationCode) html += UI.card('<small class="muted">Nº DE RESERVA · toca para copiar</small><div class="display code">' + esc(r.confirmationCode) + '</div>', { tone: 'info', data: { act: 'copy', text: r.confirmationCode } });
     html += '<div class="row row--wrap">' + (dir ? '<a class="btn btn--primary btn--sm" href="' + esc(dir) + '" target="_blank" rel="noopener">' + U.icon('nav', 16) + '<span>Cómo llegar</span></a>' : '') +
       (r.phone ? '<a class="btn btn--secondary btn--sm" href="tel:' + esc(r.phone.replace(/[^\d+]/g, '')) + '">' + U.icon('phone', 16) + '<span>Llamar</span></a>' : '') +
-      (r.url ? UI.btn('Web', { icon: 'link', size: 'sm', variant: 'secondary', data: { act: 'openUrl', url: r.url } }) : '') + '</div>';
+      (r.url ? UI.btn('Web', { icon: 'link', size: 'sm', variant: 'secondary', data: { act: 'openUrl', url: r.url } }) : '') +
+      UI.btn('Añadir a Google Calendar', { icon: 'calendar', size: 'sm', variant: 'secondary', data: { act: 'gcal', col: 'reservations', id: r.id } }) + '</div>';
     html += UI.card((loc.name || loc.address ? UI.listRow({ icon: 'pin', title: loc.name || loc.address, sub: loc.name ? loc.address : '' }) : '') + (r.phone ? UI.listRow({ icon: 'phone', title: r.phone }) : '') +
       (r.cost ? UI.listRow({ icon: 'wallet', title: U.money(r.cost, r.currency || 'JPY'), sub: 'Coste' }) : '') + (!loc.name && !loc.address && !r.phone && !r.cost ? '<p class="muted">Sin más datos.</p>' : ''));
     if (r.notes) html += UI.section('Notas', UI.card('<p class="pre">' + esc(r.notes) + '</p>', { tone: 'warn' }));
-    if (linked.length) html += UI.section('En el itinerario', UI.card(linked.map((a) => UI.listRow({ icon: 'calendar', title: a.title, sub: a.startTime, data: { act: 'go', to: 'activity/' + a.id } })).join('')));
+    html += UI.section('En el itinerario', linked.length
+      ? UI.card(linked.map((a) => UI.listRow({ icon: 'calendar', title: a.title, sub: [s.days[a.dayId] ? 'Día ' + S.dayNumber(a.dayId) + ' · ' + U.fmtShort(s.days[a.dayId].date) : '', a.startTime].filter(Boolean).join(' · '), data: { act: 'go', to: 'activity/' + a.id } })).join(''))
+      : '<p class="muted small">' + (r.inItinerary === false ? 'La quitaste del itinerario. Edítala y marca «Mostrar en el itinerario del día» para que vuelva.' : 'Su fecha está fuera del viaje.') + '</p>');
     return { html: html };
   };
   A.copy = async (el) => { await SV.copy(el.dataset.text); UI.toast('Copiado'); };
+  /** Abre Google Calendar con el evento relleno: sólo queda pulsar Guardar. */
+  A.gcal = (el) => SV.openUrl(L.gcalUrl(el.dataset.col, S.get()[el.dataset.col][el.dataset.id]));
   A.shareReservation = async (el) => { const r = await SV.share(L.shareReservation(S.get().reservations[el.dataset.id])); if (r === 'copied') UI.toast('Copiado'); };
 
   F.reservation = function (id, def) {
@@ -96,6 +112,7 @@
         UI.field('Nº de reserva', UI.input('confirmationCode', r.confirmationCode || '', { placeholder: 'ABC123' }), { optional: true }) +
         '<div class="row row--top">' + UI.field('Fecha (entrada)', UI.input('date', r.date, { type: 'date' })) + UI.field('Hora', UI.input('time', r.time || '', { type: 'time' }), { optional: true }) + '</div>' +
         UI.field('Salida (hoteles)', UI.input('endDate', r.endDate || '', { type: 'date' }), { optional: true }) +
+        itineraryToggle(r) +
         UI.field('Lugar', UI.input('locName', loc.name || ''), { optional: true }) + UI.field('Dirección', UI.input('address', loc.address || ''), { optional: true }) + C.coordsField(loc.coords) +
         UI.details('Más detalles',
           UI.field('Ciudad', UI.chips('cityId', C.cityOptions(), r.cityId, { allowNone: true, noneLabel: 'Sin ciudad' }), { optional: true }) +
@@ -112,9 +129,10 @@
         if (cost === null) return 'Coste no válido';
         if (f.coords && !C.parseCoords(f.coords)) return 'Coordenadas no válidas';
         const location = f.locName || f.address || f.coords ? { name: f.locName || undefined, address: f.address || undefined, coords: C.parseCoords(f.coords) } : undefined;
-        const data = { type: f.type, name: f.name, confirmationCode: f.confirmationCode || undefined, date: f.date, time: f.time || undefined, endDate: f.endDate || undefined, location: location, cityId: f.cityId || undefined, cost: cost || undefined, currency: cost ? f.currency : undefined, phone: f.phone || undefined, url: f.url || undefined, notes: f.notes || undefined };
-        if (ex) S.update('reservations', ex.id, data); else S.create('reservations', data);
-        UI.toast('Reserva guardada');
+        const data = { type: f.type, name: f.name, confirmationCode: f.confirmationCode || undefined, date: f.date, time: f.time || undefined, endDate: f.endDate || undefined, location: location, cityId: f.cityId || undefined, cost: cost || undefined, currency: cost ? f.currency : undefined, phone: f.phone || undefined, url: f.url || undefined, notes: f.notes || undefined, inItinerary: f.inItinerary ? undefined : false };
+        const rid = ex ? ex.id : S.create('reservations', data);
+        if (ex) S.update('reservations', ex.id, data);
+        savedToast('Reserva guardada', 'reservations', rid);
       }
     });
   };
@@ -178,6 +196,7 @@
         '<div class="stack-sm"><span class="field__label">Escalas / transbordos <em>· opcional</em></span><div class="stack-sm" data-stops>' + (t.stops || []).map(stopBlock).join('') + '</div>' +
         '<button type="button" class="btn btn--secondary btn--sm" data-stop-add>' + U.icon('plus', 16) + '<span>Añadir escala</span></button>' +
         '<small class="faint">Pon las horas locales de cada aeropuerto, como salen en la tarjeta de embarque: la app calcula cuánto esperas.</small></div>' +
+        itineraryToggle(t) +
         UI.details('Más detalles',
           UI.field('Reserva', UI.input('bookingCode', t.bookingCode || ''), { optional: true }) +
           UI.field('Duración total (min)', UI.input('durationMinutes', t.durationMinutes || '', { inputmode: 'numeric' }), { optional: true, hint: 'Trenes: si lo dejas vacío se calcula. Vuelos: escríbela tú (cada hora es local de su aeropuerto).' }) +
@@ -223,9 +242,10 @@
           if (!arriveDate && dur < 0) dur += 1440;
           dur = dur > 0 ? dur : undefined;
         }
-        const data = { kind: f.kind, origin: f.origin, destination: f.destination, date: f.date, arriveDate: arriveDate, departTime: f.departTime || undefined, arriveTime: f.arriveTime || undefined, durationMinutes: dur, number: f.number || undefined, seat: f.seat || undefined, stops: st.stops.length ? st.stops : undefined, bookingCode: f.bookingCode || undefined, cost: cost || undefined, currency: cost ? f.currency : undefined, notes: f.notes || undefined };
-        if (ex) S.update('transports', ex.id, data); else S.create('transports', data);
-        UI.toast('Trayecto guardado');
+        const data = { kind: f.kind, origin: f.origin, destination: f.destination, date: f.date, arriveDate: arriveDate, departTime: f.departTime || undefined, arriveTime: f.arriveTime || undefined, durationMinutes: dur, number: f.number || undefined, seat: f.seat || undefined, stops: st.stops.length ? st.stops : undefined, bookingCode: f.bookingCode || undefined, cost: cost || undefined, currency: cost ? f.currency : undefined, notes: f.notes || undefined, inItinerary: f.inItinerary ? undefined : false };
+        const tid = ex ? ex.id : S.create('transports', data);
+        if (ex) S.update('transports', ex.id, data);
+        savedToast('Trayecto guardado', 'transports', tid);
       }
     });
   };
@@ -472,8 +492,14 @@
   JT.uiState.import = JT.uiState.import || { text: '' };
 
   V.import = function () {
-    const st = JT.uiState.import, items = L.parseImportLines(st.text), s = S.get();
+    const st = JT.uiState.import, s = S.get();
+    // Texto copiado de «Compartir» de Google Maps (nombre, dirección y enlace corto): también es un solo sitio.
+    if (!st.shared && /maps\.app\.goo\.gl/.test(st.text) && st.text.split('\n').filter((l) => l.trim()).length <= 4) { st.shared = L.parseShared({ text: st.text }); st.geoTried = false; }
+    // Si llega de «Compartir» (app.js), es un solo sitio; si no, una línea = un elemento.
+    const items = st.shared ? [st.shared] : L.parseImportLines(st.text);
     let html = UI.header({ back: true, title: 'Importar', subtitle: 'Enlaces de Google Maps, webs, texto o confirmaciones de reserva' });
+    if (st.shared) html += UI.banner('info', 'download', 'Sitio compartido', 'Revisa si es para visitar o para comer y créalo.');
+    if (st.shared && st.geoLoading) html += '<div class="loading"><span class="spinner"></span><small class="muted">Buscando su ubicación…</small></div>';
     html += '<label class="field"><span class="field__label">Pega un enlace o texto</span><textarea class="input" rows="5" data-input="importText" placeholder="https://maps.google.com/…&#10;Fushimi Inari Taisha, Kyoto&#10;Ichiran ramen Shibuya">' + esc(st.text) + '</textarea></label>';
     html += '<div class="row">' + UI.btn('Pegar', { icon: 'clipboard', size: 'sm', variant: 'secondary', data: { act: 'pasteImport' } }) + (st.text ? UI.btn('Borrar', { size: 'sm', variant: 'ghost', data: { act: 'clearImport' } }) : '') + '</div>';
     if (items.length > 1) html += UI.banner('info', 'list', items.length + ' elementos detectados', 'Revísalos uno a uno o créalos todos (luego podrás completar sus datos).', { action: UI.btn('Crear todos', { size: 'sm', data: { act: 'importAll' } }) });
@@ -485,14 +511,41 @@
         '<div class="row row--wrap">' + UI.btn(it.kind === 'reservation' ? 'Crear reserva' : it.kind === 'restaurant' ? 'Crear restaurante' : 'Crear lugar', { size: 'sm', data: { act: 'importOne', i: i } }) +
         (it.kind !== 'reservation' ? UI.btn(it.kind === 'restaurant' ? 'Es un lugar' : 'Es un restaurante', { size: 'sm', variant: 'ghost', data: { act: 'importOne', i: i, swap: '1' } }) : '') + '</div>', { cls: 'stack-sm' });
     }).join('');
-    if (!st.text.trim()) html += '<p class="faint small">Si el texto no trae coordenadas, podrás buscarlas por nombre al crear el lugar (requiere conexión).</p>';
-    return { html: html };
+    if (!st.text.trim()) html += '<p class="faint small">Truco: en Google Maps, abre un sitio y pulsa Compartir → Japón Travel. Si el texto no trae coordenadas, podrás buscarlas por nombre al crear el lugar (requiere conexión).</p>';
+    return { html: html, mount: () => locateShared(st) };
   };
-  JT.changes.importText = JT.utils.debounce(function (el) { JT.uiState.import.text = el.value; JT.app.render({ keepFocus: true }); }, 350);
+
+  /** El enlace corto de Google Maps no se puede leer: se busca la ubicación por nombre y ciudad, luego por dirección. */
+  async function locateShared(st) {
+    const it = st.shared;
+    if (!it || !it.needsCoords || st.geoTried || !SV.online()) return;
+    st.geoTried = true;
+    st.geoLoading = true;
+    JT.app.render();
+    const city = it.cityId && S.get().cities[it.cityId];
+    const tries = [city ? it.name + ', ' + city.name : null, it.address, it.name].filter(Boolean);
+    let hit = null;
+    for (const q of tries) {
+      try { hit = (await SV.geocode(q))[0]; } catch (e) { hit = null; }
+      if (hit) break;
+    }
+    st.geoLoading = false;
+    if (st.shared !== it) return; // el usuario ya ha cambiado de texto
+    if (hit) {
+      it.coords = hit.coords;
+      it.notes.push('📍 Ubicación encontrada: ' + hit.display.split(',').slice(0, 3).join(',') + ' (compruébala al crearlo)');
+      if (!it.cityId) { const c = L.matchCity(hit.display); if (c) it.cityId = c.id; }
+    } else {
+      it.notes.push('No se encontró la ubicación por el nombre; se guarda el enlace de Google Maps para abrirlo desde la ficha.');
+    }
+    JT.app.render();
+  }
+
+  JT.changes.importText = JT.utils.debounce(function (el) { const st = JT.uiState.import; st.text = el.value; st.shared = null; JT.app.render({ keepFocus: true }); }, 350);
   A.pasteImport = async function () {
-    try { JT.uiState.import.text = await navigator.clipboard.readText(); JT.app.render(); } catch (e) { UI.toast('El navegador no deja leer el portapapeles: pega con mantener pulsado'); }
+    try { JT.uiState.import.text = await navigator.clipboard.readText(); JT.uiState.import.shared = null; JT.app.render(); } catch (e) { UI.toast('El navegador no deja leer el portapapeles: pega con mantener pulsado'); }
   };
-  A.clearImport = () => { JT.uiState.import.text = ''; JT.app.render(); };
+  A.clearImport = () => { JT.uiState.import = { text: '' }; JT.app.render(); };
   A.importOne = function (el) {
     const it = Object.assign({}, JT.uiState.import.items[+el.dataset.i]);
     if (el.dataset.swap) it.kind = it.kind === 'restaurant' ? 'place' : 'restaurant';
@@ -560,7 +613,9 @@
       '<form id="fRates" class="stack">' + D.CURRENCIES.filter((c) => c !== t.mainCurrency).map((c) => UI.field('1 ' + c + ' = ? ' + t.mainCurrency, UI.input('rate_' + c, st.manualRates[c] || '', { inputmode: 'decimal', placeholder: 'Automático' }), { optional: true })).join('') +
       '<div class="row">' + UI.btn('Guardar tipos', { type: 'submit', size: 'sm', variant: 'secondary' }) + (SV.online() ? UI.btn('Actualizar BCE', { size: 'sm', variant: 'ghost', icon: 'refresh', data: { act: 'refreshRates' } }) : '') + '</div></form>', { cls: 'stack' }));
 
+    const lastExp = SV.lastExport();
     html += UI.section('Datos', UI.card(UI.btn('Exportar todo (JSON)', { icon: 'download', variant: 'secondary', block: true, data: { act: 'exportJson' } }) +
+      '<small class="muted">' + (lastExp ? 'Última copia: ' + new Date(lastExp).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Todavía no has hecho ninguna copia.') + ' Guárdala fuera del móvil (Drive, correo…).</small>' +
       UI.btn('Exportar gastos (CSV)', { icon: 'download', variant: 'secondary', block: true, data: { act: 'exportCsv' } }) +
       UI.btn('Importar (JSON)', { icon: 'upload', variant: 'secondary', block: true, data: { act: 'importJson' } }) +
       '<small class="faint">Los datos sensibles cifrados de Documentos no se incluyen en la exportación. PC y móvil no se sincronizan: usa exportar e importar para pasar datos.</small><hr>' +
@@ -568,7 +623,12 @@
       UI.btn('Empezar un viaje nuevo', { icon: 'plus', variant: 'soft', block: true, data: { act: 'newTrip' } }) +
       UI.btn('Borrar todos los datos', { icon: 'trash', variant: 'danger', block: true, data: { act: 'wipe' } }), { cls: 'stack' }));
 
-    html += UI.section('Esta instalación', UI.card((JT.uiState.installPrompt ? UI.btn('Instalar la app en este dispositivo', { icon: 'download', variant: 'secondary', block: true, data: { act: 'installApp' } }) : '') + '<small class="muted">Japón Travel v' + U.VERSION + ' · ' + esc(location.protocol === 'file:' ? 'Archivo local' : location.host) + ' · datos en el localStorage de este navegador' + (S.isWritable() ? '' : ' (BLOQUEADO: no se guardan cambios)') + '.<br>Funciona sin conexión; restaurantes cercanos, búsqueda de coordenadas y tipos de cambio requieren Internet.</small><small class="muted" id="swStatus"></small>', { tone: 'muted', cls: 'stack-sm' }));
+    // Versión, tamaño, espacio y protección (receta de Plantillas/Version-y-espacio.md); se rellena en mount().
+    html += UI.section('Esta instalación', UI.card((JT.uiState.installPrompt ? UI.btn('Instalar la app en este dispositivo', { icon: 'download', variant: 'secondary', block: true, data: { act: 'installApp' } }) : '') +
+      '<div class="build"><span class="build__left"><span>Versión</span><small id="buildQuota"></small><small id="buildPersist" hidden></small></span><strong class="mono build__right" id="buildCache">—</strong></div>' +
+      '<p class="small" id="buildHint" hidden></p>' +
+      (S.isWritable() ? '' : '<p class="small warn">El navegador está BLOQUEANDO el almacenamiento: no se guardan cambios.</p>') +
+      '<small class="faint">Funciona sin conexión; restaurantes cercanos, búsqueda de coordenadas y tipos de cambio requieren Internet.</small>', { tone: 'muted', cls: 'stack-sm' }));
 
     return {
       html: html,
@@ -621,12 +681,62 @@
           S.setSettings({ manualRates: manual });
           UI.toast('Tipos guardados');
         });
-        const sw = root.querySelector('#swStatus');
-        if ('caches' in window && location.protocol !== 'file:') caches.keys().then((k) => { sw.textContent = k.length ? 'Caché offline: ' + k.join(', ') + (k.indexOf('japon-travel-v' + U.VERSION) === -1 ? ' ⚠️ no coincide con la versión: recarga la página' : ' ✓') : 'Caché offline: todavía no instalada'; });
-        else sw.textContent = location.protocol === 'file:' ? 'Abierta como archivo local: sin caché offline ni instalación (publícala en GitHub Pages para eso).' : '';
+        renderBuildInfo(root);
       }
     };
   };
+
+  /* ── Versión, espacio y protección ────────────────────────────
+     Una fila: «Versión … v1.0.5 · 27/10/2026 · 673 KB», debajo los
+     datos frente al tope del navegador y si están protegidos; y una
+     nota sólo si hay algo que hacer. */
+
+  function formatKB(bytes) {
+    const kb = bytes / 1024;
+    return kb.toLocaleString('es-ES', { maximumFractionDigits: kb < 10 ? 1 : 0 }) + ' KB';
+  }
+
+  function renderBuildInfo(root) {
+    const $cache = root.querySelector('#buildCache'), $quota = root.querySelector('#buildQuota');
+    const $persist = root.querySelector('#buildPersist'), $hint = root.querySelector('#buildHint');
+    const setHint = (text) => { $hint.textContent = text; $hint.hidden = !text; };
+    const date = U.BUILD_DATE.split('-').reverse().join('/');
+
+    const use = SV.storageUse(), pct = (use.mine + use.others) / use.max * 100;
+    $quota.textContent = 'Datos: ' + formatKB(use.mine) + ' de ' + formatKB(use.max) + ' máx.' +
+      (use.others >= 1024 ? ' · otras apps: ' + formatKB(use.others) : '') + (pct >= 1 ? ' (' + Math.round(pct) + ' %)' : '');
+    $quota.dataset.state = pct >= 90 ? 'full' : pct >= 70 ? 'high' : 'ok';
+    $quota.title = 'El navegador guarda hasta 5 MB por sitio, compartidos con tus otras apps de ' + location.host + '.';
+
+    SV.persisted().then(function (yes) {
+      if (yes === null) { $persist.hidden = true; return; }
+      $persist.hidden = false;
+      $persist.dataset.state = yes ? 'ok' : 'risk';
+      $persist.textContent = yes ? '🔒 Protegidos: el navegador no los borrará' : '⚠️ Sin proteger: el navegador podría borrarlos';
+      $persist.title = yes ? 'El navegador los trata como persistentes: no los borra aunque le falte espacio.'
+        : 'Instalar la app y usarla a menudo suele bastar para que Chrome los proteja. Mientras, exporta copias.';
+    });
+
+    // La fecha sólo se pone si la copia guardada es la de este código: de una versión vieja no la sabemos.
+    const line = (version, appBytes) => 'v' + version + (version === U.VERSION ? ' · ' + date : '') + ' · ' + formatKB(appBytes + use.mine);
+    $cache.dataset.state = 'plain';
+    if (location.protocol === 'file:' || !window.caches) {
+      $cache.textContent = line(U.VERSION, 0);
+      $cache.title = 'Sin caché offline: solo cuentan tus datos';
+      return;
+    }
+    $cache.textContent = 'Comprobando…';
+    SV.offlineCopy().then(function (c) {
+      if (!c) { $cache.textContent = line(U.VERSION, 0); setHint('Todavía no se ha guardado una copia offline.'); return; }
+      $cache.textContent = line(c.version, c.bytes);
+      $cache.title = 'App ' + formatKB(c.bytes) + ' + datos ' + formatKB(use.mine);
+      $cache.dataset.state = c.stale ? 'stale' : 'ok';
+      setHint(c.stale ? 'La copia offline no coincide con la v' + U.VERSION + '. Cierra la app del todo y ábrela otra vez para que se actualice.' : '');
+    }).catch(function () {
+      $cache.textContent = line(U.VERSION, 0);
+      $cache.title = 'No se pudo leer la caché: solo cuentan tus datos';
+    });
+  }
 
   /** «Hoy: 1 EUR = 177,32 ¥ en el BCE → la app usa 178 ¥.» con el tipo guardado. */
   function yenRoundingExample(rates, main) {
@@ -664,7 +774,11 @@
   };
   A.setMe = (el) => { Object.values(S.get().travelers).forEach((x) => x.isMe && S.update('travelers', x.id, { isMe: false })); S.update('travelers', el.dataset.id, { isMe: true }); };
   A.delTraveler = async (el) => { const x = S.get().travelers[el.dataset.id]; if (await UI.confirm('¿Eliminar a ' + x.name + '?', 'Sus gastos se conservarán sin «quién pagó».')) S.remove('travelers', x.id); };
-  A.exportJson = () => SV.download('japon-travel-' + new Date().toISOString().slice(0, 10) + '.json', S.exportJson(), 'application/json');
+  A.exportJson = function () {
+    SV.download('japon-travel-' + new Date().toISOString().slice(0, 10) + '.json', S.exportJson(), 'application/json');
+    SV.markExported();
+    JT.app.render();
+  };
   A.importJson = async function () {
     const f = await SV.pickFile();
     if (!f) return;

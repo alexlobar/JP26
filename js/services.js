@@ -355,10 +355,65 @@ JT.services = (function () {
     window.open(/^[a-z]+:/i.test(url) ? url : 'https://' + url, '_blank', 'noopener');
   }
 
+  /* ── Copias, espacio y datos protegidos ───────────────────────
+     Ver Plantillas/Version-y-espacio.md. El tope que importa es el de
+     localStorage: 5 MB por ORIGEN, y el origen es alexlobar.github.io
+     entero, así que lo comparten todas las apps publicadas ahí. */
+
+  const LAST_EXPORT_KEY = 'japonTravel.lastExport';
+  const STORAGE_MAX = 5 * 1024 * 1024;
+  const CACHE_PREFIX = 'japon-travel-v'; // igual que CACHE en sw.js, sin la versión
+
+  function markExported() { lsSet(LAST_EXPORT_KEY, String(Date.now())); }
+  function lastExport() { const v = Number(lsGet(LAST_EXPORT_KEY)); return v > 0 ? v : null; }
+
+  /** Caracteres en localStorage: los de esta app (claves japonTravel.*) y los de otras apps del dominio. */
+  function storageUse() {
+    let mine = 0, others = 0;
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i), size = k.length + (localStorage.getItem(k) || '').length;
+        if (k.indexOf('japonTravel.') === 0) mine += size; else others += size;
+      }
+    } catch (e) { /* sin acceso al almacenamiento */ }
+    return { mine: mine, others: others, max: STORAGE_MAX };
+  }
+
+  function cacheBytes(name) {
+    return caches.open(name).then((cache) => cache.keys().then((reqs) => Promise.all(reqs.map((req) =>
+      cache.match(req).then((res) => (res ? res.blob() : null)).then((b) => (b ? b.size : 0))))))
+      .then((sizes) => sizes.reduce((a, b) => a + b, 0));
+  }
+
+  /** { name, version, bytes, stale } de la copia offline de ESTA app, o null si no hay. */
+  function offlineCopy() {
+    if (location.protocol === 'file:' || !window.caches) return Promise.resolve(null);
+    return caches.keys().then(function (keys) {
+      const mine = keys.filter((k) => k.indexOf(CACHE_PREFIX) === 0);
+      if (!mine.length) return null;
+      const want = CACHE_PREFIX + U.VERSION, stale = mine.indexOf(want) === -1;
+      const name = stale ? mine[mine.length - 1] : want;
+      return Promise.all(mine.map(cacheBytes)).then((sizes) => ({ name: name, version: name.slice(CACHE_PREFIX.length), bytes: sizes.reduce((a, b) => a + b, 0), stale: stale }));
+    });
+  }
+
+  /** true/false si el navegador protege los datos contra el borrado; null si no tiene la API. */
+  function persisted() {
+    if (!navigator.storage || !navigator.storage.persisted) return Promise.resolve(null);
+    return navigator.storage.persisted().catch(() => null);
+  }
+
+  /** Se pide en cada arranque mientras no esté concedido: Chrome decide por uso e instalación. */
+  function requestPersist() {
+    if (!navigator.storage || !navigator.storage.persist) return Promise.resolve(null);
+    return navigator.storage.persisted().then((yes) => yes || navigator.storage.persist()).catch(() => null);
+  }
+
   return {
     online, rates, refreshRatesIfStale, fetchRates, nearby, geocode, getPlacesKey, setPlacesKey,
     vaultAvailable, vaultExists, vaultUnlocked, vaultUnlock, vaultLock, vaultGet, vaultSet, vaultReset,
     notificationsSupported, requestNotifications, dueReminders, showSystemNotification,
-    copy, share, download, pickFile, openUrl
+    copy, share, download, pickFile, openUrl,
+    markExported, lastExport, storageUse, offlineCopy, persisted, requestPersist
   };
 })();

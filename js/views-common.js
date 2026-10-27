@@ -111,7 +111,8 @@ JT.cards = (function () {
 
   function expenseRow(e, mainValue) {
     const s = S.get(), c = D.EXPENSE[e.category], payer = e.paidById && s.travelers[e.paidById];
-    const meta = [U.fmtShort(e.date), e.placeName, payer ? 'pagó ' + payer.name : '', (e.splitWithIds || []).length > 1 ? '÷' + e.splitWithIds.length : ''].filter(Boolean).join(' · ');
+    const pay = e.paymentMethod && D.PAYMENT[e.paymentMethod];
+    const meta = [U.fmtShort(e.date), pay ? pay[1] + ' ' + pay[0] : '', e.placeName, payer ? 'pagó ' + payer.name : '', (e.splitWithIds || []).length > 1 ? '÷' + e.splitWithIds.length : ''].filter(Boolean).join(' · ');
     return '<div class="swipe" data-swipe>' +
       '<div class="swipe__actions"><button type="button" class="swipe__btn" data-act="dupExpense" data-id="' + e.id + '">' + U.icon('copy', 18) + 'Duplicar</button>' +
       '<button type="button" class="swipe__btn swipe__btn--danger" data-act="delExpense" data-id="' + e.id + '">' + U.icon('trash', 18) + 'Eliminar</button></div>' +
@@ -141,7 +142,8 @@ JT.cards = (function () {
       '<div class="row row--between"><small class="muted">' + esc([k[0], t.number, U.fmtDay(t.date)].filter(Boolean).join(' · ')) + '</small><span class="mono">' + (t.departTime || '--:--') + ' → ' + (t.arriveTime || '--:--') + (plusDays > 0 ? '<sup>+' + plusDays + '</sup>' : '') + '</span></div>' +
       (stops.length ? '<div class="stops">' + stopRows + '</div>' : '') +
       '<div class="pills">' + (stops.length ? UI.pill(stops.length + (stops.length === 1 ? ' escala' : ' escalas') + ' · ' + U.fmtDur(wait) + ' de espera', 'info') : '') +
-      (t.durationMinutes ? UI.pill(U.fmtDur(t.durationMinutes), 'neutral', 'clock') : '') + (t.seat ? UI.pill(t.seat) : '') + (t.bookingCode ? UI.pill(t.bookingCode, 'info') : '') + '</div></div>';
+      (t.durationMinutes ? UI.pill(U.fmtDur(t.durationMinutes), 'neutral', 'clock') : '') + (t.seat ? UI.pill(t.seat) : '') + (t.bookingCode ? UI.pill(t.bookingCode, 'info') : '') + '</div>' +
+      '<div class="row">' + UI.btn('Añadir a Google Calendar', { icon: 'calendar', size: 'sm', variant: 'ghost', data: { act: 'gcal', col: 'transports', id: t.id } }) + '</div></div>';
   }
 
   function noteRef(n) {

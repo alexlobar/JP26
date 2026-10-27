@@ -261,7 +261,27 @@ JT.app = (function () {
      ofrecemos con un botón propio en Inicio y en Ajustes. */
   function listenInstall() {
     window.addEventListener('beforeinstallprompt', function (ev) { ev.preventDefault(); JT.uiState.installPrompt = ev; scheduleRender(); });
-    window.addEventListener('appinstalled', function () { JT.uiState.installPrompt = null; UI.toast('App instalada: búscala entre tus aplicaciones'); scheduleRender(); });
+    window.addEventListener('appinstalled', function () {
+      JT.uiState.installPrompt = null;
+      UI.toast('App instalada: búscala entre tus aplicaciones');
+      persist(); // al instalarla es cuando Chrome suele aceptar proteger los datos
+      scheduleRender();
+    });
+  }
+
+  /** Pide que el navegador no borre los datos y, si Ajustes está a la vista, repinta su estado (🔒 / ⚠️). */
+  function persist() {
+    SV.requestPersist().then(function () { if (document.body.dataset.view === 'settings') scheduleRender(); });
+  }
+
+  /* Compartir desde Google Maps (u otra app) → Japón Travel. El manifest declara share_target,
+     así que Android abre index.html?title=…&text=…&url=…: se lleva a Importar como un solo sitio. */
+  function takeShared() {
+    const q = new URLSearchParams(location.search);
+    if (!q.has('title') && !q.has('text') && !q.has('url')) return;
+    const sh = { title: q.get('title') || '', text: q.get('text') || '', url: q.get('url') || '' };
+    history.replaceState(null, '', location.pathname + '#/import');
+    JT.uiState.import = { text: [sh.title, sh.text, sh.url].filter(Boolean).join('\n'), shared: JT.logic.parseShared(sh) };
   }
 
   /* ── Arranque ─────────────────────────────────────────────── */
@@ -289,10 +309,13 @@ JT.app = (function () {
     document.addEventListener('touchstart', onTouchStart, { passive: true });
     document.addEventListener('touchmove', onTouchMove, { passive: true });
     document.addEventListener('touchend', onTouchEnd);
+    takeShared();
     render();
     listenInstall();
     linkManifest();
     registerServiceWorker();
+    // Pedir que el navegador no borre los datos; se repite en cada arranque mientras no lo conceda.
+    persist();
     SV.refreshRatesIfStale().then((changed) => changed && scheduleRender()).catch(() => {});
     setInterval(tick, 30000);
     setTimeout(tick, 2000);

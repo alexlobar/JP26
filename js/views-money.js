@@ -125,7 +125,8 @@
     const me = travelers.find((x) => x.isMe) || travelers[0];
     const last = Object.values(s.expenses).filter((e) => !e.isSample).sort((a, b) => b.createdAt - a.createdAt)[0];
     const e = ex || {
-      currency: last ? last.currency : 'JPY', date: def.date || t.now.date, cityId: def.cityId || (t.phase === 'during' && t.city ? t.city.id : undefined),
+      currency: last ? last.currency : 'JPY', paymentMethod: last ? last.paymentMethod : undefined,
+      date: def.date || t.now.date, cityId: def.cityId || (t.phase === 'during' && t.city ? t.city.id : undefined),
       placeName: def.placeName, activityId: def.activityId, paidById: me && me.id, splitWithIds: me ? [me.id] : []
     };
     const main = s.trip.mainCurrency;
@@ -133,12 +134,13 @@
       '<label class="field"><span class="field__label">Importe</span><input class="input input--lg" name="amount" inputmode="decimal" placeholder="0" value="' + esc(ex ? String(ex.amount).replace('.', ',') : '') + '"' + (ex ? '' : ' autofocus') + ' autocomplete="off"><span class="field__hint" id="conv"></span></label>' +
       UI.chips('currency', D.CURRENCIES.map((c) => ({ value: c, label: c })), e.currency) +
       UI.field('Categoría', UI.chips('category', D.options(D.EXPENSE), e.category)) +
+      // Sólo para saber cómo se pagó: el total de gastos es uno solo, se pague como se pague.
+      UI.field('Pagado con', UI.chips('paymentMethod', D.options(D.PAYMENT), e.paymentMethod, { allowNone: true, noneLabel: '—' }), { optional: true }) +
       UI.field('Descripción', UI.input('description', e.description || '', { placeholder: 'p.ej. Cena ramen' }), { optional: true }) +
       UI.details('Más detalles',
         UI.field('Fecha', UI.input('date', e.date, { type: 'date' })) +
         UI.field('Ciudad', UI.chips('cityId', C.cityOptions(), e.cityId, { allowNone: true, noneLabel: 'Sin ciudad' }), { optional: true }) +
         UI.field('Lugar', UI.input('placeName', e.placeName || ''), { optional: true }) +
-        UI.field('Método de pago', UI.chips('paymentMethod', D.options(D.PAYMENT), e.paymentMethod, { allowNone: true, noneLabel: '—' }), { optional: true }) +
         (travelers.length > 1 ? UI.field('Pagó', UI.chips('paidById', travelers.map((x) => ({ value: x.id, label: x.name })), e.paidById)) +
           UI.field('Para quién', UI.chipsMulti('split', travelers.map((x) => ({ value: x.id, label: x.name })), e.splitWithIds), { hint: 'Marca a todos los que comparten el gasto.' }) : '') +
         UI.field('Notas', UI.textarea('notes', e.notes), { optional: true }), !!ex) +

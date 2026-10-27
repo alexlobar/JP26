@@ -307,6 +307,31 @@ JT.logic = (function () {
     return Object.assign(g, { name: parts[0] || raw, address: parts.length > 1 ? parts.slice(1).join(', ') : undefined, cityId: c && c.id, notes: notes });
   }
 
+  /**
+   * Lo que llega al compartir desde Google Maps (Compartir → Japón Travel): Android manda
+   * título, texto y enlace, p. ej. «Fushimi Inari Taisha\n68 Fukakusa…, Kyoto\nhttps://maps.app.goo.gl/…».
+   * Es UN sitio: nombre en la primera línea, dirección en el resto. El enlace corto no se
+   * puede leer desde el navegador, así que si no trae coordenadas se buscan por nombre (needsCoords).
+   */
+  function parseShared(sh) {
+    const all = [sh.title, sh.text, sh.url].filter(Boolean).join('\n');
+    const urls = all.match(/https?:\/\/\S+/g) || [];
+    const lines = [];
+    all.split('\n').map((l) => l.replace(/https?:\/\/\S+/g, '').trim()).filter(Boolean).forEach((l) => { if (lines.indexOf(l) === -1) lines.push(l); });
+    const name = lines[0] || 'Sitio compartido';
+    const longMaps = urls.find((u) => /maps\.google\.|google\.[a-z.]+\/maps/.test(u));
+    let item = longMaps ? parseImport(name + ' ' + longMaps) : null;
+    if (!item || item.kind === 'reservation') item = Object.assign(guess(name), { name: name });
+    if (!item.name || item.name === 'Lugar de Google Maps') item.name = name;
+    item.address = item.address || lines.slice(1).join(', ') || undefined;
+    item.url = item.url || urls[0];
+    const c = matchCity(all);
+    if (c) item.cityId = c.id;
+    item.notes = ['Compartido desde ' + (urls.some((u) => /goo\.gl|google\./.test(u)) ? 'Google Maps' : 'otra app')].concat(item.coords ? ['📍 Coordenadas leídas del enlace'] : []);
+    item.needsCoords = !item.coords;
+    return item;
+  }
+
   function parseImportLines(input) {
     const one = parseImport(input);
     if (one && one.kind === 'reservation') return [one];
@@ -402,9 +427,57 @@ JT.logic = (function () {
 
   function totalWait(t) { return (t.stops || []).reduce((sum, st) => sum + Math.max(0, stopWait(st)), 0); }
 
+  /* ── Añadir a Google Calendar ─────────────────────────────────
+     Enlace «crear evento» de Google Calendar con todo relleno: abre
+     el calendario y sólo hay que pulsar Guardar. Las horas van con su
+     zona: Japón, salvo los trayectos anteriores al viaje (salen de
+     España). Los hoteles van como evento de día completo. */
+
+  function gcalUrl(col, x) {
+    const s = S.get(), pad = (n) => String(n).padStart(2, '0'), details = [];
+    const stamp = (date, min) => {
+      const m = ((min % 1440) + 1440) % 1440;
+      return U.addDays(date, Math.floor(min / 1440)).replace(/-/g, '') + 'T' + pad(Math.floor(m / 60)) + pad(m % 60) + '00';
+    };
+    let title, time, dur = 60, endDate, place, tz = 'Asia/Tokyo';
+    if (col === 'reservations') {
+      title = D.RESERVATION[x.type][1] + ' ' + x.name;
+      time = x.type === 'hotel' ? undefined : x.time;
+      if (x.type === 'restaurant') dur = 90;
+      if (x.type === 'hotel') endDate = x.endDate;
+      place = x.location && [x.location.name, x.location.address].filter(Boolean).join(', ');
+      if (x.type === 'hotel' && x.time) details.push('Check-in desde las ' + x.time);
+      if (x.confirmationCode) details.push('Reserva: ' + x.confirmationCode);
+      if (x.phone) details.push('Tel.: ' + x.phone);
+      if (x.url) details.push(x.url);
+    } else {
+      title = D.TRANSPORT[x.kind][1] + ' ' + x.origin + ' → ' + x.destination + (x.number ? ' · ' + x.number : '');
+      time = x.departTime;
+      place = x.origin;
+      if (x.date < s.trip.startDate) tz = 'Europe/Madrid';
+      if (x.durationMinutes) dur = x.durationMinutes;
+      else if (x.kind !== 'flight' && x.departTime && x.arriveTime) {
+        const m = minutesBetween(x.date, x.departTime, x.arriveDate || x.date, x.arriveTime);
+        dur = m > 0 ? m : m + 1440;
+      }
+      if (x.seat) details.push('Asiento: ' + x.seat);
+      if (x.bookingCode) details.push('Reserva: ' + x.bookingCode);
+      (x.stops || []).forEach((st) => details.push('Escala en ' + st.place + ': llegas ' + st.arriveTime + ', sales ' + st.departTime + (st.number ? ' (' + st.number + ')' : '') + ' · espera ' + U.fmtDur(Math.max(0, stopWait(st)))));
+      if (x.arriveTime) details.push('Llegada a ' + x.destination + ': ' + x.arriveTime + ' (hora local)');
+    }
+    if (x.notes) details.push(x.notes);
+    const dates = time
+      ? stamp(x.date, U.toMin(time)) + '/' + stamp(x.date, U.toMin(time) + dur)
+      : x.date.replace(/-/g, '') + '/' + (endDate && endDate > x.date ? endDate : U.addDays(x.date, 1)).replace(/-/g, '');
+    const p = new URLSearchParams({ action: 'TEMPLATE', text: title, dates: dates, details: details.join('\n') });
+    if (time) p.set('ctz', tz);
+    if (place) p.set('location', place);
+    return 'https://calendar.google.com/calendar/render?' + p.toString();
+  }
+
   return {
-    planDay, balances, search, parseImport, parseImportLines, matchCity, reminders,
+    planDay, balances, search, parseImport, parseImportLines, parseShared, matchCity, reminders,
     shareDay, shareReservation, sharePlace, shareExpenses, expensesCsv,
-    minutesBetween, stopWait, totalWait
+    minutesBetween, stopWait, totalWait, gcalUrl
   };
 })();

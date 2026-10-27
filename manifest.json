@@ -11,6 +11,11 @@
   "background_color": "#F7F5F0",
   "theme_color": "#F7F5F0",
   "categories": ["travel", "lifestyle"],
+  "share_target": {
+    "action": "./index.html",
+    "method": "GET",
+    "params": { "title": "title", "text": "text", "url": "url" }
+  },
   "icons": [
     {
       "src": "icon.svg",
