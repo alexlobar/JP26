@@ -231,11 +231,14 @@ JT.logic = (function () {
   function decode(s) { try { return decodeURIComponent(s.replace(/\+/g, ' ')); } catch (e) { return s; } }
   function pt(lat, lng) { const p = { lat: Number(lat), lng: Number(lng) }; return U.validCoords(p) ? p : undefined; }
 
+  /* Grafías de la misma ciudad: la ciudad puede llamarse «Tokio» y el texto decir «Tokyo», o al revés. */
+  const CITY_ALIASES = [['tokyo', 'tokio'], ['kyoto', 'kioto'], ['osaka', 'ōsaka']];
+
   function matchCity(text) {
     const t = String(text || '').toLowerCase();
-    const alias = { tokyo: ['tokio'], kyoto: ['kioto'], osaka: ['ōsaka'] };
     return Object.values(S.get().cities).find(function (c) {
-      return [c.name.toLowerCase(), c.nameJa].concat(alias[c.name.toLowerCase()] || []).some((n) => n && t.indexOf(n) > -1);
+      const name = c.name.toLowerCase(), group = CITY_ALIASES.find((g) => g.indexOf(name) > -1) || [];
+      return [name, c.nameJa].concat(group).some((n) => n && t.indexOf(n) > -1);
     });
   }
 
