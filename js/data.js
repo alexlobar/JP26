@@ -189,6 +189,20 @@ JT.data = (function () {
     ['Carteles', 'Empujar / Tirar', '押 / 引', 'Osu / Hiku']
   ];
 
+  /* ── Ficha de emergencia ──────────────────────────────────────
+     Alérgenos con su nombre en japonés (como aparecen en etiquetas y
+     cartas) para enseñárselo a un médico o en un restaurante. */
+
+  const ALLERGENS = [
+    ['egg', 'Huevo', '卵', 'Tamago'], ['milk', 'Leche y lácteos', '乳製品', 'Nyūseihin'], ['wheat', 'Trigo (gluten)', '小麦', 'Komugi'],
+    ['soba', 'Trigo sarraceno (soba)', 'そば', 'Soba'], ['peanut', 'Cacahuete', '落花生（ピーナッツ）', 'Rakkasei (pīnattsu)'], ['nuts', 'Frutos secos', 'ナッツ類', 'Nattsu-rui'],
+    ['crustacean', 'Gamba y cangrejo', 'えび・かに', 'Ebi, kani'], ['shellfish', 'Moluscos y bivalvos', '貝類', 'Kai-rui'], ['fish', 'Pescado', '魚', 'Sakana'],
+    ['soy', 'Soja', '大豆', 'Daizu'], ['sesame', 'Sésamo', 'ごま', 'Goma'], ['penicillin', 'Penicilina', 'ペニシリン', 'Penishirin'], ['latex', 'Látex', 'ラテックス', 'Ratekkusu']
+  ];
+
+  /* Los mismos teléfonos que la ficha «Emergencias» de Información útil. */
+  const EMERGENCY_NUMBERS = [['119', 'Ambulancia y bomberos'], ['110', 'Policía'], ['+81-50-3816-2787', 'Japan Visitor Hotline (24 h, en inglés)']];
+
   /* ── Información práctica (editable, orientativa, NO oficial) ─ */
 
   const INFO = [
@@ -500,6 +514,6 @@ JT.data = (function () {
 
   return {
     ACTIVITY, PLACE, VISIT_MIN, CUISINE, PRICE, EXPENSE, PAYMENT, RESERVATION, TRANSPORT, MODE, PRIORITY, NOTE_SCOPE,
-    CHECK_SECTION, DOC_KIND, CURRENCIES, DEFAULT_SETTINGS, PHRASES, emptyCollections, baseContent, sampleTrip, options
+    CHECK_SECTION, DOC_KIND, CURRENCIES, DEFAULT_SETTINGS, PHRASES, ALLERGENS, EMERGENCY_NUMBERS, emptyCollections, baseContent, sampleTrip, options
   };
 })();

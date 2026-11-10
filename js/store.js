@@ -32,6 +32,7 @@ JT.store = (function () {
     COLLECTIONS.forEach(function (c) { if (!out[c] || typeof out[c] !== 'object') out[c] = {}; });
     out.settings = Object.assign({}, D.DEFAULT_SETTINGS, data.settings || {});
     out.trip = Object.assign({ timezoneOffsetMinutes: 540, mainCurrency: 'JPY', emoji: '🇯🇵' }, data.trip || {});
+    out.emergency = Object.assign({}, data.emergency || {}); // ficha de emergencia (sin cifrar: se ve sin PIN)
     addMissingPhrases(out.phrases);
     out.schema = SCHEMA;
     return out;
@@ -157,6 +158,7 @@ JT.store = (function () {
 
   function setTrip(patch) { state.trip = Object.assign({}, state.trip, patch); commit(); }
   function setSettings(patch) { state.settings = Object.assign({}, state.settings, patch); commit(); }
+  function setEmergency(data) { state.emergency = Object.assign({}, data); commit(); }
 
   /** Cambia las fechas y regenera los días. Falla si se perderían días con actividades. */
   function setTripDates(start, end) {
@@ -399,6 +401,7 @@ JT.store = (function () {
     const next = Object.assign(D.emptyCollections(), D.baseContent(ts), {
       trip: { id: U.uid('t'), name: input.name, emoji: '🇯🇵', startDate: input.startDate, endDate: input.endDate, mainCurrency: input.mainCurrency, totalBudget: input.totalBudget, timezoneOffsetMinutes: 540 },
       settings: Object.assign({}, state.settings, { simulatedDate: '', simulatedTime: '' }),
+      emergency: state.emergency, // la ficha de emergencia es tuya, no del viaje
       days: days,
       travelers: {}
     });
@@ -520,6 +523,11 @@ JT.store = (function () {
       .sort((a, b) => U.cmpTime(a.time, b.time));
   }
 
+  /** El hotel donde se duerme la noche de esa fecha (el día de salida ya no cuenta). */
+  function hotelTonight(date) {
+    return reservationsOn(date).find((r) => r.type === 'hotel' && (r.endDate ? date < r.endDate : r.date === date));
+  }
+
   /** Las reservas de ese día que NO salen ya en su timeline (p. ej. el hotel las noches sin check-in). */
   function reservationsOffTimeline(day) {
     const inDay = new Set(dayActivities(day.id).map((a) => a.reservationId).filter(Boolean));
@@ -548,11 +556,11 @@ JT.store = (function () {
   }
 
   return {
-    load, get, subscribe, create, update, remove, setTrip, setSettings, setTripDates,
+    load, get, subscribe, create, update, remove, setTrip, setSettings, setEmergency, setTripDates,
     addActivity, updateActivity, toggleDone, duplicateActivity, shiftActivity, sortDayByTime, addReservationFor, linkedDayLabel,
     replaceAll, loadSample, startEmptyTrip, removeSample, exportJson, parseImport,
     sortedDays, dayNumber, dayActivities, cityStays, resolveLocation, now, today, travelModeActive,
-    upcoming, reservationsOn, reservationsOffTimeline, inferArea, savedNear,
+    upcoming, reservationsOn, reservationsOffTimeline, hotelTonight, inferArea, savedNear,
     isWritable: () => writable, lastError: () => lastError, clearError: () => { lastError = null; }
   };
 })();

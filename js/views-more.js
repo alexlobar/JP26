@@ -44,19 +44,6 @@
     UI.toast(where ? msg + ' · está en el ' + where : msg);
   }
 
-  /* ══ MÁS ═════════════════════════════════════════════════════ */
-
-  V.more = function () {
-    const s = S.get(), n = (k) => Object.keys(s[k]).length;
-    const pending = Object.values(s.checklistItems).filter((i) => !i.done).length;
-    const group = (rows) => UI.card(rows.map((r) => UI.listRow({ emoji: r[0], title: r[1], sub: r[2], data: { act: 'go', to: r[3] } })).join(''), { cls: 'card--list' });
-    return { html: UI.header({ title: 'Más' }) +
-      group([['✨', 'Planificar día', 'Ordena 4-6 sitios por cercanía y horarios', 'planner'], ['🔎', 'Buscar', 'En todo el viaje', 'search'], ['📋', 'Importar enlace o texto', 'Google Maps, webs, confirmaciones', 'import']]) +
-      group([['🏙️', 'Ciudades', n('cities') + ' ciudades', 'cities'], ['🎫', 'Reservas', n('reservations') + ' reservas', 'reservations'],
-        ['🚄', 'Transporte', n('transports') + ' trayectos', 'transport'], ['🗒️', 'Notas', n('notes') + ' notas', 'notes'], ['✅', 'Checklist', pending ? pending + ' pendientes' : 'Todo listo', 'checklist'], ['📄', 'Documentos', n('docs') + ' datos importantes', 'documents']]) +
-      group([['🗾', 'Información útil', 'Enchufes, emergencias, propinas…', 'info'], ['🗣️', 'Frases', 'Japonés básico offline', 'phrases'], ['⚙️', 'Configuración', 'Viaje, viajeros, APIs, datos', 'settings']]) };
-  };
-
   /* ══ RESERVAS ════════════════════════════════════════════════ */
 
   V.reservations = function () {
@@ -86,6 +73,7 @@
     html += '<div class="row row--wrap">' + (dir ? '<a class="btn btn--primary btn--sm" href="' + esc(dir) + '" target="_blank" rel="noopener">' + U.icon('nav', 16) + '<span>Cómo llegar</span></a>' : '') +
       (r.phone ? '<a class="btn btn--secondary btn--sm" href="tel:' + esc(r.phone.replace(/[^\d+]/g, '')) + '">' + U.icon('phone', 16) + '<span>Llamar</span></a>' : '') +
       (r.url ? UI.btn('Web', { icon: 'link', size: 'sm', variant: 'secondary', data: { act: 'openUrl', url: r.url } }) : '') +
+      (loc.name || loc.address || r.addressJa ? UI.btn('Para el taxista', { icon: 'car', size: 'sm', variant: 'secondary', data: { act: 'taxi', id: r.id } }) : '') +
       UI.btn('Añadir a Google Calendar', { icon: 'calendar', size: 'sm', variant: 'secondary', data: { act: 'gcal', col: 'reservations', id: r.id } }) + '</div>';
     html += UI.card((loc.name || loc.address ? UI.listRow({ icon: 'pin', title: loc.name || loc.address, sub: loc.name ? loc.address : '' }) : '') + (r.phone ? UI.listRow({ icon: 'phone', title: r.phone }) : '') +
       (r.cost ? UI.listRow({ icon: 'wallet', title: U.money(r.cost, r.currency || 'JPY'), sub: 'Coste' }) : '') + (!loc.name && !loc.address && !r.phone && !r.cost ? '<p class="muted">Sin más datos.</p>' : ''));
@@ -96,6 +84,26 @@
     return { html: html };
   };
   A.copy = async (el) => { await SV.copy(el.dataset.text); UI.toast('Copiado'); };
+  /** Tarjeta para el taxista: «A esta dirección, por favor» y el nombre y la dirección en japonés, en grande. */
+  A.taxi = function (el) {
+    const r = S.get().reservations[el.dataset.id];
+    if (!r) return;
+    const loc = r.location || {};
+    const dir = loc.coords || loc.name || loc.address ? U.directionsUrl(loc) : null;
+    const nameBig = r.nameJa || r.name, addrBig = r.addressJa || loc.address || '';
+    UI.sheet({
+      title: 'Para el taxista',
+      body: '<div class="taxi" lang="ja"><p class="taxi__ask">この住所までお願いします</p><div class="taxi__name">' + esc(nameBig) + '</div>' + (addrBig ? '<div class="taxi__addr">' + esc(addrBig) + '</div>' : '') + '</div>' +
+        '<p class="muted center small">Kono jūsho made onegai shimasu · «A esta dirección, por favor»</p>' +
+        (r.nameJa || r.addressJa ? '<p class="faint center small">' + esc([r.name, loc.address].filter(Boolean).join(' · ')) + '</p>' : '') +
+        (r.addressJa ? '' : UI.banner('warn', 'alert', 'Falta la dirección en japonés', 'Edita la reserva y pégala: muchos taxistas no leen bien el alfabeto latino.')) +
+        (r.phone ? '<p class="center"><a class="btn btn--ghost btn--sm" href="tel:' + esc(r.phone.replace(/[^\d+]/g, '')) + '">' + U.icon('phone', 16) + '<span>' + esc(r.phone) + '</span></a></p>' : ''),
+      footer: '<div class="row">' + UI.btn('Copiar dirección', { icon: 'copy', variant: 'secondary', block: true, data: { cp: '1' } }) +
+        (dir ? '<a class="btn btn--primary btn--block" href="' + esc(dir) + '" target="_blank" rel="noopener">' + U.icon('nav', 18) + '<span>Cómo llegar</span></a>' : '') + '</div>',
+      onMount: (root) => root.querySelector('[data-cp]').addEventListener('click', async () => { await SV.copy([nameBig, addrBig].filter(Boolean).join('\n')); UI.toast('Copiado'); })
+    });
+  };
+
   /** Abre Google Calendar con el evento relleno: sólo queda pulsar Guardar. */
   A.gcal = (el) => SV.openUrl(L.gcalUrl(el.dataset.col, S.get()[el.dataset.col][el.dataset.id]));
   A.shareReservation = async (el) => { const r = await SV.share(L.shareReservation(S.get().reservations[el.dataset.id])); if (r === 'copied') UI.toast('Copiado'); };
@@ -114,6 +122,9 @@
         UI.field('Salida (hoteles)', UI.input('endDate', r.endDate || '', { type: 'date' }), { optional: true }) +
         itineraryToggle(r) +
         UI.field('Lugar', UI.input('locName', loc.name || ''), { optional: true }) + UI.field('Dirección', UI.input('address', loc.address || ''), { optional: true }) + C.coordsField(loc.coords) +
+        // Lo que se enseña al taxista: cópialo de la confirmación o de Google Maps en japonés (no se traduce solo).
+        UI.field('Nombre en japonés', UI.input('nameJa', r.nameJa || '', { placeholder: '例: ホテルさくら新宿' }), { optional: true }) +
+        UI.field('Dirección en japonés', UI.input('addressJa', r.addressJa || '', { placeholder: '東京都新宿区…' }), { optional: true, hint: 'Cópiala de la confirmación o de Google Maps en japonés. Es lo que verá el taxista.' }) +
         UI.details('Más detalles',
           UI.field('Ciudad', UI.chips('cityId', C.cityOptions(), r.cityId, { allowNone: true, noneLabel: 'Sin ciudad' }), { optional: true }) +
           '<div class="row row--top">' + UI.field('Coste', UI.input('cost', r.cost || '', { inputmode: 'decimal' }), { optional: true }) + UI.field('Moneda', UI.chips('currency', D.CURRENCIES.map((c) => ({ value: c, label: c })), r.currency || 'JPY')) + '</div>' +
@@ -129,7 +140,8 @@
         if (cost === null) return 'Coste no válido';
         if (f.coords && !C.parseCoords(f.coords)) return 'Coordenadas no válidas';
         const location = f.locName || f.address || f.coords ? { name: f.locName || undefined, address: f.address || undefined, coords: C.parseCoords(f.coords) } : undefined;
-        const data = { type: f.type, name: f.name, confirmationCode: f.confirmationCode || undefined, date: f.date, time: f.time || undefined, endDate: f.endDate || undefined, location: location, cityId: f.cityId || undefined, cost: cost || undefined, currency: cost ? f.currency : undefined, phone: f.phone || undefined, url: f.url || undefined, notes: f.notes || undefined, inItinerary: f.inItinerary ? undefined : false };
+        const data = { type: f.type, name: f.name, confirmationCode: f.confirmationCode || undefined, date: f.date, time: f.time || undefined, endDate: f.endDate || undefined, location: location, cityId: f.cityId || undefined, cost: cost || undefined, currency: cost ? f.currency : undefined, phone: f.phone || undefined, url: f.url || undefined, notes: f.notes || undefined, inItinerary: f.inItinerary ? undefined : false,
+          nameJa: f.nameJa || undefined, addressJa: f.addressJa || undefined };
         const rid = ex ? ex.id : S.create('reservations', data);
         if (ex) S.update('reservations', ex.id, data);
         savedToast('Reserva guardada', 'reservations', rid);
@@ -406,10 +418,70 @@
 
   /* ══ DOCUMENTOS (cofre cifrado para lo sensible) ═════════════ */
 
+  /* ══ EMERGENCIA ══════════════════════════════════════════════
+     Ficha para enseñar a un médico, a la policía o en un restaurante:
+     lo importante en japonés y en grande. Se guarda SIN cifrar a
+     propósito, para verla sin PIN; por eso no admite pasaporte ni
+     tarjetas (eso va en Documentos, cifrado). */
+
+  const BLOOD = ['A', 'B', 'AB', 'O'];
+
+  V.emergency = function () {
+    const s = S.get(), e = s.emergency || {}, me = Object.values(s.travelers).find((t) => t.isMe);
+    const allergens = D.ALLERGENS.filter((a) => (e.allergies || []).indexOf(a[0]) > -1);
+    const tel = (n) => 'tel:' + String(n).replace(/[^\d+]/g, '');
+    const row = (ja, romaji, es, value, phone) => value ? '<div class="sos__row"><div class="sos__label"><span lang="ja">' + ja + '</span><small>' + esc(romaji) + ' · ' + esc(es) + '</small></div>' +
+      '<div class="sos__value">' + esc(value) + (phone ? ' <a class="btn btn--secondary btn--sm" href="' + esc(tel(phone)) + '">' + U.icon('phone', 16) + '<span>Llamar</span></a>' : '') + '</div></div>' : '';
+    const filled = allergens.length || e.allergyOther || e.conditions || e.meds || e.blood || e.insurer || e.contactName || e.embassyPhone;
+
+    let html = UI.header({ back: true, eyebrow: '緊急時の情報 · KINKYŪJI NO JŌHŌ', title: 'Emergencia', subtitle: 'Enséñala si necesitas ayuda', actions: UI.iconBtn('edit', 'Editar ficha', { act: 'editEmergency' }) });
+    html += UI.section('Llamar', UI.card(D.EMERGENCY_NUMBERS.map((x) => '<a class="lr lr--tap" href="' + esc(tel(x[0])) + '"><span class="lr__icon">' + U.icon('phone', 18) + '</span><span class="lr__text"><span class="lr__title mono">' + esc(x[0]) + '</span><span class="lr__sub">' + esc(x[1]) + '</span></span></a>').join(''), { cls: 'card--list' }));
+    if (!filled) {
+      html += UI.empty('🩺', 'Rellena tu ficha', 'Alergias, medicación, grupo sanguíneo, seguro y a quién avisar. Se verá aquí en japonés y en grande.', UI.btn('Rellenar ficha', { icon: 'edit', data: { act: 'editEmergency' } }));
+    } else {
+      html += UI.card((me ? '<div class="sos__who">' + esc(me.name) + '</div>' : '') +
+        (allergens.length || e.allergyOther ? '<div class="sos__alert" lang="ja"><p>次のものにアレルギーがあります：</p><strong>' + esc(allergens.map((a) => a[2]).join('、') || e.allergyOther) + '</strong>' +
+          '<small>Tengo alergia a: ' + esc(allergens.map((a) => a[1]).concat(e.allergyOther && allergens.length ? [e.allergyOther] : []).join(', ')) + '</small></div>' : '') +
+        row('持病', 'Jibyō', 'Enfermedades', e.conditions) + row('服用中の薬', 'Fukuyō-chū no kusuri', 'Medicación', e.meds) +
+        row('血液型', 'Ketsueki-gata', 'Grupo sanguíneo', e.blood ? e.blood + (e.rh ? ' Rh' + e.rh : '') + '型' : '') +
+        row('保険', 'Hoken', 'Seguro', [e.insurer, e.policy].filter(Boolean).join(' · '), e.insurerPhone) +
+        row('緊急連絡先', 'Kinkyū renrakusaki', 'Contacto de emergencia', [e.contactName, e.contactPhone].filter(Boolean).join(' · '), e.contactPhone) +
+        row('大使館', 'Taishikan', 'Embajada / consulado', e.embassyPhone, e.embassyPhone), { cls: 'stack sos' });
+    }
+    html += UI.section('Frases para pedir ayuda', UI.card([['助けて！', 'Tasukete!', '¡Ayuda!'], ['救急車を呼んでください', 'Kyūkyūsha o yonde kudasai', 'Llame a una ambulancia'], ['病院に連れて行ってください', 'Byōin ni tsurete itte kudasai', 'Lléveme a un hospital']]
+      .map((p) => '<div class="sos__phrase"><span lang="ja">' + p[0] + '</span><small>' + esc(p[1]) + ' · ' + esc(p[2]) + '</small></div>').join(''), { cls: 'stack' }));
+    html += '<p class="faint small">Esta ficha se guarda sin cifrar para poder verla sin PIN en una emergencia. No pongas aquí el pasaporte ni tarjetas: eso va en Documentos, cifrado.</p>';
+    return { html: html };
+  };
+
+  F.emergency = function () {
+    const e = S.get().emergency || {};
+    return formSheet({
+      id: 'fSos', title: 'Ficha de emergencia',
+      body: UI.field('Alergias', UI.chipsMulti('allergies', D.ALLERGENS.map((a) => ({ value: a[0], label: a[1] })), e.allergies || []), { optional: true, hint: 'Salen en japonés en la ficha.' }) +
+        UI.field('Otra alergia', UI.input('allergyOther', e.allergyOther || '', { placeholder: 'Escríbela como la diría un médico' }), { optional: true }) +
+        UI.field('Enfermedades', UI.textarea('conditions', e.conditions, 'p.ej. asma, diabetes'), { optional: true }) +
+        UI.field('Medicación', UI.textarea('meds', e.meds, 'Nombre del medicamento y dosis'), { optional: true }) +
+        '<div class="row row--top">' + UI.field('Grupo sanguíneo', UI.chips('blood', BLOOD.map((b) => ({ value: b, label: b })), e.blood, { allowNone: true, noneLabel: '—' }), { optional: true }) +
+        UI.field('Rh', UI.chips('rh', [{ value: '+', label: '+' }, { value: '-', label: '−' }], e.rh, { allowNone: true, noneLabel: '—' }), { optional: true }) + '</div>' +
+        UI.field('Seguro de viaje', UI.input('insurer', e.insurer || '', { placeholder: 'Compañía' }), { optional: true }) +
+        '<div class="row row--top">' + UI.field('Nº de póliza', UI.input('policy', e.policy || ''), { optional: true }) + UI.field('Teléfono del seguro', UI.input('insurerPhone', e.insurerPhone || '', { type: 'tel' }), { optional: true }) + '</div>' +
+        '<div class="row row--top">' + UI.field('Contacto de emergencia', UI.input('contactName', e.contactName || '', { placeholder: 'Nombre' }), { optional: true }) + UI.field('Su teléfono', UI.input('contactPhone', e.contactPhone || '', { type: 'tel' }), { optional: true }) + '</div>' +
+        UI.field('Teléfono de la embajada o consulado', UI.input('embassyPhone', e.embassyPhone || '', { type: 'tel' }), { optional: true, hint: 'Búscalo en exteriores.gob.es → Embajada de España en Tokio. No lo ponemos nosotros para no darte un número desactualizado.' }),
+      onSave: function (f) {
+        S.setEmergency({ allergies: UI.list(f.allergies), allergyOther: f.allergyOther || undefined, conditions: f.conditions || undefined, meds: f.meds || undefined, blood: f.blood || undefined, rh: f.rh || undefined,
+          insurer: f.insurer || undefined, policy: f.policy || undefined, insurerPhone: f.insurerPhone || undefined, contactName: f.contactName || undefined, contactPhone: f.contactPhone || undefined, embassyPhone: f.embassyPhone || undefined });
+        UI.toast('Ficha de emergencia guardada');
+      }
+    });
+  };
+  A.editEmergency = () => F.emergency();
+
   V.documents = function () {
     const s = S.get(), list = Object.values(s.docs).sort((a, b) => a.title.localeCompare(b.title));
     const unlocked = SV.vaultUnlocked();
     let html = UI.header({ back: true, title: 'Documentos', subtitle: 'Datos importantes del viaje', actions: UI.iconBtn('plus', 'Nuevo dato', { act: 'newDoc' }) });
+    html += UI.banner('accent', 'sos', 'Ficha de emergencia', 'Alergias, seguro y a quién avisar, en japonés y sin PIN.', { data: { act: 'go', to: 'emergency' } });
     html += SV.vaultAvailable()
       ? UI.banner(unlocked ? 'success' : 'neutral', 'lock', unlocked ? 'Cofre desbloqueado' : 'Datos sensibles cifrados con PIN', unlocked ? 'Se bloqueará al cerrar la app.' : 'Pólizas, nº de pasaporte o códigos privados se cifran en este navegador con tu PIN y no se exportan.',
         { action: unlocked ? UI.btn('Bloquear', { size: 'sm', variant: 'ghost', data: { act: 'lockVault' } }) : UI.btn(SV.vaultExists() ? 'Desbloquear' : 'Crear PIN', { size: 'sm', variant: 'secondary', data: { act: 'unlockVault' } }) })

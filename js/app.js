@@ -17,10 +17,12 @@ JT.app = (function () {
     // Sitios = lugares para visitar + restaurantes, en una sola pestaña.
     [/^sites$/, 'sites', 'sites'], [/^places$/, 'places', 'sites'], [/^place\/([\w-]+)$/, 'place', 'sites'],
     [/^food$/, 'food', 'sites'], [/^restaurant\/([\w-]+)$/, 'restaurant', 'sites'], [/^nearby$/, 'nearby', 'sites'],
-    [/^expenses$/, 'expenses', 'expenses'], [/^more$/, 'more', 'more'],
-    [/^cities$/, 'cities', 'more'], [/^city\/([\w-]+)$/, 'city', 'more'], [/^reservations$/, 'reservations', 'more'], [/^reservation\/([\w-]+)$/, 'reservation', 'more'],
-    [/^transport$/, 'transport', 'more'], [/^notes$/, 'notes', 'more'], [/^checklist$/, 'checklist', 'more'], [/^info$/, 'info', 'more'],
-    [/^phrases$/, 'phrases', 'more'], [/^documents$/, 'documents', 'more'], [/^search$/, 'search', 'more'], [/^import$/, 'import', 'more'], [/^settings$/, 'settings', 'more']
+    // Sin pestaña «Más»: Planificar está en el Itinerario e Importar en Sitios y en el botón (+). #/more antiguo → Inicio.
+    [/^expenses$/, 'expenses', 'expenses'], [/^import$/, 'import', 'sites'], [/^emergency$/, 'emergency', 'home'],
+    // Se abren desde Inicio («Tu viaje» y los iconos de arriba): la pestaña marcada es Inicio.
+    [/^cities$/, 'cities', 'home'], [/^city\/([\w-]+)$/, 'city', 'home'], [/^reservations$/, 'reservations', 'home'], [/^reservation\/([\w-]+)$/, 'reservation', 'home'],
+    [/^transport$/, 'transport', 'home'], [/^notes$/, 'notes', 'home'], [/^checklist$/, 'checklist', 'home'], [/^info$/, 'info', 'home'],
+    [/^phrases$/, 'phrases', 'home'], [/^documents$/, 'documents', 'home'], [/^search$/, 'search', 'home'], [/^settings$/, 'settings', 'home']
   ];
 
   let main, lastPath = null, pending = false;
@@ -211,13 +213,14 @@ JT.app = (function () {
     const t = S.today();
     const dayId = t.phase === 'during' && t.day ? t.day.id : undefined;
     UI.menu('Añadir', [
-      { emoji: '💰', label: 'Gasto', hint: 'Importe, categoría y listo', run: () => JT.forms.expense(null, {}) },
-      { emoji: '🗓️', label: 'Actividad', hint: dayId ? 'En el día de hoy' : 'Elige el día', run: () => JT.forms.activity(null, { dayId: dayId }) },
-      { emoji: '🍜', label: 'Restaurante', run: () => JT.forms.restaurant(null, { cityId: t.phase === 'during' && t.city ? t.city.id : undefined }) },
-      { emoji: '📍', label: 'Lugar', run: () => JT.forms.place(null, { cityId: t.phase === 'during' && t.city ? t.city.id : undefined }) },
-      { emoji: '🗒️', label: 'Nota', run: () => JT.forms.note(null, {}) },
-      { emoji: '🎫', label: 'Reserva', run: () => JT.forms.reservation(null, {}) },
-      { emoji: '📋', label: 'Pegar enlace o texto', hint: 'Google Maps, web o confirmación', run: () => JT.go('import') }
+      { icon: 'wallet', label: 'Gasto', hint: 'Importe, categoría y listo', run: () => JT.forms.expense(null, {}) },
+      { icon: 'calendar', label: 'Actividad', hint: dayId ? 'En el día de hoy' : 'Elige el día', run: () => JT.forms.activity(null, { dayId: dayId }) },
+      { icon: 'food', label: 'Restaurante', run: () => JT.forms.restaurant(null, { cityId: t.phase === 'during' && t.city ? t.city.id : undefined }) },
+      { icon: 'pin', label: 'Lugar', run: () => JT.forms.place(null, { cityId: t.phase === 'during' && t.city ? t.city.id : undefined }) },
+      { icon: 'note', label: 'Nota', run: () => JT.forms.note(null, {}) },
+      { icon: 'ticket', label: 'Reserva', hint: 'Hotel, restaurante, entradas', run: () => JT.forms.reservation(null, {}) },
+      { icon: 'train', label: 'Trayecto', hint: 'Vuelo, tren, bus', run: () => JT.forms.transport(null) },
+      { icon: 'clipboard', label: 'Pegar enlace o texto', hint: 'Google Maps, web o confirmación', run: () => JT.go('import') }
     ]);
   };
 

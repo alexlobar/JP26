@@ -11,8 +11,8 @@ JT.utils = (function () {
 
   /* Tiene que coincidir con CACHE en sw.js y con data-build en index.html.
      BUILD_DATE es la fecha de esta versión (se ve en Ajustes → Esta instalación). */
-  const VERSION = '1.0.8';
-  const BUILD_DATE = '2026-10-28';
+  const VERSION = '1.1.0';
+  const BUILD_DATE = '2026-11-10';
 
   /* ── Texto y DOM ──────────────────────────────────────────── */
 
@@ -342,7 +342,18 @@ JT.utils = (function () {
     alert: '<path d="M12 3l10 18H2z"/><path d="M12 10v4M12 17h0"/>',
     eye: '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/>',
     clipboard: '<rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3h6v1"/>',
-    bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a2 2 0 0 0 3.4 0"/>'
+    bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a2 2 0 0 0 3.4 0"/>',
+    // Navegación y botones van con iconos de línea; los emojis quedan para el contenido (tipos de actividad, comida…).
+    city: '<path d="M3 21h18M5 21V8l6-3v16M11 21V10h8v11M8 10h0M8 14h0M15 14h0M15 17h0"/>',
+    ticket: '<path d="M3 7h18v3a2 2 0 0 0 0 4v3H3v-3a2 2 0 0 0 0-4z"/><path d="M14 7v10"/>',
+    train: '<rect x="5" y="3" width="14" height="14" rx="3"/><path d="M5 10h14M9 21l1.5-4M15 21l-1.5-4M9 14h0M15 14h0"/>',
+    note: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/>',
+    checklist: '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 12l3 3 5-6"/>',
+    doc: '<path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5"/>',
+    chat: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 10h8"/>',
+    bed: '<path d="M3 18V7M3 13h18v5M21 18v-3a3 3 0 0 0-3-3h-8v5"/><circle cx="7" cy="10" r="2"/>',
+    car: '<path d="M5 17h14v-5l-2-5H7l-2 5z"/><path d="M5 12h14"/><circle cx="8" cy="17" r="2"/><circle cx="16" cy="17" r="2"/>',
+    sos: '<path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z"/>'
   };
 
   function icon(name, size) {

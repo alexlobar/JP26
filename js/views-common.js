@@ -162,8 +162,27 @@ JT.cards = (function () {
   }
 
   /** Accesos rápidos grandes. items: [[emoji, label, data]] */
+  /** Cuadritos de acceso: [icono de línea, texto, data-*, subtítulo opcional]. */
   function quick(items) {
-    return '<div class="quick">' + items.map((it) => '<button type="button" class="quick__btn"' + UI.dataAttrs(it[2]) + '><span aria-hidden="true">' + it[0] + '</span><small>' + esc(it[1]) + '</small></button>').join('') + '</div>';
+    return '<div class="quick">' + items.map((it) => '<button type="button" class="quick__btn"' + UI.dataAttrs(it[2]) + '><span class="quick__icon">' + U.icon(it[0], 22) + '</span><small>' + esc(it[1]) + '</small>' +
+      (it[3] ? '<span class="quick__sub">' + esc(it[3]) + '</span>' : '') + '</button>').join('') + '</div>';
+  }
+
+  /** «Tu viaje» en Inicio: ciudades, reservas, notas…, con cuántos hay de cada uno. */
+  function tripHub() {
+    const s = S.get(), n = (k) => Object.keys(s[k]).length;
+    const pending = Object.values(s.checklistItems).filter((i) => !i.done).length;
+    const count = (k, one, many) => (n(k) ? n(k) + ' ' + (n(k) === 1 ? one : many) : 'Vacío');
+    return UI.section('Tu viaje', quick([
+      ['city', 'Ciudades', { act: 'go', to: 'cities' }, count('cities', 'ciudad', 'ciudades')],
+      ['ticket', 'Reservas', { act: 'go', to: 'reservations' }, count('reservations', 'reserva', 'reservas')],
+      ['train', 'Transporte', { act: 'go', to: 'transport' }, count('transports', 'trayecto', 'trayectos')],
+      ['note', 'Notas', { act: 'go', to: 'notes' }, count('notes', 'nota', 'notas')],
+      ['checklist', 'Checklist', { act: 'go', to: 'checklist' }, pending ? pending + ' pendientes' : 'Todo listo'],
+      ['doc', 'Documentos', { act: 'go', to: 'documents' }, count('docs', 'dato', 'datos')],
+      ['info', 'Info útil', { act: 'go', to: 'info' }, 'Enchufes, 110…'],
+      ['chat', 'Frases', { act: 'go', to: 'phrases' }, 'Sin conexión']
+    ]));
   }
 
   function cityOptions() {
@@ -220,5 +239,5 @@ JT.cards = (function () {
     });
   }
 
-  return { q, sampleBanner, offlineBanner, isNow, timelineItem, travelLeg, timeline, placeCard, restaurantCard, expenseRow, reservationCard, transportCard, noteCard, noteRef, quick, cityOptions, moneySum, parseCoords, coordsField, bindCoords };
+  return { q, sampleBanner, offlineBanner, isNow, timelineItem, travelLeg, timeline, placeCard, restaurantCard, expenseRow, reservationCard, transportCard, noteCard, noteRef, quick, tripHub, cityOptions, moneySum, parseCoords, coordsField, bindCoords };
 })();

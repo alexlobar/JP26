@@ -85,7 +85,7 @@
     if (x.imageUrl) html += '<img class="hero-img" src="' + esc(x.imageUrl) + '" alt="' + esc(x.name) + '" loading="lazy" onerror="this.remove()">';
     html += '<div class="row row--wrap">' + UI.btn(x.status === 'visited' ? 'Visitado' : 'Marcar visitado', { icon: 'check', size: 'sm', variant: x.status === 'visited' ? 'soft' : 'primary', data: { act: 'toggleVisited', id: x.id } }) +
       (dir ? '<a class="btn btn--secondary btn--sm" href="' + esc(dir) + '" target="_blank" rel="noopener">' + U.icon('nav', 16) + '<span>Cómo llegar</span></a>' : '') +
-      (x.coords ? UI.btn('Restaurantes cerca', { emoji: '🍜', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'nearby?' + C.q({ lat: x.coords.lat, lng: x.coords.lng, label: x.name }) } }) : '') +
+      (x.coords ? UI.btn('Restaurantes cerca', { icon: 'food', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'nearby?' + C.q({ lat: x.coords.lat, lng: x.coords.lng, label: x.name }) } }) : '') +
       UI.btn('Al itinerario', { icon: 'calendar', size: 'sm', variant: 'secondary', data: { act: 'newActivity', place: x.id, title: x.name } }) + '</div>';
     html += UI.card('<div class="pills">' + UI.pill('Prioridad ' + D.PRIORITY[x.priority][0].toLowerCase(), x.priority === 'high' ? 'accent' : 'neutral') + UI.openBadge(x.hours) + (x.priceApprox ? UI.pill(x.priceApprox) : '') + '</div>' +
       (x.hours ? UI.listRow({ icon: 'clock', title: 'Horario', sub: x.hours }) : '') +
@@ -193,7 +193,7 @@
     html += '<div class="row row--wrap">' + (dir ? '<a class="btn btn--primary btn--sm" href="' + esc(dir) + '" target="_blank" rel="noopener">' + U.icon('nav', 16) + '<span>Cómo llegar</span></a>' : '') +
       UI.btn('Al itinerario', { icon: 'calendar', size: 'sm', variant: 'secondary', data: { act: 'newActivity', restaurant: r.id, title: r.name, category: r.cuisine === 'cafe' ? 'cafe' : 'restaurant' } }) +
       UI.btn('Gasto', { icon: 'plus', size: 'sm', variant: 'secondary', data: { act: 'newExpense', city: r.cityId, place: r.name } }) +
-      UI.btn('Reserva', { emoji: '🎫', size: 'sm', variant: 'secondary', data: { act: 'newReservation', type: 'restaurant', name: r.name } }) + '</div>';
+      UI.btn('Reserva', { icon: 'ticket', size: 'sm', variant: 'secondary', data: { act: 'newReservation', type: 'restaurant', name: r.name } }) + '</div>';
     html += UI.card('<div class="chips">' + [['want', '📌 Quiero ir'], ['tried', '✅ Probado']].map((o) => '<button type="button" class="chip chip--btn' + (r.status === o[0] ? ' is-on' : '') + '" aria-pressed="' + (r.status === o[0]) + '" data-act="restStatus" data-id="' + r.id + '" data-value="' + o[0] + '"><span>' + o[1] + '</span></button>').join('') + '</div>' +
       '<div class="stack-sm"><small class="muted">Mi valoración</small>' + UI.stars(r.rating, { act: 'rate', id: r.id }) + '</div>', { cls: 'stack' });
     html += UI.card('<div class="pills">' + UI.openBadge(r.hours) + '</div>' + (r.hours ? UI.listRow({ icon: 'clock', title: 'Horario', sub: r.hours }) : '') + (r.priceApprox ? UI.listRow({ icon: 'wallet', title: 'Precio', sub: r.priceApprox }) : '') +
@@ -356,7 +356,7 @@
     let html = UI.header({ back: true, eyebrow: c.nameJa, title: c.name, subtitle: stays.map((x) => U.fmtRange(x.start, x.end)).join(' · ') || 'Sin días asignados', actions: UI.iconBtn('edit', 'Editar ciudad', { act: 'editCity', id: c.id }) });
     html += UI.card('<div class="stats">' + UI.stat('Noches', String(nights)) + UI.stat('Gastado', spent.text, '', true) + UI.stat('Presupuesto', c.budget ? U.money(c.budget, main) : '—') + '</div>' + (c.budget ? UI.progress(spent.total / c.budget, spent.total > c.budget ? 'accent' : 'info') : ''), { cls: 'stack' });
     html += '<div class="row row--wrap">' + (stays[0] ? UI.btn('Ver días', { icon: 'calendar', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'day/' + stays[0].dayIds[0] } }) : '') +
-      (c.coords ? UI.btn('Comer cerca', { emoji: '🍜', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'nearby?' + C.q({ lat: c.coords.lat, lng: c.coords.lng, label: c.name }) } }) : '') +
+      (c.coords ? UI.btn('Comer cerca', { icon: 'food', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'nearby?' + C.q({ lat: c.coords.lat, lng: c.coords.lng, label: c.name }) } }) : '') +
       UI.btn('Planificar día', { icon: 'sparkle', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'planner' + (stays[0] ? '?day=' + stays[0].dayIds[0] : '') } }) + '</div>';
     html += UI.section('Alojamiento', hotels.length ? hotels.map(C.reservationCard).join('') : '<p class="muted small">Sin alojamiento guardado.</p>', UI.btn('Añadir', { size: 'sm', variant: 'ghost', icon: 'plus', data: { act: 'newReservation', type: 'hotel', date: stays[0] && stays[0].start, city: c.id } }));
     html += UI.section('Lugares (' + places.length + ')', places.map((x) => C.placeCard(x)).join(''), UI.btn('Añadir', { size: 'sm', variant: 'ghost', icon: 'plus', data: { act: 'newPlace', city: c.id } }));

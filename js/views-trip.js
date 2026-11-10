@@ -26,7 +26,7 @@
       '<p class="muted">' + esc((a.startTime || 'Sin hora') + (a.endTime ? ' – ' + a.endTime : '') + (loc.name && loc.name !== a.title ? ' · ' + loc.name : '')) + '</p></div></div>' +
       (est ? '<p class="muted small">' + D.MODE[est.mode][1] + ' ~' + U.fmtDur(est.minutes) + ' · ' + U.fmtKm(est.routeKm, S.get().settings.units) + (fromLabel ? ' desde ' + esc(fromLabel) : '') + ' (estimado)</p>' : '') +
       '<div class="row row--wrap">' + (dirUrl ? '<a class="btn btn--primary btn--sm" href="' + esc(dirUrl) + '" target="_blank" rel="noopener">' + U.icon('nav', 16) + '<span>Cómo llegar</span></a>' : '') +
-        (loc.coords ? UI.btn('Comer cerca', { emoji: '🍜', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'nearby?' + C.q({ lat: loc.coords.lat, lng: loc.coords.lng, label: loc.name || a.title }) } }) : '') +
+        (loc.coords ? UI.btn('Comer cerca', { icon: 'food', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'nearby?' + C.q({ lat: loc.coords.lat, lng: loc.coords.lng, label: loc.name || a.title }) } }) : '') +
         // Marcarla como hecha (o saltarla) hace que la siguiente pase a primer plano.
         UI.btn('Hecha', { icon: 'check', size: 'sm', variant: 'ghost', data: { act: 'doneNext', id: a.id } }) + '</div>',
       { tone: item.inProgress ? 'accent' : '', data: { act: 'go', to: 'activity/' + a.id }, cls: 'stack' }
@@ -65,7 +65,7 @@
     const s = S.get(), t = S.today(), n = t.now, travel = S.travelModeActive();
     const head = UI.header({
       large: true, title: (s.trip.name + ' ' + (s.trip.emoji || '')).trim(), subtitle: U.fmtRange(s.trip.startDate, s.trip.endDate),
-      actions: UI.iconBtn('search', 'Buscar', { act: 'go', to: 'search' }) + UI.iconBtn('settings', 'Ajustes', { act: 'go', to: 'settings' })
+      actions: UI.iconBtn('sos', 'Emergencia', { act: 'go', to: 'emergency' }) + UI.iconBtn('search', 'Buscar', { act: 'go', to: 'search' }) + UI.iconBtn('settings', 'Ajustes', { act: 'go', to: 'settings' })
     });
     const seg = '<div class="seg" role="tablist">' +
       '<button type="button" role="tab" class="seg__item' + (!travel ? ' is-on' : '') + '" aria-selected="' + !travel + '" data-act="travelMode" data-value="off">Resumen</button>' +
@@ -82,19 +82,23 @@
     const spent = C.moneySum(Object.values(s.expenses));
     const budget = s.trip.totalBudget;
     const dayList = t.day ? S.dayActivities(t.day.id) : [];
-    let html = UI.card('<div class="eyebrow">' + (t.phase === 'during' ? esc(U.fmtDay(n.date).toUpperCase()) : t.phase === 'before' ? 'CUENTA ATRÁS' : 'FIN') + '</div><h2 class="display">' + esc(title) + '</h2><p class="muted">' + esc(sub) + '</p>' +
-      (t.phase === 'before' ? '<div>' + UI.btn('Probar el Modo viaje', { icon: 'nav', size: 'sm', variant: 'secondary', data: { act: 'simulate' } }) + '</div>' : ''), { tone: t.phase === 'during' ? 'accent' : '', cls: 'stack' });
+    // Cabecera compacta: cuenta atrás (o el día de hoy) en una línea, con «Probar el Modo viaje» al lado.
+    let html = UI.card('<div class="hero"><div class="grow"><div class="eyebrow">' + (t.phase === 'during' ? esc(U.fmtDay(n.date).toUpperCase()) : t.phase === 'before' ? 'CUENTA ATRÁS' : 'FIN') + '</div>' +
+      '<h2 class="title">' + esc(title) + '</h2><p class="muted small">' + esc(sub) + '</p></div>' +
+      (t.phase === 'before' ? UI.btn('Probar Modo viaje', { icon: 'nav', size: 'sm', variant: 'ghost', data: { act: 'simulate' } }) : '') + '</div>', { tone: t.phase === 'during' ? 'accent' : '' });
     html += alerts(t);
     if (up[0]) html += nextUpCard(up[0], up[0].isToday ? 'SIGUIENTE' : 'PRÓXIMA ACTIVIDAD');
     html += C.quick([
-      ['🗓️', '+ Actividad', { act: 'newActivity', day: t.phase === 'during' && t.day ? t.day.id : '' }],
-      ['💰', '+ Gasto', { act: 'newExpense' }],
-      ['🍜', '+ Restaurante', { act: 'newRestaurant' }],
-      ['🗒️', '+ Nota', { act: 'newNote' }]
+      ['calendar', '+ Actividad', { act: 'newActivity', day: t.phase === 'during' && t.day ? t.day.id : '' }],
+      ['wallet', '+ Gasto', { act: 'newExpense' }],
+      ['food', '+ Restaurante', { act: 'newRestaurant' }],
+      ['note', '+ Nota', { act: 'newNote' }]
     ]);
+    html += C.tripHub();
     if (t.day) {
       html += UI.section(t.phase === 'during' ? 'Resumen de hoy' : t.phase === 'before' ? 'Día 1 · ' + (t.city ? t.city.name : '') : 'Último día',
-        UI.card(dayList.length ? '<div class="mini-tl">' + dayList.map((a) => '<div class="mini-tl__row' + (a.status === 'done' ? ' is-done' : '') + '"><span class="mono">' + (a.startTime || '··:··') + '</span><span>' + D.ACTIVITY[a.category][1] + ' ' + esc(a.title) + '</span></div>').join('') + '</div>' : '<p class="muted">Sin actividades. Toca para planificar.</p>', { data: { act: 'go', to: 'day/' + t.day.id } }),
+        UI.card(dayList.length ? '<div class="mini-tl">' + dayList.slice(0, 5).map((a) => '<div class="mini-tl__row' + (a.status === 'done' ? ' is-done' : '') + '"><span class="mono">' + (a.startTime || '··:··') + '</span><span>' + D.ACTIVITY[a.category][1] + ' ' + esc(a.title) + '</span></div>').join('') +
+          (dayList.length > 5 ? '<small class="faint">+' + (dayList.length - 5) + ' más · toca para ver el día</small>' : '') + '</div>' : '<p class="muted">Sin actividades. Toca para planificar.</p>', { data: { act: 'go', to: 'day/' + t.day.id } }),
         UI.btn('Ver día', { size: 'sm', variant: 'ghost', data: { act: 'go', to: 'day/' + t.day.id } }));
     }
     html += UI.section('Gastos', UI.card('<div class="stats">' + UI.stat('Gastado', spent.text, '', true) +
@@ -102,8 +106,9 @@
       (budget ? UI.progress(spent.total / budget, spent.total > budget ? 'accent' : 'info') : '') + (spent.extra ? '<small class="faint">+ ' + esc(spent.extra) + ' sin convertir</small>' : ''), { data: { act: 'go', to: 'expenses' }, cls: 'stack' }),
       UI.btn('Detalle', { size: 'sm', variant: 'ghost', data: { act: 'go', to: 'expenses' } }));
     if (up.length > 1) {
-      html += UI.section('Próximos planes', UI.card('<div class="mini-tl">' + up.slice(1).map((u) => '<button type="button" class="mini-tl__row" data-act="go" data-to="activity/' + u.activity.id + '"><span class="mini-tl__when"><small class="muted">' + esc(u.isToday ? 'Hoy' : U.fmtDay(u.day.date).split(' ').slice(0, 2).join(' ')) + '</small><span class="mono">' + (u.activity.startTime || '··:··') + '</span></span><span>' + D.ACTIVITY[u.activity.category][1] + ' ' + esc(u.activity.title) + '</span></button>').join('') + '</div>'),
-        UI.btn('Itinerario', { size: 'sm', variant: 'ghost', data: { act: 'go', to: 'itinerary' } }));
+      // Plegado: abre cuando quieras ver lo que viene, sin alargar Inicio.
+      html += UI.details('Próximos planes (' + (up.length - 1) + ')', '<div class="mini-tl">' + up.slice(1).map((u) => '<button type="button" class="mini-tl__row" data-act="go" data-to="activity/' + u.activity.id + '"><span class="mini-tl__when"><small class="muted">' + esc(u.isToday ? 'Hoy' : U.fmtDay(u.day.date).split(' ').slice(0, 2).join(' ')) + '</small><span class="mono">' + (u.activity.startTime || '··:··') + '</span></span><span>' + D.ACTIVITY[u.activity.category][1] + ' ' + esc(u.activity.title) + '</span></button>').join('') + '</div>' +
+        UI.btn('Ver el itinerario', { size: 'sm', variant: 'ghost', data: { act: 'go', to: 'itinerary' } }), false);
     }
     return html;
   }
@@ -123,16 +128,25 @@
     else if (!current) html += UI.empty('🍵', 'Nada más por hoy', 'Disfruta. Puedes buscar dónde cenar cerca o planificar mañana.');
     const nearTo = here || (city && city.coords);
     html += C.quick([
-      ['💴', 'Gasto', { act: 'newExpense' }],
-      ['🍜', 'Comer cerca', nearTo ? { act: 'go', to: 'nearby?' + C.q({ lat: nearTo.lat, lng: nearTo.lng, label: city && city.name }) } : { act: 'go', to: 'food' }],
-      ['🗓️', 'Día de hoy', day ? { act: 'go', to: 'day/' + day.id } : { act: 'go', to: 'itinerary' }],
-      ['🗣️', 'Frases', { act: 'go', to: 'phrases' }]
+      ['wallet', 'Gasto', { act: 'newExpense' }],
+      ['food', 'Comer cerca', nearTo ? { act: 'go', to: 'nearby?' + C.q({ lat: nearTo.lat, lng: nearTo.lng, label: city && city.name }) } : { act: 'go', to: 'food' }],
+      ['calendar', 'Día de hoy', day ? { act: 'go', to: 'day/' + day.id } : { act: 'go', to: 'itinerary' }],
+      ['chat', 'Frases', { act: 'go', to: 'phrases' }]
     ]);
+    // Volver al hotel: la tarjeta para el taxista a un toque.
+    const hotel = S.hotelTonight(n.date);
+    if (hotel) {
+      const hl = hotel.location || {}, hdir = hl.coords || hl.name || hl.address ? U.directionsUrl(hl) : null;
+      html += UI.card('<div class="row"><span class="quick__icon">' + U.icon('bed', 20) + '</span><div class="grow"><small class="eyebrow muted">ESTA NOCHE DUERMES EN</small><strong class="block">' + esc(hotel.name) + '</strong>' +
+        (hotel.nameJa ? '<small class="muted" lang="ja">' + esc(hotel.nameJa) + '</small>' : '') + '</div></div>' +
+        '<div class="row row--wrap">' + UI.btn('Para el taxista', { icon: 'car', size: 'sm', data: { act: 'taxi', id: hotel.id } }) +
+        (hdir ? '<a class="btn btn--secondary btn--sm" href="' + esc(hdir) + '" target="_blank" rel="noopener">' + U.icon('nav', 16) + '<span>Volver al hotel</span></a>' : '') + '</div>', { cls: 'stack' });
+    }
     const spentToday = C.moneySum(Object.values(s.expenses).filter((e) => e.date === n.date));
     const spentAll = C.moneySum(Object.values(s.expenses));
     const budget = s.trip.totalBudget;
     html += UI.card('<div class="stats">' + UI.stat('Hoy', spentToday.text, '', true) + UI.stat('Total viaje', spentAll.text, budget ? 'de ' + U.money(budget, spentAll.main) : '') + '</div>' + (budget ? UI.progress(spentAll.total / budget, spentAll.total > budget ? 'accent' : 'info') : ''), { cls: 'stack' });
-    const resv = day ? S.reservationsOffTimeline(day) : [];
+    const resv = day ? S.reservationsOffTimeline(day).filter((r) => !hotel || r.id !== hotel.id) : []; // el hotel de esta noche ya tiene su tarjeta
     if (resv.length) html += UI.section('Reservas de hoy', resv.map(C.reservationCard).join(''), UI.btn('Todas', { size: 'sm', variant: 'ghost', data: { act: 'go', to: 'reservations' } }));
     const near = here ? S.savedNear(here, 1.5).slice(0, 3) : [];
     html += UI.section('Comer cerca',
@@ -143,6 +157,8 @@
       UI.btn('Día completo', { size: 'sm', variant: 'ghost', data: { act: 'go', to: 'day/' + day.id } }));
     const notes = Object.values(s.notes).filter((x) => (city && x.scope === 'city' && x.refId === city.id) || (day && x.scope === 'day' && x.refId === day.id)).sort((a, b) => b.pinned - a.pinned).slice(0, 3);
     if (notes.length) html += UI.section('Notas · ' + (city ? city.name : 'hoy'), notes.map((x) => C.noteCard(x)).join(''), UI.btn('Todas', { size: 'sm', variant: 'ghost', data: { act: 'go', to: 'notes' } }));
+    // En el Modo viaje manda lo de ahora: los apartados del viaje van al final.
+    html += C.tripHub();
     return html;
   }
 
@@ -163,32 +179,49 @@
 
   /* ══ ITINERARIO ══════════════════════════════════════════════ */
 
+  /** Tarjeta de un día: color de su ciudad, traslados y hotel de esa noche sin tener que abrirlo. */
   function dayCard(d, num, isToday) {
-    const list = S.dayActivities(d.id), done = list.filter((a) => a.status === 'done').length;
-    return '<div class="card card--tap daycard' + (isToday ? ' card--accent' : '') + '" tabindex="0" data-act="go" data-to="day/' + d.id + '">' +
+    const s = S.get(), list = S.dayActivities(d.id), done = list.filter((a) => a.status === 'done').length;
+    const city = d.cityId && s.cities[d.cityId];
+    const trips = Object.values(s.transports).filter((x) => x.date === d.date).sort((a, b) => U.cmpTime(a.departTime, b.departTime));
+    const hotel = S.hotelTonight(d.date);
+    const shown = list.filter((a) => !a.transportId); // los trayectos ya salen arriba como etiqueta
+    const tags = trips.map((x) => '<span class="daycard__tag">' + D.TRANSPORT[x.kind][1] + ' ' + esc(x.origin + ' → ' + x.destination) + (x.departTime ? ' · ' + x.departTime : '') + '</span>').join('') +
+      (hotel ? '<span class="daycard__tag">🏨 ' + esc(hotel.name) + '</span>' : '');
+    return '<div id="day-' + d.id + '" class="card card--tap daycard' + (isToday ? ' card--accent' : '') + '" style="--city:' + esc(city ? city.color || '#C8102E' : 'transparent') + '" tabindex="0" data-act="go" data-to="day/' + d.id + '">' +
       '<div class="daycard__top"><span class="daynum' + (isToday ? ' is-today' : '') + '"><small>DÍA</small><strong>' + num + '</strong></span>' +
       '<div class="grow"><strong>' + esc(U.fmtDay(d.date)) + '</strong> ' + (isToday ? UI.pill('Hoy', 'accent') : '') + (d.title ? '<small class="muted block">' + esc(d.title) + '</small>' : '') + '</div>' +
       '<small class="faint">' + (list.length ? done + '/' + list.length : '') + '</small></div>' +
-      (list.length ? '<div class="daycard__preview">' + list.slice(0, 4).map((a) => '<small class="' + (a.status === 'done' ? 'faint' : 'muted') + '"><b class="mono">' + (a.startTime || '··:··') + '</b>  ' + D.ACTIVITY[a.category][1] + ' ' + esc(a.title) + '</small>').join('') +
-        (list.length > 4 ? '<small class="faint">+' + (list.length - 4) + ' más</small>' : '') + '</div>' : '<small class="faint daycard__preview">Sin actividades todavía</small>') + '</div>';
+      (tags ? '<div class="daycard__meta">' + tags + '</div>' : '') +
+      (shown.length ? '<div class="daycard__preview">' + shown.slice(0, 4).map((a) => '<small class="' + (a.status === 'done' ? 'faint' : 'muted') + '"><b class="mono">' + (a.startTime || '··:··') + '</b>  ' + D.ACTIVITY[a.category][1] + ' ' + esc(a.title) + '</small>').join('') +
+        (shown.length > 4 ? '<small class="faint">+' + (shown.length - 4) + ' más</small>' : '') + '</div>' : tags ? '' : '<small class="faint daycard__preview">Sin actividades todavía</small>') + '</div>';
   }
 
+  /* Durante el viaje los días ya pasados se pliegan arriba y hay un botón para ir a hoy. */
   V.itinerary = function () {
     const s = S.get(), days = S.sortedDays(), t = S.today();
     const num = {};
     days.forEach((d, i) => (num[d.id] = i + 1));
     const todayId = t.phase === 'during' && t.day ? t.day.id : null;
+    const isPast = (d) => t.phase === 'during' && d.date < t.now.date;
+    const card = (d) => dayCard(d, num[d.id], d.id === todayId);
     let html = UI.header({ title: 'Itinerario', subtitle: U.fmtRange(s.trip.startDate, s.trip.endDate) + ' · ' + days.length + ' días',
       actions: UI.iconBtn('search', 'Buscar', { act: 'go', to: 'search' }) + UI.iconBtn('sparkle', 'Planificar día', { act: 'go', to: 'planner' }) }) + C.sampleBanner();
+    if (todayId) html += UI.btn('Ir a hoy · Día ' + num[todayId], { icon: 'calendar', size: 'sm', variant: 'secondary', data: { act: 'goToday', id: todayId } });
+    const past = days.filter(isPast);
+    let body = past.length ? UI.details('Días anteriores (' + past.length + ')', past.map(card).join(''), false) : '';
     S.cityStays().forEach(function (st) {
-      const c = s.cities[st.cityId];
-      html += UI.section((c ? c.name : 'Ciudad') + ' · ' + U.fmtRange(st.start, st.end), st.dayIds.map((id) => dayCard(s.days[id], num[id], id === todayId)).join(''), '<small class="faint">' + st.nights + (st.nights === 1 ? ' noche' : ' noches') + '</small>');
+      const c = s.cities[st.cityId], ids = st.dayIds.filter((id) => !isPast(s.days[id]));
+      if (!ids.length) return;
+      body += UI.section((c ? c.name : 'Ciudad') + ' · ' + U.fmtRange(st.start, st.end), ids.map((id) => card(s.days[id])).join(''), '<small class="faint">' + st.nights + (st.nights === 1 ? ' noche' : ' noches') + '</small>');
     });
-    const loose = days.filter((d) => !d.cityId);
-    if (loose.length) html += UI.section('Días sin ciudad', loose.map((d) => dayCard(d, num[d.id], d.id === todayId)).join(''), UI.btn('Asignar', { size: 'sm', variant: 'ghost', data: { act: 'go', to: 'cities' } }));
-    html += '<div class="row row--center">' + UI.btn('Ciudades', { icon: 'map', variant: 'secondary', data: { act: 'go', to: 'cities' } }) + UI.btn('Transporte', { emoji: '🚄', variant: 'secondary', data: { act: 'go', to: 'transport' } }) + '</div>';
+    const loose = days.filter((d) => !d.cityId && !isPast(d));
+    if (loose.length) body += UI.section('Días sin ciudad', loose.map(card).join(''), UI.btn('Asignar', { size: 'sm', variant: 'ghost', data: { act: 'go', to: 'cities' } }));
+    html += '<div class="itin">' + body + '</div>';
+    html += '<div class="row row--center">' + UI.btn('Ciudades', { icon: 'city', variant: 'secondary', data: { act: 'go', to: 'cities' } }) + UI.btn('Transporte', { icon: 'train', variant: 'secondary', data: { act: 'go', to: 'transport' } }) + '</div>';
     return { html: html };
   };
+  A.goToday = (el) => { const c = document.getElementById('day-' + el.dataset.id); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
 
   /* ══ VISTA DEL DÍA ═══════════════════════════════════════════ */
 
@@ -266,7 +299,7 @@
       actions: UI.iconBtn('edit', 'Editar', { act: 'editActivity', id: a.id }) + UI.iconBtn('more', 'Más opciones', { act: 'activityMenu', id: a.id }) });
     html += '<div class="row row--wrap">' + UI.btn(done ? 'Hecha' : 'Marcar hecha', { icon: 'check', size: 'sm', variant: done ? 'soft' : 'primary', data: { act: 'toggleDone', id: a.id } }) +
       (dir ? '<a class="btn btn--secondary btn--sm" href="' + esc(dir) + '" target="_blank" rel="noopener">' + U.icon('nav', 16) + '<span>Cómo llegar</span></a>' : '') +
-      (loc.coords ? UI.btn('Restaurantes cerca', { emoji: '🍜', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'nearby?' + C.q({ lat: loc.coords.lat, lng: loc.coords.lng, label: loc.name || a.title }) } }) : '') +
+      (loc.coords ? UI.btn('Restaurantes cerca', { icon: 'food', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'nearby?' + C.q({ lat: loc.coords.lat, lng: loc.coords.lng, label: loc.name || a.title }) } }) : '') +
       UI.btn('Gasto', { icon: 'plus', size: 'sm', variant: 'secondary', data: { act: 'newExpense', date: day && day.date, city: day && day.cityId, place: loc.name || a.title, activity: a.id } }) + '</div>';
     html += UI.card((loc.name ? UI.listRow({ icon: 'pin', title: loc.name, sub: loc.address || (loc.coords ? loc.coords.lat.toFixed(4) + ', ' + loc.coords.lng.toFixed(4) : 'Sin coordenadas'), data: place ? { act: 'go', to: 'place/' + place.id } : rest ? { act: 'go', to: 'restaurant/' + rest.id } : null }) : '<p class="muted">Sin ubicación</p>') +
       '<div class="pills">' + UI.pill('Prioridad ' + D.PRIORITY[a.priority][0].toLowerCase(), a.priority === 'high' ? 'accent' : 'neutral') + (a.estimatedCost ? UI.pill('≈ ' + U.money(a.estimatedCost, a.costCurrency || 'JPY')) : '') +
@@ -297,7 +330,7 @@
       { icon: 'up', label: 'Subir', hint: a.startTime ? 'Tiene hora: mejor cámbiala en Editar y se recoloca sola' : '', run: () => S.shiftActivity(a.id, -1) },
       { icon: 'down', label: 'Bajar', hint: a.startTime ? 'Tiene hora: mejor cámbiala en Editar y se recoloca sola' : '', run: () => S.shiftActivity(a.id, 1) }
     ];
-    if (loc.coords) items.push({ emoji: '🍜', label: 'Restaurantes cerca', run: () => JT.go('nearby?' + C.q({ lat: loc.coords.lat, lng: loc.coords.lng, label: loc.name || a.title })) });
+    if (loc.coords) items.push({ icon: 'food', label: 'Restaurantes cerca', run: () => JT.go('nearby?' + C.q({ lat: loc.coords.lat, lng: loc.coords.lng, label: loc.name || a.title })) });
     const dir = U.directionsUrl(loc, null, a.transportMode);
     if (dir) items.push({ icon: 'nav', label: 'Cómo llegar', run: () => SV.openUrl(dir) });
     items.push({ icon: 'trash', label: 'Eliminar', destructive: true, run: async () => { if (await UI.confirm('¿Eliminar actividad?', a.title)) { S.remove('activities', a.id); UI.toast('Actividad eliminada'); if (location.hash.indexOf(a.id) > -1) history.back(); } } });
@@ -344,7 +377,7 @@
         UI.field('Cómo llegar desde la actividad anterior', UI.chips('transportMode', D.options(D.MODE), a.transportMode, { allowNone: true, noneLabel: 'Auto' }), { optional: true }) +
         UI.field('Prioridad', UI.chips('priority', D.options(D.PRIORITY), a.priority)) +
         '<div class="row row--top">' + UI.field('Coste estimado', UI.input('cost', a.estimatedCost || '', { inputmode: 'decimal', placeholder: '0' }), { optional: true }) + UI.field('Moneda', UI.chips('costCurrency', D.CURRENCIES.map((c) => ({ value: c, label: c })), a.costCurrency || 'JPY')) + '</div>' +
-        UI.field('Nº de reserva', UI.input('bookingCode', (linkedRes && linkedRes.confirmationCode) || '', { placeholder: 'ABC123' }), { optional: true, hint: 'Si lo pones, la actividad aparece también en Más → Reservas.' }) +
+        UI.field('Nº de reserva', UI.input('bookingCode', (linkedRes && linkedRes.confirmationCode) || '', { placeholder: 'ABC123' }), { optional: true, hint: 'Si lo pones, la actividad aparece también en Inicio → Tu viaje → Reservas.' }) +
         (resv.length ? UI.field('Reserva vinculada', '<select class="input" name="reservationId"><option value="">Ninguna</option>' + resv.sort((x, y) => x.date.localeCompare(y.date)).map((r) => '<option value="' + r.id + '"' + (r.id === a.reservationId ? ' selected' : '') + '>' + esc(U.fmtShort(r.date) + ' · ' + r.name) + '</option>').join('') + '</select>', { optional: true }) : '') +
         UI.field('Descripción', UI.textarea('description', a.description), { optional: true }) +
         UI.field('Notas', UI.textarea('notes', a.notes), { optional: true }) +
@@ -390,7 +423,7 @@
     });
   };
 
-  /* Nº de reserva escrito en la actividad: actualiza su reserva o crea una en Más → Reservas, enlazada. */
+  /* Nº de reserva escrito en la actividad: actualiza su reserva o crea una en Reservas, enlazada. */
   const RES_TYPE = { hotel: 'hotel', restaurant: 'restaurant', cafe: 'restaurant', transport: 'train', activity: 'activity', visit: 'activity' };
 
   function saveBookingCode(activityId, f) {
@@ -401,7 +434,7 @@
     const day = s.days[a.dayId], loc = S.resolveLocation(a);
     S.addReservationFor(activityId, { type: RES_TYPE[a.category] || 'other', name: a.title, date: day.date, time: a.startTime, confirmationCode: code, cityId: day.cityId,
       location: loc.name || loc.coords ? { name: loc.name, address: loc.address, coords: loc.coords } : undefined });
-    return ' · reserva añadida en Más → Reservas';
+    return ' · reserva añadida en Reservas';
   }
 
   A.newActivity = (el) => F.activity(null, { dayId: el.dataset.day || undefined, placeId: el.dataset.place, restaurantId: el.dataset.restaurant, title: el.dataset.title, category: el.dataset.category });
