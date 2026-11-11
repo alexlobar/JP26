@@ -23,7 +23,7 @@ JT.app = (function () {
     [/^cities$/, 'cities', 'home'], [/^city\/([\w-]+)$/, 'city', 'home'], [/^reservations$/, 'reservations', 'home'], [/^reservation\/([\w-]+)$/, 'reservation', 'home'],
     [/^transport$/, 'transport', 'home'], [/^notes$/, 'notes', 'home'], [/^checklist$/, 'checklist', 'home'], [/^info$/, 'info', 'home'],
     [/^phrases$/, 'phrases', 'home'], [/^documents$/, 'documents', 'home'], [/^search$/, 'search', 'home'], [/^settings$/, 'settings', 'home'],
-    [/^ready$/, 'ready', 'home'], [/^diary$/, 'diary', 'home']
+    [/^ready$/, 'ready', 'home'], [/^diary$/, 'diary', 'home'], [/^gifts$/, 'gifts', 'home']
   ];
 
   let main, lastPath = null, pending = false;
@@ -91,7 +91,7 @@ JT.app = (function () {
   }
 
   /* ── Toque de color en la cabecera: el mismo icono y color que su cuadro en «Tu viaje» ── */
-  const VIEW_ICON = { cities: 'city', city: 'city', reservations: 'ticket', reservation: 'ticket', transport: 'train', notes: 'note', checklist: 'checklist', documents: 'doc', info: 'info', phrases: 'chat' };
+  const VIEW_ICON = { cities: 'city', city: 'city', reservations: 'ticket', reservation: 'ticket', transport: 'train', notes: 'note', checklist: 'checklist', documents: 'doc', info: 'info', phrases: 'chat', gifts: 'gift' };
   function toneHeader(view) {
     const icon = VIEW_ICON[view], h1 = icon && main.querySelector('.hdr h1');
     if (!h1) return;
@@ -122,7 +122,9 @@ JT.app = (function () {
   }
 
   function applyTheme() {
-    const t = S.get().settings.theme;
+    const t = S.get().settings.theme, size = S.get().settings.textSize;
+    // Tamaño de letra: zoom de toda la app (ver styles.css, [data-text]).
+    if (size === 'large' || size === 'xl') document.documentElement.setAttribute('data-text', size); else document.documentElement.removeAttribute('data-text');
     if (t === 'system') document.documentElement.removeAttribute('data-theme');
     else document.documentElement.setAttribute('data-theme', t);
     const dark = t === 'dark' || (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);

@@ -145,6 +145,8 @@ JT.store = (function () {
       // Si era la actividad de una reserva/trayecto, no se vuelve a crear: el usuario la quitó del itinerario.
       const src = entity && entity.auto && s[entity.auto] && s[entity.auto][entity[LINKED[entity.auto]]];
       if (src) src.inItinerary = false;
+    } else if (col === 'gifts') {
+      Object.values(s.expenses).forEach((e) => { if (e.giftId === id) delete e.giftId; }); // el gasto se queda
     } else if (col === 'travelers') {
       Object.values(s.expenses).forEach((e) => {
         if (e.paidById === id) delete e.paidById;

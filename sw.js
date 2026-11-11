@@ -4,7 +4,7 @@
    Sube el número de CACHE al cambiar cualquier archivo; tiene
    que coincidir con VERSION en js/utils.js.
    ============================================================ */
-const CACHE = 'japon-travel-v1.4.0';
+const CACHE = 'japon-travel-v1.5.0';
 // Todas las apps de alexlobar.github.io comparten el almacén de cachés: sólo se tocan las nuestras.
 const PREFIX = 'japon-travel-';
 

@@ -431,6 +431,73 @@
     onSave: (f) => { if (!f.title) return 'Escribe un nombre'; S.create('checklists', { title: f.title, section: f.section, order: Object.keys(S.get().checklists).length }); }
   });
 
+  /* ══ REGALOS ═════════════════════════════════════════════════
+     Para quién, qué idea, dónde comprarlo y si ya está comprado.
+     Al marcarlo como comprado ofrece apuntarlo en Gastos (enlazado
+     con giftId, como las reservas), para no escribirlo dos veces. */
+
+  const giftExpense = (id) => Object.values(S.get().expenses).find((e) => e.giftId === id) || null;
+
+  V.gifts = function () {
+    const s = S.get(), list = Object.values(s.gifts).sort((a, b) => a.bought - b.bought || (a.createdAt || 0) - (b.createdAt || 0));
+    const bought = list.filter((g) => g.bought).length;
+    const head = UI.header({ back: true, title: 'Regalos', subtitle: list.length ? bought + ' de ' + list.length + ' comprados' : 'Para quién, qué y dónde', actions: UI.iconBtn('plus', 'Nuevo regalo', { act: 'newGift' }) });
+    if (!list.length) return { html: head + UI.empty('🎁', 'Sin regalos apuntados', 'Apunta para quién quieres traer algo y una idea. Al comprarlo, se apunta en Gastos con un toque.', UI.btn('Añadir regalo', { data: { act: 'newGift' } })) };
+    const spent = C.moneySum(list.map((g) => giftExpense(g.id)).filter(Boolean));
+    const people = {};
+    list.forEach((g) => { const k = (g.person || '').trim() || 'Sin asignar'; (people[k] = people[k] || []).push(g); });
+    let html = head + UI.card('<div class="stats">' + UI.stat('Comprados', bought + ' / ' + list.length) + UI.stat('Gastado en regalos', spent.total ? spent.text : '—') + '</div>' + UI.progress(bought / list.length, 'success'), { cls: 'stack' });
+    html += Object.keys(people).sort((a, b) => (a === 'Sin asignar') - (b === 'Sin asignar') || a.localeCompare(b, 'es')).map(function (p) {
+      const g = people[p], done = g.filter((x) => x.bought).length;
+      return UI.section(p, UI.card(g.map(function (x) {
+        const city = x.cityId && s.cities[x.cityId], ex = giftExpense(x.id);
+        const sub = [city ? 'En ' + city.name : '', x.cost ? (x.bought ? '' : '~') + U.money(x.cost, x.currency || 'JPY') : '', ex ? 'En Gastos ✓' : ''].filter(Boolean).join(' · ');
+        return '<div class="check' + (x.bought ? ' is-done' : '') + '"><button type="button" class="check__main gift__toggle" data-act="toggleGift" data-id="' + x.id + '" aria-pressed="' + !!x.bought + '" aria-label="' + esc((x.bought ? 'Comprado: ' : 'Marcar comprado: ') + x.idea) + '">' +
+          '<span class="check__box">' + U.icon('check', 14) + '</span></button>' +
+          '<button type="button" class="gift__body" data-act="editGift" data-id="' + x.id + '"><span class="gift__idea">' + esc(x.idea) + '</span>' + (sub ? '<small class="muted">' + esc(sub) + '</small>' : '') + '</button></div>';
+      }).join(''), { cls: 'card--list' }), '<small class="muted">' + done + '/' + g.length + '</small>');
+    }).join('');
+    return { html: html };
+  };
+
+  A.toggleGift = async function (el) {
+    const g = S.get().gifts[el.dataset.id];
+    if (!g) return;
+    S.update('gifts', g.id, { bought: !g.bought });
+    if (g.bought || giftExpense(g.id)) return; // desmarcado, o ya estaba en Gastos
+    if (await UI.confirm('¡Comprado! 🎁', '¿Lo apuntas también en Gastos?', { ok: 'Apuntar en Gastos', danger: false })) {
+      F.expense(null, { amount: g.cost, currency: g.currency || 'JPY', category: 'gifts', description: 'Regalo · ' + (g.person ? g.person + ': ' : '') + g.idea, cityId: g.cityId, giftId: g.id });
+    }
+  };
+
+  F.gift = function (id) {
+    const s = S.get(), ex = id ? s.gifts[id] : null, t = S.today();
+    const g = ex || { person: '', idea: '', currency: 'JPY', cityId: t.phase === 'during' && t.city ? t.city.id : undefined };
+    const people = Array.from(new Set(Object.values(s.gifts).map((x) => (x.person || '').trim()).filter(Boolean))).sort();
+    const ex2 = ex && giftExpense(ex.id);
+    return formSheet({
+      id: 'fGift', title: ex ? 'Editar regalo' : 'Nuevo regalo',
+      body: UI.field('Para quién', '<input class="input" name="person" list="giftPeople" value="' + esc(g.person || '') + '" placeholder="p.ej. Mamá"' + (ex ? '' : ' autofocus') + ' autocomplete="off"><datalist id="giftPeople">' + people.map((p) => '<option value="' + esc(p) + '">').join('') + '</datalist>') +
+        UI.field('Idea', UI.input('idea', g.idea || '', { placeholder: 'p.ej. Té matcha de Uji' })) +
+        '<div class="row row--top">' + UI.field('Precio', UI.input('cost', g.cost ? String(g.cost).replace('.', ',') : '', { inputmode: 'decimal', placeholder: 'aprox.' }), { optional: true }) + UI.field('Moneda', UI.chips('currency', D.CURRENCIES.map((c) => ({ value: c, label: c })), g.currency || 'JPY')) + '</div>' +
+        UI.field('Dónde comprarlo', UI.chips('cityId', C.cityOptions(), g.cityId, { allowNone: true, noneLabel: 'Donde sea' }), { optional: true }) +
+        UI.chipsMulti('bought', [{ value: '1', label: '✓ Ya comprado' }], g.bought ? ['1'] : []) +
+        UI.field('Notas', UI.textarea('notes', g.notes || '', 'Talla, color, tienda…'), { optional: true }) +
+        (ex2 ? UI.listRow({ icon: 'wallet', title: U.money(ex2.amount, ex2.currency), sub: 'Apuntado en Gastos · toca para verlo', data: { act: 'editExpense', id: ex2.id } }) : ''),
+      onDelete: ex ? async () => { if (!(await UI.confirm('¿Eliminar regalo?', ex.idea))) return false; S.remove('gifts', ex.id); return true; } : null,
+      onSave: function (f) {
+        const cost = f.cost ? U.parseAmount(f.cost) : undefined;
+        if (!f.idea) return 'Escribe una idea';
+        if (cost === null) return 'Precio no válido';
+        const data = { person: (f.person || '').trim() || undefined, idea: f.idea, cost: cost || undefined, currency: cost ? f.currency : undefined, cityId: f.cityId || undefined, bought: !!f.bought, notes: f.notes || undefined };
+        if (ex) S.update('gifts', ex.id, data); else S.create('gifts', data);
+        UI.toast('Regalo guardado');
+      }
+    });
+  };
+  A.newGift = () => F.gift(null);
+  A.editGift = (el) => F.gift(el.dataset.id);
+
   /* ══ INFORMACIÓN ÚTIL ════════════════════════════════════════ */
 
   V.info = function () {
@@ -849,7 +916,10 @@
       '<form id="fTraveler" class="row"><input class="input" name="name" placeholder="Nombre del viajero" aria-label="Nombre del viajero">' + UI.btn('Añadir', { type: 'submit', size: 'sm' }) + '</form>' +
       '<small class="faint">Con 2 o más viajeros puedes indicar quién pagó cada gasto y repartirlo.</small>', { cls: 'stack' }));
 
-    html += UI.section('Apariencia y unidades', UI.card(seg('setTheme', st.theme, [['system', 'Sistema'], ['light', 'Claro'], ['dark', 'Oscuro']]) + seg('setUnits', st.units, [['km', 'Kilómetros'], ['mi', 'Millas']]), { cls: 'stack' }));
+    html += UI.section('Apariencia y unidades', UI.card(seg('setTheme', st.theme, [['system', 'Sistema'], ['light', 'Claro'], ['dark', 'Oscuro']]) +
+      '<span class="field__label">Tamaño de letra</span>' + seg('setTextSize', st.textSize || 'normal', [['normal', 'Normal'], ['large', 'Grande'], ['xl', 'Muy grande']]) +
+      '<small class="muted">Agranda toda la app (textos, botones e iconos) para leer mejor en la calle o enseñar la pantalla. Sólo en este dispositivo.</small>' +
+      seg('setUnits', st.units, [['km', 'Kilómetros'], ['mi', 'Millas']]), { cls: 'stack' }));
 
     html += UI.section('Modo viaje', UI.card(seg('setTravel', st.travelMode, [['auto', 'Automático'], ['on', 'Siempre'], ['off', 'Nunca']]) +
       '<small class="muted">Automático: Inicio cambia al Modo viaje durante las fechas del viaje.</small>' +
@@ -1024,6 +1094,7 @@
 
   A.setYenRounding =(el) => S.setSettings({ yenRounding: el.dataset.value });
   A.setTheme = (el) => S.setSettings({ theme: el.dataset.value });
+  A.setTextSize = (el) => S.setSettings({ textSize: el.dataset.value });
   A.setUnits = (el) => S.setSettings({ units: el.dataset.value });
   A.setTravel = (el) => S.setSettings({ travelMode: el.dataset.value });
   A.clearSim = () => S.setSettings({ simulatedDate: '', simulatedTime: '' });

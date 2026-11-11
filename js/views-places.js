@@ -60,14 +60,13 @@
       .filter((p) => !st.status || (st.status === 'fav' ? p.favorite : p.status === st.status))
       .filter((p) => !nq || U.normalize(p.name + ' ' + (p.neighborhood || '') + ' ' + (p.description || '')).indexOf(nq) > -1)
       .sort((a, b) => b.favorite - a.favorite || (a.priority === 'high' ? -1 : 0) - (b.priority === 'high' ? -1 : 0) || a.name.localeCompare(b.name));
-    const groups = {};
-    list.forEach((p) => (groups[p.cityId || ''] = (groups[p.cityId || ''] || []).concat(p)));
     let html = sitesHeader('visit');
     html += searchBox('places', 'Buscar lugares…') +
       fchips('places', 'status', [{ value: 'pending', label: 'Pendientes' }, { value: 'visited', label: 'Visitados' }, { value: 'fav', label: '♥ Favoritos' }]) +
       fchips('places', 'city', C.cityOptions(), 'Todas las ciudades') +
       fchips('places', 'cat', D.options(D.PLACE), 'Todas las categorías');
-    html += list.length ? Object.keys(groups).map((cid) => UI.section(s.cities[cid] ? s.cities[cid].name : 'Sin ciudad', groups[cid].map((p) => C.placeCard(p)).join(''))).join('')
+    // Agrupados por ciudad en el orden del viaje, con su color y sus fechas (como el Itinerario).
+    html += list.length ? C.byCityGroups(list, (p) => C.placeCard(p))
       : UI.empty('📍', 'Sin lugares', 'Guarda templos, barrios, miradores… o pega un enlace de Google Maps.', UI.btn('Añadir lugar', { data: { act: 'newPlace', city: st.city } }));
     return { html: html };
   };
@@ -171,7 +170,7 @@
     html += searchBox('food', 'Buscar restaurantes…') +
       fchips('food', 'status', [{ value: 'want', label: 'Quiero ir' }, { value: 'tried', label: 'Probados' }, { value: 'fav', label: '♥ Favoritos' }]) +
       fchips('food', 'city', C.cityOptions(), 'Todas las ciudades') + fchips('food', 'cuisine', D.options(D.CUISINE), 'Toda la comida');
-    html += list.length ? UI.section(st.city && s.cities[st.city] ? s.cities[st.city].name : 'Todos', list.map((r) => C.restaurantCard(r)).join(''))
+    html += list.length ? C.byCityGroups(list, (r) => C.restaurantCard(r))
       : UI.empty('🍜', 'Nada por aquí', 'Guarda restaurantes que quieras probar o busca cerca de tu próxima actividad.', UI.btn('Añadir restaurante', { data: { act: 'newRestaurant', city: st.city } }));
     return { html: html };
   };

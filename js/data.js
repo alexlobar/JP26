@@ -231,12 +231,12 @@ JT.data = (function () {
   function emptyCollections() {
     return {
       travelers: {}, cities: {}, days: {}, activities: {}, places: {}, restaurants: {}, expenses: {}, notes: {},
-      reservations: {}, transports: {}, checklists: {}, checklistItems: {}, infoArticles: {}, phrases: {}, docs: {}
+      reservations: {}, transports: {}, checklists: {}, checklistItems: {}, infoArticles: {}, phrases: {}, docs: {}, gifts: {}
     };
   }
 
   const DEFAULT_SETTINGS = {
-    theme: 'system', units: 'km', notificationsEnabled: false, notifyLeadMinutes: 30, travelMode: 'auto',
+    theme: 'system', textSize: 'normal', units: 'km', notificationsEnabled: false, notifyLeadMinutes: 30, travelMode: 'auto',
     placesProvider: 'auto', manualRates: {}, yenRounding: 'up', simulatedDate: '', simulatedTime: ''
   };
 

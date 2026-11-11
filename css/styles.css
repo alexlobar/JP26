@@ -337,6 +337,19 @@ details.more > .stack { margin-top: 12px; }
 .ready__dot.is-ok { background: var(--success); color: #fff; }
 .ready__dot.is-warn { background: var(--warn-soft); color: var(--warn); }
 .ready__dot.is-wait { background: var(--surface-2); color: var(--muted); }
+/* Tamaño de letra (Ajustes): agranda toda la app por igual, también la barra y las hojas */
+:root[data-text="large"] body { zoom: 1.1; }
+:root[data-text="xl"] body { zoom: 1.2; }
+/* Sitios agrupados por ciudad: punto con su color */
+.citygrp .section__title { display: flex; align-items: center; gap: 8px; }
+.citygrp .dot { width: 10px; height: 10px; border-radius: 5px; }
+/* Regalos */
+.check .gift__toggle { flex: none; padding: 10px 4px 10px 0; }
+.gift__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; padding: 9px 0; border: 0; background: transparent; text-align: left; }
+.gift__idea { font-weight: 500; }
+.check.is-done .gift__idea { text-decoration: line-through; color: var(--faint); }
+/* «Tu viaje»: 9 apartados en una cuadrícula de 3 × 3 */
+.quick--hub { grid-template-columns: repeat(3, 1fr); }
 /* Gastos: reparto por categoría en una barra de colores */
 .catstack { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--surface-2); gap: 2px; }
 .catstack span { display: block; min-width: 3px; }

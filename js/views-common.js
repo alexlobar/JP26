@@ -168,7 +168,7 @@ JT.cards = (function () {
      para reconocerlo de un vistazo sin leer. Los tonos están en styles.css (.tone-*). */
   const TONE = {
     city: 'violet', ticket: 'red', train: 'blue', note: 'amber', checklist: 'green', doc: 'slate', info: 'teal', chat: 'pink',
-    calendar: 'indigo', wallet: 'green', food: 'orange', bed: 'violet'
+    calendar: 'indigo', wallet: 'green', food: 'orange', bed: 'violet', gift: 'indigo'
   };
   function quick(items, variant) {
     return '<div class="quick' + (variant ? ' quick--' + variant : '') + '">' + items.map((it) => '<button type="button" class="quick__btn tone-' + (TONE[it[0]] || 'red') + '"' + UI.dataAttrs(it[2]) + '><span class="quick__icon">' + U.icon(it[0], 22) + '</span><small>' + esc(it[1]) + '</small>' +
@@ -208,6 +208,31 @@ JT.cards = (function () {
   function pctText(v, total) {
     const p = Math.round((v / total) * 100);
     return p === 0 && v > 0 ? '<1%' : p + '%';
+  }
+
+  /** Fechas de una ciudad en el viaje: «19 nov – 25 nov» (y otro tramo si vuelves: « · 14 dic – 16 dic»). */
+  function cityRanges(cityId) {
+    const out = [];
+    let cur = null;
+    S.sortedDays().forEach(function (d) {
+      if (d.cityId === cityId) { if (cur) cur[1] = d.date; else out.push((cur = [d.date, d.date])); } else cur = null;
+    });
+    return out.map((r) => U.fmtShort(r[0]) + (r[1] !== r[0] ? ' – ' + U.fmtShort(r[1]) : '')).join(' · ');
+  }
+
+  /** Lista agrupada por ciudad, en el orden en que las visitas (luego las que no están en el viaje y «Sin ciudad»).
+      Cabecera con el color de la ciudad, sus fechas y cuántos hay; se queda fija arriba al bajar. */
+  function byCityGroups(items, render) {
+    const s = S.get(), groups = {}, order = [];
+    items.forEach((x) => { const k = x.cityId && s.cities[x.cityId] ? x.cityId : ''; (groups[k] = groups[k] || []).push(x); });
+    S.sortedDays().forEach((d) => { if (d.cityId && groups[d.cityId] && order.indexOf(d.cityId) === -1) order.push(d.cityId); });
+    Object.keys(groups).filter((k) => k && order.indexOf(k) === -1).forEach((k) => order.push(k));
+    if (groups['']) order.push('');
+    return '<div class="itin">' + order.map(function (k) {
+      const c = s.cities[k], dates = c ? cityRanges(k) : '';
+      return '<section class="section"><div class="section__hdr citygrp"><h2 class="section__title"><span class="dot" style="background:' + esc(c ? c.color || 'var(--accent)' : 'var(--border)') + '"></span>' + esc(c ? c.name : 'Sin ciudad') + '</h2>' +
+        '<small class="muted">' + esc((dates ? dates + ' · ' : '') + groups[k].length) + '</small></div>' + groups[k].map(render).join('') + '</section>';
+    }).join('') + '</div>';
   }
 
   /** Franja con todos los días del viaje coloreados por ciudad y una marca en «hoy». Toca → Itinerario. */
@@ -258,6 +283,11 @@ JT.cards = (function () {
     JT.app.render();
   };
 
+  function giftCount() {
+    const g = Object.values(S.get().gifts), bought = g.filter((x) => x.bought).length;
+    return !g.length ? 'Vacío' : bought === g.length ? 'Todo comprado' : bought + ' de ' + g.length + ' comprados';
+  }
+
   /** «Tu viaje» en Inicio: ciudades, reservas, notas…, con cuántos hay de cada uno. */
   function tripHub() {
     const s = S.get(), n = (k) => Object.keys(s[k]).length;
@@ -271,7 +301,8 @@ JT.cards = (function () {
       ['checklist', 'Checklist', { act: 'go', to: 'checklist' }, pending ? pending + ' pendientes' : 'Todo listo'],
       ['doc', 'Documentos', { act: 'go', to: 'documents' }, count('docs', 'dato', 'datos')],
       ['info', 'Info útil', { act: 'go', to: 'info' }, 'Enchufes, 110…'],
-      ['chat', 'Frases', { act: 'go', to: 'phrases' }, 'Sin conexión']
+      ['chat', 'Frases', { act: 'go', to: 'phrases' }, 'Sin conexión'],
+      ['gift', 'Regalos', { act: 'go', to: 'gifts' }, giftCount()]
     ], 'hub'));
   }
 
@@ -329,5 +360,5 @@ JT.cards = (function () {
     });
   }
 
-  return { q, sampleBanner, offlineBanner, isNow, timelineItem, travelLeg, timeline, placeCard, restaurantCard, expenseRow, reservationCard, transportCard, noteCard, noteRef, quick, tripHub, speakBtn, TONE, catColor, byCategory, catStack, pctText, cityStrip, quickConverter, cityOptions, moneySum, parseCoords, coordsField, bindCoords };
+  return { q, sampleBanner, offlineBanner, isNow, timelineItem, travelLeg, timeline, placeCard, restaurantCard, expenseRow, reservationCard, transportCard, noteCard, noteRef, quick, tripHub, speakBtn, TONE, catColor, byCategory, catStack, pctText, cityStrip, quickConverter, cityRanges, byCityGroups, cityOptions, moneySum, parseCoords, coordsField, bindCoords };
 })();

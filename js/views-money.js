@@ -133,7 +133,7 @@
       date: def.date || t.now.date, cityId: def.cityId || (t.phase === 'during' && t.city ? t.city.id : undefined),
       placeName: def.placeName, activityId: def.activityId, paidById: me && me.id, splitWithIds: me ? [me.id] : [],
       // Desde una reserva o un trayecto con coste: llega ya relleno.
-      amount: def.amount, category: def.category, description: def.description, reservationId: def.reservationId, transportId: def.transportId
+      amount: def.amount, category: def.category, description: def.description, reservationId: def.reservationId, transportId: def.transportId, giftId: def.giftId
     };
     const main = s.trip.mainCurrency;
     const body = '<form id="fExp" class="stack" novalidate>' +
@@ -175,7 +175,7 @@
           const splitIds = travelers.length > 1 ? UI.list(f.split) : e.splitWithIds;
           const paid = travelers.length > 1 ? f.paidById : e.paidById;
           const data = { amount: amount, currency: f.currency, category: f.category, description: f.description || undefined, date: f.date || e.date, cityId: f.cityId || undefined,
-            placeName: f.placeName || undefined, paymentMethod: f.paymentMethod || undefined, paidById: paid, splitWithIds: splitIds.length ? splitIds : paid ? [paid] : [], notes: f.notes || undefined, activityId: e.activityId, reservationId: e.reservationId, transportId: e.transportId };
+            placeName: f.placeName || undefined, paymentMethod: f.paymentMethod || undefined, paidById: paid, splitWithIds: splitIds.length ? splitIds : paid ? [paid] : [], notes: f.notes || undefined, activityId: e.activityId, reservationId: e.reservationId, transportId: e.transportId, giftId: e.giftId };
           if (ex) S.update('expenses', ex.id, data); else S.create('expenses', data);
           UI.toast('Gasto de ' + U.money(amount, f.currency) + ' guardado');
           close();
