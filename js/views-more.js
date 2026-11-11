@@ -44,6 +44,38 @@
     UI.toast(where ? msg + ' · está en el ' + where : msg);
   }
 
+  /* ── Del coste de una reserva o trayecto a Gastos, sin escribirlo dos veces ── */
+
+  const COST_FIELD = { reservations: 'reservationId', transports: 'transportId' };
+  const RES_EXPENSE = { hotel: 'hotel', restaurant: 'food', train: 'transport', flight: 'flights', activity: 'tickets', other: 'other' };
+
+  /** Gasto apuntado desde esa reserva/trayecto, si lo hay. */
+  function costExpense(col, id) {
+    return Object.values(S.get().expenses).find((e) => e[COST_FIELD[col]] === id) || null;
+  }
+
+  /** Fila del coste: «Apuntar en Gastos» o, si ya está, enlace al gasto. */
+  function costRow(col, x) {
+    const ex = costExpense(col, x.id), money = U.money(x.cost, x.currency || 'JPY');
+    return ex ? UI.listRow({ icon: 'wallet', title: money, sub: 'Coste · ya está en Gastos ✓', data: { act: 'editExpense', id: ex.id } })
+      : UI.listRow({ icon: 'wallet', title: money, sub: 'Coste · aún no está en Gastos', right: UI.btn('Apuntar en Gastos', { size: 'sm', variant: 'secondary', data: { act: 'costToExpense', col: col, id: x.id } }) });
+  }
+  JT.cards.costExpense = costExpense;
+
+  A.costToExpense = function (el) {
+    const col = el.dataset.col, x = S.get()[col][el.dataset.id];
+    if (!x || !x.cost) return;
+    const ex = costExpense(col, x.id);
+    if (ex) return F.expense(ex.id);
+    const isRes = col === 'reservations';
+    F.expense(null, {
+      amount: x.cost, currency: x.currency || 'JPY', date: x.date, cityId: x.cityId,
+      category: isRes ? RES_EXPENSE[x.type] || 'other' : x.kind === 'flight' ? 'flights' : 'transport',
+      description: isRes ? x.name : x.origin + ' → ' + x.destination,
+      reservationId: isRes ? x.id : undefined, transportId: isRes ? undefined : x.id
+    });
+  };
+
   /* ══ RESERVAS ════════════════════════════════════════════════ */
 
   V.reservations = function () {
@@ -67,16 +99,17 @@
     const dir = loc.coords || loc.name || loc.address ? U.directionsUrl(loc) : null;
     const linked = Object.values(s.activities).filter((a) => a.reservationId === r.id);
     let html = UI.header({ back: true, eyebrow: (t[1] + ' ' + t[0] + (city ? ' · ' + city.name : '')).toUpperCase(), title: r.name,
-      subtitle: U.fmtDay(r.date) + (r.time ? ' · ' + r.time : '') + (r.endDate ? ' → ' + U.fmtDay(r.endDate) : ''),
+      subtitle: U.fmtDay(r.date) + (r.time ? ' · ' + r.time : '') + (r.endDate ? ' → ' + U.fmtDay(r.endDate) + (r.checkoutTime ? ' · salida ' + r.checkoutTime : '') : ''),
       actions: UI.iconBtn('share', 'Compartir', { act: 'shareReservation', id: r.id }) + UI.iconBtn('edit', 'Editar', { act: 'editReservation', id: r.id }) });
     if (r.confirmationCode) html += UI.card('<small class="muted">Nº DE RESERVA · toca para copiar</small><div class="display code">' + esc(r.confirmationCode) + '</div>', { tone: 'info', data: { act: 'copy', text: r.confirmationCode } });
     html += '<div class="row row--wrap">' + (dir ? '<a class="btn btn--primary btn--sm" href="' + esc(dir) + '" target="_blank" rel="noopener">' + U.icon('nav', 16) + '<span>Cómo llegar</span></a>' : '') +
       (r.phone ? '<a class="btn btn--secondary btn--sm" href="tel:' + esc(r.phone.replace(/[^\d+]/g, '')) + '">' + U.icon('phone', 16) + '<span>Llamar</span></a>' : '') +
       (r.url ? UI.btn('Web', { icon: 'link', size: 'sm', variant: 'secondary', data: { act: 'openUrl', url: r.url } }) : '') +
+      (r.type === 'hotel' && r.endDate ? UI.btn('Antes de salir', { icon: 'checklist', size: 'sm', variant: 'secondary', data: { act: 'checkoutList', id: r.id } }) : '') +
       (loc.name || loc.address || r.addressJa ? UI.btn('Para el taxista', { icon: 'car', size: 'sm', variant: 'secondary', data: { act: 'taxi', id: r.id } }) : '') +
       UI.btn('Añadir a Google Calendar', { icon: 'calendar', size: 'sm', variant: 'secondary', data: { act: 'gcal', col: 'reservations', id: r.id } }) + '</div>';
     html += UI.card((loc.name || loc.address ? UI.listRow({ icon: 'pin', title: loc.name || loc.address, sub: loc.name ? loc.address : '' }) : '') + (r.phone ? UI.listRow({ icon: 'phone', title: r.phone }) : '') +
-      (r.cost ? UI.listRow({ icon: 'wallet', title: U.money(r.cost, r.currency || 'JPY'), sub: 'Coste' }) : '') + (!loc.name && !loc.address && !r.phone && !r.cost ? '<p class="muted">Sin más datos.</p>' : ''));
+      (r.cost ? costRow('reservations', r) : '') + (!loc.name && !loc.address && !r.phone && !r.cost ? '<p class="muted">Sin más datos.</p>' : ''));
     if (r.notes) html += UI.section('Notas', UI.card('<p class="pre">' + esc(r.notes) + '</p>', { tone: 'warn' }));
     html += UI.section('En el itinerario', linked.length
       ? UI.card(linked.map((a) => UI.listRow({ icon: 'calendar', title: a.title, sub: [s.days[a.dayId] ? 'Día ' + S.dayNumber(a.dayId) + ' · ' + U.fmtShort(s.days[a.dayId].date) : '', a.startTime].filter(Boolean).join(' · '), data: { act: 'go', to: 'activity/' + a.id } })).join(''))
@@ -95,12 +128,57 @@
       title: 'Para el taxista',
       body: '<div class="taxi" lang="ja"><p class="taxi__ask">この住所までお願いします</p><div class="taxi__name">' + esc(nameBig) + '</div>' + (addrBig ? '<div class="taxi__addr">' + esc(addrBig) + '</div>' : '') + '</div>' +
         '<p class="muted center small">Kono jūsho made onegai shimasu · «A esta dirección, por favor»</p>' +
+        (SV.canSpeak() ? '<p class="center">' + UI.btn('Escuchar', { icon: 'speaker', size: 'sm', variant: 'ghost', data: { act: 'speak', text: 'この住所までお願いします。' + (r.nameJa || '') } }) + '</p>' : '') +
         (r.nameJa || r.addressJa ? '<p class="faint center small">' + esc([r.name, loc.address].filter(Boolean).join(' · ')) + '</p>' : '') +
         (r.addressJa ? '' : UI.banner('warn', 'alert', 'Falta la dirección en japonés', 'Edita la reserva y pégala: muchos taxistas no leen bien el alfabeto latino.')) +
         (r.phone ? '<p class="center"><a class="btn btn--ghost btn--sm" href="tel:' + esc(r.phone.replace(/[^\d+]/g, '')) + '">' + U.icon('phone', 16) + '<span>' + esc(r.phone) + '</span></a></p>' : ''),
       footer: '<div class="row">' + UI.btn('Copiar dirección', { icon: 'copy', variant: 'secondary', block: true, data: { cp: '1' } }) +
         (dir ? '<a class="btn btn--primary btn--block" href="' + esc(dir) + '" target="_blank" rel="noopener">' + U.icon('nav', 18) + '<span>Cómo llegar</span></a>' : '') + '</div>',
       onMount: (root) => root.querySelector('[data-cp]').addEventListener('click', async () => { await SV.copy([nameBig, addrBig].filter(Boolean).join('\n')); UI.toast('Copiado'); })
+    });
+  };
+
+  /* ── Antes de salir del hotel: repaso rápido, marcado por estancia ── */
+
+  const CHECKOUT_ITEMS = [
+    ['chargers', 'Cargadores, cables y batería externa'],
+    ['adapter', 'Adaptador de enchufe (se suele quedar en la pared)'],
+    ['passport', 'Pasaporte y documentos'],
+    ['safe', 'Caja fuerte vacía'],
+    ['ic', 'Suica / tarjeta IC y billetes de hoy'],
+    ['bathroom', 'Baño: cepillo, cremas, maquinilla'],
+    ['closet', 'Armario, cajones y debajo de la cama'],
+    ['fridge', 'Nevera'],
+    ['laundry', 'Ropa tendida o en la lavandería'],
+    ['luggage', 'Maleta: ¿consigna en el hotel o envío (takkyūbin)?'],
+    ['key', 'Devolver la llave o la tarjeta']
+  ];
+  C.checkoutTotal = CHECKOUT_ITEMS.length;
+
+  A.checkoutList = function (el) {
+    const id = el.dataset.id, r = S.get().reservations[id];
+    if (!r) return;
+    let done = (r.checkoutDone || []).slice();
+    const count = () => done.length + ' de ' + CHECKOUT_ITEMS.length;
+    UI.sheet({
+      title: 'Antes de salir del hotel',
+      body: '<p class="muted small">' + esc(r.name) + (r.checkoutTime ? ' · salida antes de las ' + r.checkoutTime : '') + ' · <span data-count>' + count() + '</span></p>' +
+        '<div class="card card--list">' + CHECKOUT_ITEMS.map((it) => '<div class="check' + (done.indexOf(it[0]) > -1 ? ' is-done' : '') + '"><button type="button" class="check__main" data-k="' + it[0] + '" aria-pressed="' + (done.indexOf(it[0]) > -1) + '">' +
+          '<span class="check__box">' + U.icon('check', 14) + '</span><span>' + esc(it[1]) + '</span></button></div>').join('') + '</div>',
+      footer: UI.btn('Listo', { block: true, data: { ok: '1' } }),
+      onClose: () => JT.app.render(), // que el aviso de Inicio muestre lo ya revisado
+      onMount: function (root, close) {
+        root.querySelector('[data-ok]').addEventListener('click', close);
+        root.querySelectorAll('[data-k]').forEach((b) => b.addEventListener('click', function () {
+          const k = b.dataset.k, on = done.indexOf(k) === -1;
+          done = on ? done.concat(k) : done.filter((x) => x !== k);
+          b.parentElement.classList.toggle('is-done', on);
+          b.setAttribute('aria-pressed', String(on));
+          root.querySelector('[data-count]').textContent = count();
+          S.update('reservations', id, { checkoutDone: done.length ? done : undefined });
+          if (done.length === CHECKOUT_ITEMS.length) UI.toast('Todo revisado. ¡Buen viaje! 🧳');
+        }));
+      }
     });
   };
 
@@ -119,7 +197,8 @@
         UI.field('Nombre', UI.input('name', r.name, { placeholder: 'p.ej. Cena en Gion', autofocus: !ex && !def.name })) +
         UI.field('Nº de reserva', UI.input('confirmationCode', r.confirmationCode || '', { placeholder: 'ABC123' }), { optional: true }) +
         '<div class="row row--top">' + UI.field('Fecha (entrada)', UI.input('date', r.date, { type: 'date' })) + UI.field('Hora', UI.input('time', r.time || '', { type: 'time' }), { optional: true }) + '</div>' +
-        UI.field('Salida (hoteles)', UI.input('endDate', r.endDate || '', { type: 'date' }), { optional: true }) +
+        '<div class="row row--top">' + UI.field('Salida (hoteles)', UI.input('endDate', r.endDate || '', { type: 'date' }), { optional: true }) +
+          UI.field('Check-out', UI.input('checkoutTime', r.checkoutTime || '', { type: 'time' }), { optional: true }) + '</div>' +
         itineraryToggle(r) +
         UI.field('Lugar', UI.input('locName', loc.name || ''), { optional: true }) + UI.field('Dirección', UI.input('address', loc.address || ''), { optional: true }) + C.coordsField(loc.coords) +
         // Lo que se enseña al taxista: cópialo de la confirmación o de Google Maps en japonés (no se traduce solo).
@@ -140,7 +219,7 @@
         if (cost === null) return 'Coste no válido';
         if (f.coords && !C.parseCoords(f.coords)) return 'Coordenadas no válidas';
         const location = f.locName || f.address || f.coords ? { name: f.locName || undefined, address: f.address || undefined, coords: C.parseCoords(f.coords) } : undefined;
-        const data = { type: f.type, name: f.name, confirmationCode: f.confirmationCode || undefined, date: f.date, time: f.time || undefined, endDate: f.endDate || undefined, location: location, cityId: f.cityId || undefined, cost: cost || undefined, currency: cost ? f.currency : undefined, phone: f.phone || undefined, url: f.url || undefined, notes: f.notes || undefined, inItinerary: f.inItinerary ? undefined : false,
+        const data = { type: f.type, name: f.name, confirmationCode: f.confirmationCode || undefined, date: f.date, time: f.time || undefined, endDate: f.endDate || undefined, checkoutTime: f.endDate && f.checkoutTime ? f.checkoutTime : undefined, location: location, cityId: f.cityId || undefined, cost: cost || undefined, currency: cost ? f.currency : undefined, phone: f.phone || undefined, url: f.url || undefined, notes: f.notes || undefined, inItinerary: f.inItinerary ? undefined : false,
           nameJa: f.nameJa || undefined, addressJa: f.addressJa || undefined };
         const rid = ex ? ex.id : S.create('reservations', data);
         if (ex) S.update('reservations', ex.id, data);
@@ -398,11 +477,13 @@
     return { html: UI.header({ back: true, title: 'Frases', subtitle: 'Funciona sin conexión · toca una frase para verla en grande', actions: UI.iconBtn('plus', 'Nueva frase', { act: 'newPhrase' }) }) +
       JT.searchBox('phrases', 'Buscar en español o romaji…') + JT.fchips('phrases', 'cat', [{ value: 'fav', label: '♥ Favoritas' }].concat(cats.map((c) => ({ value: c, label: c }))), 'Todas') +
       Object.keys(g).map((c) => UI.section(c, g[c].map((p) => '<div class="card card--tap phrase" tabindex="0" data-act="bigPhrase" data-id="' + p.id + '"><div class="grow"><small class="muted">' + esc(p.es) + '</small><div class="phrase__ja">' + esc(p.ja) + '</div><span class="accent">' + esc(p.romaji) + '</span></div>' +
-        '<button type="button" class="iconbtn fav' + (p.favorite ? ' is-on' : '') + '" aria-pressed="' + !!p.favorite + '" aria-label="Favorita" data-act="fav" data-col="phrases" data-id="' + p.id + '">' + U.icon('heart', 20) + '</button></div>').join(''))).join('') };
+        '<div class="phrase__acts">' + C.speakBtn(p.ja) + '<button type="button" class="iconbtn fav' + (p.favorite ? ' is-on' : '') + '" aria-pressed="' + !!p.favorite + '" aria-label="Favorita" data-act="fav" data-col="phrases" data-id="' + p.id + '">' + U.icon('heart', 20) + '</button></div></div>').join(''))).join('') };
   };
   A.bigPhrase = function (el) {
     const p = S.get().phrases[el.dataset.id];
-    const close = UI.sheet({ title: p.es, body: '<div class="bigphrase" lang="ja">' + esc(p.ja) + '</div><p class="title accent center">' + esc(p.romaji) + '</p>',
+    const voice = SV.canSpeak();
+    const close = UI.sheet({ title: p.es, body: '<div class="bigphrase" lang="ja">' + esc(p.ja) + '</div><p class="title accent center">' + esc(p.romaji) + '</p>' +
+        (voice ? '<div class="row row--center">' + UI.btn('Escuchar', { icon: 'speaker', variant: 'secondary', data: { act: 'speak', text: p.ja } }) + UI.btn('Despacio', { icon: 'speaker', variant: 'ghost', data: { act: 'speak', text: p.ja, slow: '1' } }) + '</div>' : ''),
       footer: '<div class="row">' + UI.btn('Copiar', { icon: 'copy', variant: 'secondary', block: true, data: { cp: '1' } }) + (p.isCustom ? UI.btn('Eliminar', { icon: 'trash', variant: 'danger', data: { rm: '1' } }) : '') + '</div>',
       onMount: function (root) {
         root.querySelector('[data-cp]').addEventListener('click', async () => { await SV.copy(p.ja); UI.toast('Copiado'); });
@@ -410,6 +491,17 @@
         if (rm) rm.addEventListener('click', async () => { if (await UI.confirm('¿Eliminar frase?', p.es)) { S.remove('phrases', p.id); close(); } });
       } });
   };
+  /** 🔊 Lee en japonés con la voz del móvil. */
+  let voiceHintShown = false;
+  A.speak = function (el) {
+    const r = SV.speak(el.dataset.text, el.dataset.slow === '1');
+    if (r === 'unsupported') UI.toast('Este navegador no puede leer en voz alta');
+    else if (r === 'novoice' && !voiceHintShown) {
+      voiceHintShown = true;
+      UI.alert('Falta la voz japonesa', 'Tu móvil no tiene instalada la voz en japonés.\n\nEn Android, busca «texto a voz» en los Ajustes del móvil → Motor de Google → Instalar datos de voz → Japonés (日本語).\n\nDescárgala con wifi antes del viaje y funcionará también sin conexión.');
+    }
+  };
+
   A.newPhrase = () => formSheet({
     id: 'fPh', title: 'Nueva frase',
     body: UI.field('En español', UI.input('es', '', { autofocus: true })) + UI.field('En japonés', UI.input('ja', '')) + UI.field('Pronunciación (romaji)', UI.input('romaji', ''), { optional: true }),
@@ -440,7 +532,7 @@
       html += UI.empty('🩺', 'Rellena tu ficha', 'Alergias, medicación, grupo sanguíneo, seguro y a quién avisar. Se verá aquí en japonés y en grande.', UI.btn('Rellenar ficha', { icon: 'edit', data: { act: 'editEmergency' } }));
     } else {
       html += UI.card((me ? '<div class="sos__who">' + esc(me.name) + '</div>' : '') +
-        (allergens.length || e.allergyOther ? '<div class="sos__alert" lang="ja"><p>次のものにアレルギーがあります：</p><strong>' + esc(allergens.map((a) => a[2]).join('、') || e.allergyOther) + '</strong>' +
+        (allergens.length || e.allergyOther ? '<div class="sos__alert" lang="ja"><div class="row row--between"><p>次のものにアレルギーがあります：</p>' + (allergens.length ? C.speakBtn('次のものにアレルギーがあります。' + allergens.map((a) => a[2]).join('、'), 'Escuchar las alergias') : '') + '</div><strong>' + esc(allergens.map((a) => a[2]).join('、') || e.allergyOther) + '</strong>' +
           '<small>Tengo alergia a: ' + esc(allergens.map((a) => a[1]).concat(e.allergyOther && allergens.length ? [e.allergyOther] : []).join(', ')) + '</small></div>' : '') +
         row('持病', 'Jibyō', 'Enfermedades', e.conditions) + row('服用中の薬', 'Fukuyō-chū no kusuri', 'Medicación', e.meds) +
         row('血液型', 'Ketsueki-gata', 'Grupo sanguíneo', e.blood ? e.blood + (e.rh ? ' Rh' + e.rh : '') + '型' : '') +
@@ -449,7 +541,7 @@
         row('大使館', 'Taishikan', 'Embajada / consulado', e.embassyPhone, e.embassyPhone), { cls: 'stack sos' });
     }
     html += UI.section('Frases para pedir ayuda', UI.card([['助けて！', 'Tasukete!', '¡Ayuda!'], ['救急車を呼んでください', 'Kyūkyūsha o yonde kudasai', 'Llame a una ambulancia'], ['病院に連れて行ってください', 'Byōin ni tsurete itte kudasai', 'Lléveme a un hospital']]
-      .map((p) => '<div class="sos__phrase"><span lang="ja">' + p[0] + '</span><small>' + esc(p[1]) + ' · ' + esc(p[2]) + '</small></div>').join(''), { cls: 'stack' }));
+      .map((p) => '<div class="row"><div class="sos__phrase grow"><span lang="ja">' + p[0] + '</span><small>' + esc(p[1]) + ' · ' + esc(p[2]) + '</small></div>' + C.speakBtn(p[0]) + '</div>').join(''), { cls: 'stack' }));
     html += '<p class="faint small">Esta ficha se guarda sin cifrar para poder verla sin PIN en una emergencia. No pongas aquí el pasaporte ni tarjetas: eso va en Documentos, cifrado.</p>';
     return { html: html };
   };
@@ -640,6 +732,104 @@
 
   /* ══ AJUSTES ═════════════════════════════════════════════════ */
 
+  /* ══ ¿LISTO PARA EL VIAJE? ═══════════════════════════════════
+     Repaso antes de salir. Lo que se sabe al momento se calcula aquí;
+     lo que pregunta al navegador (copia offline, protección, voces)
+     se rellena después en mount(). Nada se inventa: si el navegador
+     no lo puede saber, lo dice. */
+
+  function syncChecks() {
+    const s = S.get(), e = s.emergency || {}, out = [];
+    const last = SV.lastExport(), days = last ? Math.floor((Date.now() - last) / 86400000) : null;
+    out.push({ id: 'backup', title: 'Copia de seguridad', ok: days !== null && days < 7,
+      sub: days === null ? 'Aún no has exportado ninguna. Guárdala fuera del móvil (Drive, correo…).' : days < 7 ? 'Hecha hace ' + (days === 0 ? 'menos de un día' : days + (days === 1 ? ' día' : ' días')) + '.' : 'La última es de hace ' + days + ' días.',
+      action: UI.btn('Exportar', { size: 'sm', variant: 'secondary', data: { act: 'exportJson' } }) });
+    const filled = (e.allergies && e.allergies.length) || e.allergyOther || e.conditions || e.meds || e.blood || e.insurer || e.contactName;
+    out.push({ id: 'sos', title: 'Ficha de emergencia', ok: !!filled, sub: filled ? (e.insurer ? 'Con seguro' : 'Sin seguro apuntado') + (e.contactName ? ' · con contacto' : ' · sin contacto') + '.' : 'Alergias, seguro y a quién avisar, en japonés.',
+      action: UI.btn(filled ? 'Ver' : 'Rellenar', { size: 'sm', variant: 'secondary', data: { act: 'go', to: 'emergency' } }) });
+    const hotels = Object.values(s.reservations).filter((r) => r.type === 'hotel' && !r.isSample).sort((a, b) => a.date.localeCompare(b.date));
+    const noJa = hotels.filter((r) => !r.addressJa), noOut = hotels.filter((r) => r.endDate && !r.checkoutTime);
+    out.push({ id: 'hotels', title: 'Hoteles para el taxista', ok: hotels.length > 0 && !noJa.length,
+      sub: !hotels.length ? 'Aún no hay ningún hotel en Reservas.' : noJa.length ? 'Sin dirección en japonés: ' + noJa.map((r) => r.name).join(', ') + '.' : 'Los ' + hotels.length + ' tienen la dirección en japonés.',
+      action: noJa.length ? UI.btn('Completar', { size: 'sm', variant: 'secondary', data: { act: 'editReservation', id: noJa[0].id } }) : !hotels.length ? UI.btn('Añadir', { size: 'sm', variant: 'secondary', data: { act: 'newReservation', type: 'hotel' } }) : '' });
+    if (hotels.length) out.push({ id: 'checkout', title: 'Hora de check-out', ok: !noOut.length,
+      sub: noOut.length ? 'Falta en: ' + noOut.map((r) => r.name).join(', ') + '. Sin ella, el aviso no dice a qué hora salir.' : 'Todos los hoteles la tienen.',
+      action: noOut.length ? UI.btn('Completar', { size: 'sm', variant: 'secondary', data: { act: 'editReservation', id: noOut[0].id } }) : '' });
+    const rates = SV.rates();
+    out.push({ id: 'rates', title: 'Tipo de cambio guardado', ok: !!rates, sub: rates ? (rates.source === 'manual' ? 'Tipo manual.' : 'BCE' + (rates.date ? ' del ' + rates.date : '') + ': funciona sin conexión.') : 'Conéctate una vez para descargarlo.',
+      action: !rates && SV.online() ? UI.btn('Descargar', { size: 'sm', variant: 'secondary', data: { act: 'refreshRates' } }) : '' });
+    const lists = Object.values(s.checklists).filter((c) => c.section === 'before').map((c) => c.id);
+    const pend = Object.values(s.checklistItems).filter((i) => lists.indexOf(i.checklistId) > -1 && !i.done).length;
+    out.push({ id: 'todo', title: 'Checklist «Antes del viaje»', ok: !pend, sub: pend ? pend + (pend === 1 ? ' tarea pendiente.' : ' tareas pendientes.') : 'Todo hecho.',
+      action: pend ? UI.btn('Ver', { size: 'sm', variant: 'secondary', data: { act: 'go', to: 'checklist' } }) : '' });
+    const standalone = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    out.push({ id: 'app', title: 'Abierta como app', ok: standalone,
+      sub: standalone ? 'La estás usando desde el icono instalado.' : 'La estás usando en el navegador. Instalada es más fácil de abrir sin conexión y el navegador protege mejor sus datos.',
+      action: !standalone && JT.uiState.installPrompt ? UI.btn('Instalar', { size: 'sm', variant: 'secondary', data: { act: 'installApp' } }) : '' });
+    return out;
+  }
+
+  JT.ready = { syncSummary: () => { const c = syncChecks(); return { pending: c.filter((x) => !x.ok).length, total: c.length }; } };
+
+  function readyRow(c) {
+    const icon = c.ok === null ? '<span class="ready__dot is-wait" aria-label="Comprobando">…</span>' : c.ok ? '<span class="ready__dot is-ok" aria-label="Listo">' + U.icon('check', 14) + '</span>' : '<span class="ready__dot is-warn" aria-label="Pendiente">!</span>';
+    return '<div class="ready__row" id="ready-' + c.id + '">' + icon + '<div class="grow"><strong class="block">' + esc(c.title) + '</strong><small class="muted">' + esc(c.sub) + '</small></div>' + (c.ok ? '' : c.action || '') + '</div>';
+  }
+
+  V.ready = function () {
+    const t = S.today(), checks = syncChecks();
+    const async = [
+      { id: 'offline', title: 'Copia sin conexión', ok: null, sub: 'Comprobando…' },
+      { id: 'persist', title: 'Datos protegidos', ok: null, sub: 'Comprobando…' },
+      { id: 'voice', title: 'Voz japonesa', ok: null, sub: 'Comprobando…' }
+    ];
+    const all = async.concat(checks);
+    return {
+      html: UI.header({ back: true, title: '¿Listo para el viaje?', subtitle: t.phase === 'before' ? (t.daysUntil === 1 ? 'Os vais mañana' : 'Faltan ' + t.daysUntil + ' días') : '' }) +
+        UI.card('<div class="row row--between"><strong id="readyCount">' + checks.filter((c) => c.ok).length + ' de ' + all.length + ' listo</strong><small class="faint">Se comprueba en este móvil</small></div>' +
+          '<div class="progress"><div class="progress__fill progress__fill--info" id="readyBar" style="width:' + (checks.filter((c) => c.ok).length / all.length) * 100 + '%"></div></div>', { cls: 'stack-sm' }) +
+        UI.card(all.map(readyRow).join(''), { cls: 'ready' }) +
+        '<p class="faint small">Hazlo en el móvil que vas a llevar: la copia sin conexión, la voz y la protección de datos son de cada navegador.</p>',
+      mount: function (root) {
+        const results = {};
+        checks.forEach((c) => (results[c.id] = c.ok));
+        const put = function (c) {
+          results[c.id] = c.ok;
+          const el = root.querySelector('#ready-' + c.id);
+          if (el) el.outerHTML = readyRow(c);
+          const ok = Object.keys(results).filter((k) => results[k]).length;
+          const cnt = root.querySelector('#readyCount'), bar = root.querySelector('#readyBar');
+          if (cnt) cnt.textContent = ok + ' de ' + all.length + ' listo';
+          if (bar) bar.style.width = (ok / all.length) * 100 + '%';
+        };
+        SV.offlineCopy().then(function (c) {
+          if (location.protocol === 'file:' || !window.caches) put({ id: 'offline', title: 'Copia sin conexión', ok: false, sub: 'Abierta como archivo: sólo funciona sin conexión desde la web publicada.' });
+          else if (!c) put({ id: 'offline', title: 'Copia sin conexión', ok: false, sub: 'Aún no hay copia. Ábrela con conexión y recarga una vez.' });
+          else put({ id: 'offline', title: 'Copia sin conexión', ok: !c.stale, sub: c.stale ? 'Tienes la v' + c.version + ' guardada; recarga con conexión para guardar la v' + U.VERSION + '.' : 'Guardada la v' + c.version + ' (' + Math.round(c.bytes / 1024) + ' KB).' });
+        }).catch(() => put({ id: 'offline', title: 'Copia sin conexión', ok: false, sub: 'No se ha podido comprobar.' }));
+        SV.persisted().then(function (p) {
+          put({ id: 'persist', title: 'Datos protegidos', ok: p === true,
+            sub: p === true ? 'El navegador no borrará tus datos para hacer sitio.' : p === false ? 'El navegador podría borrarlos si falta espacio: instálala y ábrela desde el icono, y ten una copia exportada.' : 'Este navegador no permite saberlo: ten una copia exportada.',
+            action: p === false && JT.uiState.installPrompt ? UI.btn('Instalar', { size: 'sm', variant: 'secondary', data: { act: 'installApp' } }) : '' });
+        });
+        const voice = function (final) {
+          const vs = SV.canSpeak() ? window.speechSynthesis.getVoices() : [];
+          const ja = vs.filter((v) => /^ja/i.test(v.lang));
+          if (!vs.length && !final) return false;
+          put({ id: 'voice', title: 'Voz japonesa', ok: ja.length > 0,
+            sub: !SV.canSpeak() ? 'Este navegador no puede leer en voz alta.' : ja.length ? 'Instalada (' + ja[0].name + '). Para usarla sin conexión, que esté descargada en el móvil.' : 'No está instalada. Busca «texto a voz» en los Ajustes del móvil → Motor de Google → Instalar datos de voz → Japonés.',
+            action: SV.canSpeak() ? UI.btn('Probar', { icon: 'speaker', size: 'sm', variant: 'secondary', data: { act: 'speak', text: 'こんにちは' } }) : '' });
+          return true;
+        };
+        // Chrome carga la lista de voces tarde: se espera un poco antes de decidir.
+        if (!voice(false) && SV.canSpeak()) {
+          window.speechSynthesis.addEventListener('voiceschanged', function once() { window.speechSynthesis.removeEventListener('voiceschanged', once); voice(true); });
+          setTimeout(() => voice(true), 1500);
+        }
+      }
+    };
+  };
+
   V.settings = function () {
     const s = S.get(), t = s.trip, st = s.settings, rates = SV.rates();
     const seg = (act, value, opts) => '<div class="seg">' + opts.map((o) => '<button type="button" class="seg__item' + (o[0] === value ? ' is-on' : '') + '" aria-pressed="' + (o[0] === value) + '" data-act="' + act + '" data-value="' + o[0] + '">' + o[1] + '</button>').join('') + '</div>';
@@ -696,7 +886,7 @@
       UI.btn('Borrar todos los datos', { icon: 'trash', variant: 'danger', block: true, data: { act: 'wipe' } }), { cls: 'stack' }));
 
     // Versión, tamaño, espacio y protección (receta de Plantillas/Version-y-espacio.md); se rellena en mount().
-    html += UI.section('Esta instalación', UI.card((JT.uiState.installPrompt ? UI.btn('Instalar la app en este dispositivo', { icon: 'download', variant: 'secondary', block: true, data: { act: 'installApp' } }) : '') +
+    html += UI.section('Esta instalación', UI.card(UI.btn('¿Listo para el viaje? Repasar', { icon: 'check', variant: 'secondary', block: true, data: { act: 'go', to: 'ready' } }) + (JT.uiState.installPrompt ? UI.btn('Instalar la app en este dispositivo', { icon: 'download', variant: 'secondary', block: true, data: { act: 'installApp' } }) : '') +
       '<div class="build"><span class="build__left"><span>Versión</span><small id="buildQuota"></small><small id="buildPersist" hidden></small></span><strong class="mono build__right" id="buildCache">—</strong></div>' +
       '<p class="small" id="buildHint" hidden></p>' +
       (S.isWritable() ? '' : '<p class="small warn">El navegador está BLOQUEANDO el almacenamiento: no se guardan cambios.</p>') +

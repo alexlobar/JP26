@@ -20,22 +20,41 @@
     else if (!item.isToday) until = U.fmtDay(item.day.date);
     const est = from && loc.coords ? U.estimateTravel(from, loc.coords, a.transportMode) : null;
     const dirUrl = U.directionsUrl(loc, from, est ? est.mode : a.transportMode);
+    // Compacta: emoji + título + hora en un bloque y todas las acciones en una sola fila.
     return UI.card(
-      '<div class="row row--between"><span class="eyebrow">' + (item.inProgress ? 'AHORA' : esc(label)) + '</span>' + (until ? UI.pill(until, item.inProgress ? 'accent' : 'neutral') : '') + '</div>' +
-      '<div class="next"><span class="next__emoji" aria-hidden="true">' + D.ACTIVITY[a.category][1] + '</span><div><h2 class="title">' + esc(a.title) + '</h2>' +
-      '<p class="muted">' + esc((a.startTime || 'Sin hora') + (a.endTime ? ' – ' + a.endTime : '') + (loc.name && loc.name !== a.title ? ' · ' + loc.name : '')) + '</p></div></div>' +
-      (est ? '<p class="muted small">' + D.MODE[est.mode][1] + ' ~' + U.fmtDur(est.minutes) + ' · ' + U.fmtKm(est.routeKm, S.get().settings.units) + (fromLabel ? ' desde ' + esc(fromLabel) : '') + ' (estimado)</p>' : '') +
-      '<div class="row row--wrap">' + (dirUrl ? '<a class="btn btn--primary btn--sm" href="' + esc(dirUrl) + '" target="_blank" rel="noopener">' + U.icon('nav', 16) + '<span>Cómo llegar</span></a>' : '') +
-        (loc.coords ? UI.btn('Comer cerca', { icon: 'food', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'nearby?' + C.q({ lat: loc.coords.lat, lng: loc.coords.lng, label: loc.name || a.title }) } }) : '') +
+      '<div class="next"><span class="next__emoji" aria-hidden="true">' + D.ACTIVITY[a.category][1] + '</span><div class="grow">' +
+        '<div class="next__top"><span class="eyebrow">' + (item.inProgress ? 'AHORA' : esc(label)) + '</span>' + (until ? UI.pill(until, item.inProgress ? 'accent' : 'neutral') : '') + '</div>' +
+        '<strong class="next__title">' + esc(a.title) + '</strong>' +
+        '<small class="muted block">' + esc((a.startTime || 'Sin hora') + (a.endTime ? ' – ' + a.endTime : '') + (loc.name && loc.name !== a.title ? ' · ' + loc.name : '')) + '</small>' +
+        (est ? '<small class="faint block">' + D.MODE[est.mode][1] + ' ~' + U.fmtDur(est.minutes) + ' · ' + U.fmtKm(est.routeKm, S.get().settings.units) + (fromLabel ? ' desde ' + esc(fromLabel) : '') + ' (estimado)</small>' : '') +
+      '</div></div>' +
+      '<div class="next__acts">' + (dirUrl ? '<a class="btn btn--primary btn--sm" href="' + esc(dirUrl) + '" target="_blank" rel="noopener">' + U.icon('nav', 16) + '<span>Cómo llegar</span></a>' : '<span class="grow"></span>') +
+        (loc.coords ? UI.iconBtn('food', 'Comer cerca', { act: 'go', to: 'nearby?' + C.q({ lat: loc.coords.lat, lng: loc.coords.lng, label: loc.name || a.title }) }, { size: 20 }) : '') +
         // Marcarla como hecha (o saltarla) hace que la siguiente pase a primer plano.
-        UI.btn('Hecha', { icon: 'check', size: 'sm', variant: 'ghost', data: { act: 'doneNext', id: a.id } }) + '</div>',
-      { tone: item.inProgress ? 'accent' : '', data: { act: 'go', to: 'activity/' + a.id }, cls: 'stack' }
+        UI.iconBtn('check', 'Marcar como hecha', { act: 'doneNext', id: a.id }, { size: 20 }) + '</div>',
+      { tone: item.inProgress ? 'accent' : '', data: { act: 'go', to: 'activity/' + a.id }, cls: 'stack-sm next-card' }
     );
   }
 
+  /** Aviso de check-out: la mañana que dejas un hotel (hasta la hora de salida) y la noche anterior. */
+  const checkedText = (r, fallback) => (r.checkoutDone && r.checkoutDone.length ? 'Lista «Antes de salir»: ' + r.checkoutDone.length + ' de ' + C.checkoutTotal + ' revisado' : fallback);
+
+  function checkoutAlerts(n) {
+    const out = [], tomorrow = U.addDays(n.date, 1);
+    Object.values(S.get().reservations).filter((r) => r.type === 'hotel' && r.endDate).forEach(function (r) {
+      const at = r.checkoutTime ? ' a las ' + r.checkoutTime : '';
+      if (r.endDate === n.date && (!r.checkoutTime || n.minutes < U.toMin(r.checkoutTime)))
+        out.push(UI.banner('warn', 'bed', 'Hoy dejas ' + r.name + (r.checkoutTime ? ' · salida antes de las ' + r.checkoutTime : ''), checkedText(r, 'Toca para repasar lo que no te puedes dejar.'), { data: { act: 'checkoutList', id: r.id } }));
+      else if (r.endDate === tomorrow && n.minutes >= 18 * 60)
+        out.push(UI.banner('info', 'bed', 'Mañana dejas ' + r.name + at, checkedText(r, 'Buen momento para ir haciendo la maleta. Toca para ver la lista.'), { data: { act: 'checkoutList', id: r.id } }));
+    });
+    return out.join('');
+  }
+
   function alerts(t) {
-    const s = S.get(), out = [], n = t.now;
-    if (t.phase === 'before') {
+    const s = S.get(), out = [checkoutAlerts(t.now)], n = t.now;
+    // A menos de 30 días ya lo cuenta «¿Listo para el viaje?», que incluye la checklist.
+    if (t.phase === 'before' && t.daysUntil > 30) {
       const lists = Object.values(s.checklists).filter((c) => c.section === 'before').map((c) => c.id);
       const pending = Object.values(s.checklistItems).filter((i) => lists.indexOf(i.checklistId) > -1 && !i.done).length;
       if (pending) out.push(UI.banner('warn', 'check', pending + ' tareas pendientes antes del viaje', '', { data: { act: 'go', to: 'checklist' } }));
@@ -85,9 +104,17 @@
     // Cabecera compacta: cuenta atrás (o el día de hoy) en una línea, con «Probar el Modo viaje» al lado.
     let html = UI.card('<div class="hero"><div class="grow"><div class="eyebrow">' + (t.phase === 'during' ? esc(U.fmtDay(n.date).toUpperCase()) : t.phase === 'before' ? 'CUENTA ATRÁS' : 'FIN') + '</div>' +
       '<h2 class="title">' + esc(title) + '</h2><p class="muted small">' + esc(sub) + '</p></div>' +
-      (t.phase === 'before' ? UI.btn('Probar Modo viaje', { icon: 'nav', size: 'sm', variant: 'ghost', data: { act: 'simulate' } }) : '') + '</div>', { tone: t.phase === 'during' ? 'accent' : '' });
+      (t.phase === 'before' ? UI.btn('Probar Modo viaje', { icon: 'nav', size: 'sm', variant: 'ghost', data: { act: 'simulate' } }) : '') + '</div>' +
+      C.cityStrip(n.date), { tone: t.phase === 'during' ? 'accent' : '', cls: 'stack-sm' });
+    // Antes de salir: repaso de lo importante (copia sin conexión, voz, hoteles, emergencia…).
+    if (t.phase === 'before' && t.daysUntil <= 30) {
+      const r = JT.ready ? JT.ready.syncSummary() : null;
+      html += UI.banner(r && r.pending ? 'warn' : 'info', 'check', '¿Listo para el viaje?', r && r.pending ? r.pending + (r.pending === 1 ? ' cosa por preparar' : ' cosas por preparar') + ' · toca para verlas' : 'Comprueba la copia sin conexión, la voz japonesa y lo demás antes de salir.', { data: { act: 'go', to: 'ready' } });
+    }
     html += alerts(t);
-    if (up[0]) html += nextUpCard(up[0], up[0].isToday ? 'SIGUIENTE' : 'PRÓXIMA ACTIVIDAD');
+    if (t.phase === 'during' && t.day && n.minutes >= 18 * 60) html += diaryCard(t.day);
+    if (t.phase === 'after' && S.sortedDays().some((d) => d.diary || d.mood)) html += UI.banner('info', 'book', 'Tu diario del viaje', 'Todos los días que escribiste, para releerlos o compartirlos.', { data: { act: 'go', to: 'diary' } });
+    if (up[0]) html += nextUpCard(up[0], up[0].isToday ? 'SIGUIENTE' : 'PRÓXIMO PLAN');
     html += C.quick([
       ['calendar', '+ Actividad', { act: 'newActivity', day: t.phase === 'during' && t.day ? t.day.id : '' }],
       ['wallet', '+ Gasto', { act: 'newExpense' }],
@@ -103,7 +130,8 @@
     }
     html += UI.section('Gastos', UI.card('<div class="stats">' + UI.stat('Gastado', spent.text, '', true) +
       (budget ? UI.stat('Restante', U.money(budget - spent.total, spent.main), 'de ' + U.money(budget, spent.main)) : UI.stat('Presupuesto', '—', 'Defínelo en Ajustes')) + '</div>' +
-      (budget ? UI.progress(spent.total / budget, spent.total > budget ? 'accent' : 'info') : '') + (spent.extra ? '<small class="faint">+ ' + esc(spent.extra) + ' sin convertir</small>' : ''), { data: { act: 'go', to: 'expenses' }, cls: 'stack' }),
+      (budget ? UI.progress(spent.total / budget, spent.total > budget ? 'accent' : 'info') : '') + C.catStack(Object.values(s.expenses), 3) +
+      (spent.extra ? '<small class="faint">+ ' + esc(spent.extra) + ' sin convertir</small>' : ''), { data: { act: 'go', to: 'expenses' }, cls: 'stack' }),
       UI.btn('Detalle', { size: 'sm', variant: 'ghost', data: { act: 'go', to: 'expenses' } }));
     if (up.length > 1) {
       // Plegado: abre cuando quieras ver lo que viene, sin alargar Inicio.
@@ -123,6 +151,9 @@
     const current = up.find((u) => u.inProgress), next = up.find((u) => !u.inProgress);
     let html = '';
     if (n.simulated) html += UI.banner('warn', 'clock', 'Simulando ' + n.date + ' a las ' + n.time, 'Cámbialo o desactívalo en Ajustes → Modo viaje.', { data: { act: 'go', to: 'settings' } });
+    html += checkoutAlerts(n);
+    const strip = C.cityStrip(n.date);
+    if (strip && t.phase === 'during') html += UI.card('<small class="muted">Día ' + t.dayNumber + ' de ' + t.totalDays + (city ? ' · ' + esc(city.name) : '') + (t.nextCity ? ' · después: ' + esc(t.nextCity.name) : '') + '</small>' + strip, { cls: 'stack-sm' });
     if (current) html += nextUpCard(current, 'AHORA');
     if (next) html += nextUpCard(next, 'SIGUIENTE', here, current ? 'la actividad actual' : 'tu última parada');
     else if (!current) html += UI.empty('🍵', 'Nada más por hoy', 'Disfruta. Puedes buscar dónde cenar cerca o planificar mañana.');
@@ -133,11 +164,14 @@
       ['calendar', 'Día de hoy', day ? { act: 'go', to: 'day/' + day.id } : { act: 'go', to: 'itinerary' }],
       ['chat', 'Frases', { act: 'go', to: 'phrases' }]
     ]);
+    // Por la noche: cómo fue el día, arriba para que no se olvide.
+    if (day && n.minutes >= 18 * 60) html += diaryCard(day);
+    html += C.quickConverter();
     // Volver al hotel: la tarjeta para el taxista a un toque.
     const hotel = S.hotelTonight(n.date);
     if (hotel) {
       const hl = hotel.location || {}, hdir = hl.coords || hl.name || hl.address ? U.directionsUrl(hl) : null;
-      html += UI.card('<div class="row"><span class="quick__icon">' + U.icon('bed', 20) + '</span><div class="grow"><small class="eyebrow muted">ESTA NOCHE DUERMES EN</small><strong class="block">' + esc(hotel.name) + '</strong>' +
+      html += UI.card('<div class="row"><span class="quick__icon tone-violet">' + U.icon('bed', 20) + '</span><div class="grow"><small class="eyebrow muted">ESTA NOCHE DUERMES EN</small><strong class="block">' + esc(hotel.name) + '</strong>' +
         (hotel.nameJa ? '<small class="muted" lang="ja">' + esc(hotel.nameJa) + '</small>' : '') + '</div></div>' +
         '<div class="row row--wrap">' + UI.btn('Para el taxista', { icon: 'car', size: 'sm', data: { act: 'taxi', id: hotel.id } }) +
         (hdir ? '<a class="btn btn--secondary btn--sm" href="' + esc(hdir) + '" target="_blank" rel="noopener">' + U.icon('nav', 16) + '<span>Volver al hotel</span></a>' : '') + '</div>', { cls: 'stack' });
@@ -186,8 +220,11 @@
     const trips = Object.values(s.transports).filter((x) => x.date === d.date).sort((a, b) => U.cmpTime(a.departTime, b.departTime));
     const hotel = S.hotelTonight(d.date);
     const shown = list.filter((a) => !a.transportId); // los trayectos ya salen arriba como etiqueta
-    const tags = trips.map((x) => '<span class="daycard__tag">' + D.TRANSPORT[x.kind][1] + ' ' + esc(x.origin + ' → ' + x.destination) + (x.departTime ? ' · ' + x.departTime : '') + '</span>').join('') +
-      (hotel ? '<span class="daycard__tag">🏨 ' + esc(hotel.name) + '</span>' : '');
+    // Si ese día dejas un hotel distinto del de esa noche: etiqueta de check-out.
+    const leaving = Object.values(s.reservations).find((r) => r.type === 'hotel' && r.endDate === d.date && (!hotel || hotel.id !== r.id));
+    const tags = (leaving ? '<span class="daycard__tag">🧳 Check-out' + (leaving.checkoutTime ? ' ' + leaving.checkoutTime : '') + '</span>' : '') + trips.map((x) => '<span class="daycard__tag">' + D.TRANSPORT[x.kind][1] + ' ' + esc(x.origin + ' → ' + x.destination) + (x.departTime ? ' · ' + x.departTime : '') + '</span>').join('') +
+      // El día que llegas al hotel: «Check-in 15:00 · nombre»; los demás días, sólo dónde dormís.
+      (hotel ? '<span class="daycard__tag">🏨 ' + (hotel.date === d.date ? 'Check-in' + (hotel.time ? ' ' + hotel.time : '') + ' · ' : '') + esc(hotel.name) + '</span>' : '');
     return '<div id="day-' + d.id + '" class="card card--tap daycard' + (isToday ? ' card--accent' : '') + '" style="--city:' + esc(city ? city.color || '#C8102E' : 'transparent') + '" tabindex="0" data-act="go" data-to="day/' + d.id + '">' +
       '<div class="daycard__top"><span class="daynum' + (isToday ? ' is-today' : '') + '"><small>DÍA</small><strong>' + num + '</strong></span>' +
       '<div class="grow"><strong>' + esc(U.fmtDay(d.date)) + '</strong> ' + (isToday ? UI.pill('Hoy', 'accent') : '') + (d.title ? '<small class="muted block">' + esc(d.title) + '</small>' : '') + '</div>' +
@@ -254,7 +291,77 @@
     html += UI.section('Comer cerca', nearList.length ? nearList.map((x) => C.restaurantCard(x.restaurant, x.km)).join('') : '<p class="muted small">No hay restaurantes guardados a menos de 1 km de las actividades del día.</p>',
       firstLoc ? UI.btn('Buscar', { size: 'sm', variant: 'ghost', icon: 'search', data: { act: 'go', to: 'nearby?' + C.q({ lat: firstLoc.coords.lat, lng: firstLoc.coords.lng, label: city && city.name }) } }) : '');
     html += UI.section('Notas', notes.length ? notes.map((x) => C.noteCard(x)).join('') : '<p class="muted small">Sin notas para este día.</p>', UI.btn('Nota', { size: 'sm', variant: 'ghost', icon: 'plus', data: { act: 'newNote', scope: 'day', ref: day.id } }));
+    const mood = day.mood && D.MOOD[day.mood];
+    html += UI.section('Diario', day.diary || mood
+      ? UI.card((mood ? '<span class="diary__mood">' + mood[1] + ' <small class="muted">' + esc(mood[0]) + '</small></span>' : '') + (day.diary ? '<p class="pre">' + esc(day.diary) + '</p>' : ''), { data: { act: 'editDiary', id: day.id }, cls: 'stack-sm' })
+      : '<p class="muted small">' + (day.date <= n.date ? 'Aún no has escrito cómo fue este día.' : 'Al final del día podrás contar aquí cómo fue.') + '</p>',
+      UI.btn(day.diary || mood ? 'Editar' : 'Escribir', { size: 'sm', variant: 'ghost', icon: 'edit', data: { act: 'editDiary', id: day.id } }));
     return { html: html };
+  };
+
+  /* ══ DIARIO ══════════════════════════════════════════════════
+     Una nota por día con cómo fue (😍🙂😐😴😣). Se guarda en el día
+     (day.diary, day.mood), así va en la exportación JSON. */
+
+  function dayStats(day) {
+    const list = S.dayActivities(day.id);
+    return { done: list.filter((a) => a.status === 'done').length, total: list.length, spent: C.moneySum(Object.values(S.get().expenses).filter((e) => e.date === day.date)) };
+  }
+
+  /** Tarjeta «¿Qué tal hoy?»: por la noche en Inicio y en el Modo viaje. */
+  function diaryCard(day) {
+    const st = dayStats(day), mood = day.mood && D.MOOD[day.mood];
+    return UI.card('<div class="row row--between"><span class="eyebrow">' + (day.diary || mood ? 'TU DIARIO DE HOY' : '¿QUÉ TAL HOY?') + '</span>' + (mood ? '<span class="diary__mood" aria-label="' + esc(mood[0]) + '">' + mood[1] + '</span>' : '') + '</div>' +
+      '<small class="muted">' + st.done + ' de ' + st.total + ' planes hechos · ' + esc(st.spent.text) + ' gastado</small>' +
+      (day.diary ? '<p class="pre clamp4">' + esc(day.diary) + '</p>' : '<p class="muted small">Apunta lo mejor del día antes de que se te olvide: al volver tendrás el viaje contado día a día.</p>') +
+      '<div class="row row--wrap">' + UI.btn(day.diary || mood ? 'Editar' : 'Escribir el diario', { icon: 'edit', size: 'sm', variant: day.diary ? 'ghost' : 'primary', data: { act: 'editDiary', id: day.id } }) +
+        UI.btn('Ver diario', { icon: 'book', size: 'sm', variant: 'ghost', data: { act: 'go', to: 'diary' } }) + '</div>', { cls: 'stack-sm' });
+  }
+  C.diaryCard = diaryCard;
+
+  F.diary = function (dayId) {
+    const day = S.get().days[dayId];
+    if (!day) return;
+    const st = dayStats(day);
+    const close = UI.sheet({
+      title: 'Diario · Día ' + S.dayNumber(day.id),
+      body: '<form id="fDiary" class="stack"><p class="muted small">' + esc(U.fmtLong(day.date)) + ' · ' + st.done + ' de ' + st.total + ' planes hechos · ' + esc(st.spent.text) + '</p>' +
+        UI.field('¿Qué tal fue?', UI.chips('mood', Object.keys(D.MOOD).map((k) => ({ value: k, label: D.MOOD[k][1] + ' ' + D.MOOD[k][0] })), day.mood, { allowNone: true, noneLabel: '—' }), { optional: true }) +
+        UI.field('Lo que no quieres olvidar', UI.textarea('diary', day.diary || '', 'Lo mejor del día, qué comisteis, una anécdota, un sitio al que volver…', 6), { optional: true }) + '</form>',
+      footer: UI.btn('Guardar', { type: 'submit', form: 'fDiary', block: true }),
+      onMount: (root) => root.querySelector('#fDiary').addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        const f = UI.formData(ev.target), text = (f.diary || '').trim();
+        S.update('days', day.id, { diary: text || undefined, mood: f.mood || undefined });
+        UI.toast(text || f.mood ? 'Diario guardado' : 'Diario vacío');
+        close();
+      })
+    });
+  };
+  A.editDiary = (el) => F.diary(el.dataset.id);
+
+  V.diary = function () {
+    const s = S.get(), days = S.sortedDays().filter((d) => d.diary || d.mood);
+    const head = UI.header({ back: true, title: 'Diario del viaje', subtitle: days.length ? days.length + (days.length === 1 ? ' día escrito' : ' días escritos') : '',
+      actions: days.length ? UI.iconBtn('share', 'Compartir el diario', { act: 'shareDiary' }) : '' });
+    if (!days.length) return { html: head + UI.empty('📔', 'Aún no has escrito nada', 'Cada noche, en Inicio, sale «¿Qué tal hoy?». También puedes escribir desde la vista de cada día.') };
+    return { html: head + days.map(function (d) {
+      const city = d.cityId && s.cities[d.cityId], mood = d.mood && D.MOOD[d.mood], st = dayStats(d);
+      return '<div class="card card--tap stack-sm diary" tabindex="0" data-act="editDiary" data-id="' + d.id + '" style="--city:' + esc(city ? city.color || 'var(--accent)' : 'var(--border)') + '">' +
+        '<div class="row row--between"><span class="eyebrow">DÍA ' + S.dayNumber(d.id) + (city ? ' · ' + esc(city.name.toUpperCase()) : '') + '</span>' + (mood ? '<span class="diary__mood" aria-label="' + esc(mood[0]) + '">' + mood[1] + '</span>' : '') + '</div>' +
+        '<strong>' + esc(U.fmtLong(d.date)) + '</strong>' + (d.diary ? '<p class="pre">' + esc(d.diary) + '</p>' : '') +
+        '<small class="faint">' + st.done + ' de ' + st.total + ' planes · ' + esc(st.spent.text) + '</small></div>';
+    }).join('') };
+  };
+
+  A.shareDiary = async function () {
+    const s = S.get();
+    const text = s.trip.name + ' — diario\n\n' + S.sortedDays().filter((d) => d.diary || d.mood).map(function (d) {
+      const city = d.cityId && s.cities[d.cityId], mood = d.mood && D.MOOD[d.mood];
+      return 'Día ' + S.dayNumber(d.id) + ' · ' + U.fmtLong(d.date) + (city ? ' · ' + city.name : '') + (mood ? ' ' + mood[1] : '') + (d.diary ? '\n' + d.diary : '');
+    }).join('\n\n');
+    const r = await SV.share(text, 'Diario');
+    if (r === 'copied') UI.toast('Copiado');
   };
 
   A.toggleDone = (el) => S.toggleDone(el.dataset.id);

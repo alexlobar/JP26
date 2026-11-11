@@ -22,7 +22,8 @@ JT.app = (function () {
     // Se abren desde Inicio («Tu viaje» y los iconos de arriba): la pestaña marcada es Inicio.
     [/^cities$/, 'cities', 'home'], [/^city\/([\w-]+)$/, 'city', 'home'], [/^reservations$/, 'reservations', 'home'], [/^reservation\/([\w-]+)$/, 'reservation', 'home'],
     [/^transport$/, 'transport', 'home'], [/^notes$/, 'notes', 'home'], [/^checklist$/, 'checklist', 'home'], [/^info$/, 'info', 'home'],
-    [/^phrases$/, 'phrases', 'home'], [/^documents$/, 'documents', 'home'], [/^search$/, 'search', 'home'], [/^settings$/, 'settings', 'home']
+    [/^phrases$/, 'phrases', 'home'], [/^documents$/, 'documents', 'home'], [/^search$/, 'search', 'home'], [/^settings$/, 'settings', 'home'],
+    [/^ready$/, 'ready', 'home'], [/^diary$/, 'diary', 'home']
   ];
 
   let main, lastPath = null, pending = false;
@@ -67,6 +68,7 @@ JT.app = (function () {
       t.classList.toggle('is-on', on);
       if (on) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
     });
+    toneHeader(r.view);
     if (res.mount) res.mount(main);
     // Que el filtro elegido quede a la vista en las filas de chips desplazables.
     main.querySelectorAll('.chips--scroll .is-on').forEach(function (c) {
@@ -86,6 +88,30 @@ JT.app = (function () {
       document.title = (t ? t.textContent + ' · ' : '') + 'Japón Travel';
     }
     lastPath = h.full;
+  }
+
+  /* ── Toque de color en la cabecera: el mismo icono y color que su cuadro en «Tu viaje» ── */
+  const VIEW_ICON = { cities: 'city', city: 'city', reservations: 'ticket', reservation: 'ticket', transport: 'train', notes: 'note', checklist: 'checklist', documents: 'doc', info: 'info', phrases: 'chat' };
+  function toneHeader(view) {
+    const icon = VIEW_ICON[view], h1 = icon && main.querySelector('.hdr h1');
+    if (!h1) return;
+    const badge = document.createElement('span');
+    badge.className = 'hdr__badge tone-' + JT.cards.TONE[icon];
+    badge.setAttribute('aria-hidden', 'true');
+    badge.innerHTML = JT.utils.icon(icon, 16);
+    h1.classList.add('hdr__toned');
+    h1.insertBefore(badge, h1.firstChild);
+  }
+
+  /* ── Botón (+): se aparta al bajar para no tapar tarjetas, vuelve al subir o al final ── */
+  let lastY = 0;
+  function onScrollFab() {
+    const fab = document.querySelector('.fab');
+    if (!fab) return;
+    const y = window.scrollY, atEnd = window.innerHeight + y >= document.documentElement.scrollHeight - 40;
+    if (y < 80 || atEnd || y < lastY - 6) fab.classList.remove('is-away');
+    else if (y > lastY + 6) fab.classList.add('is-away');
+    if (Math.abs(y - lastY) > 6) lastY = y;
   }
 
   /** Re-render agrupado tras cambios del store (no interrumpe si hay una hoja abierta). */
@@ -312,6 +338,7 @@ JT.app = (function () {
     document.addEventListener('touchstart', onTouchStart, { passive: true });
     document.addEventListener('touchmove', onTouchMove, { passive: true });
     document.addEventListener('touchend', onTouchEnd);
+    window.addEventListener('scroll', onScrollFab, { passive: true });
     takeShared();
     render();
     listenInstall();

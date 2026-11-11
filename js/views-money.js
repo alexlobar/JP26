@@ -66,14 +66,18 @@
       list.forEach((e) => { const k = keyFn(e); if (k === undefined) return; const v = U.convert(e.amount, e.currency, main, rates); if (v !== null) m[k] = (m[k] || 0) + v; });
       return Object.keys(m).map((k) => [k, m[k]]).sort((a, b) => b[1] - a[1]);
     };
-    const byCat = group((e) => e.category), byCity = group((e) => e.cityId || 'none');
+    const byCat = C.byCategory(list), byCity = group((e) => e.cityId || 'none');
     const byDay = group((e) => (e.date >= s.trip.startDate && e.date <= s.trip.endDate ? e.date : undefined)).sort((a, b) => a[0].localeCompare(b[0]));
     let html = UI.card('<div class="stats">' + UI.stat('Total gastado', total.text, '', true) + (budget ? UI.stat('Restante', U.money(budget - total.total, main), Math.round((total.total / budget) * 100) + '% del presupuesto') : '') + '</div>' +
       (budget ? UI.progress(total.total / budget, total.total > budget ? 'accent' : 'info') : '') +
       '<div class="stats">' + UI.stat('Hoy', C.moneySum(list.filter((e) => e.date === t.now.date)).text) + UI.stat('Media diaria', U.money(avg, main), nDays ? nDays + ' días con gastos' : 'en el viaje') + '</div>' +
       (total.extra ? '<small class="warn">Sin convertir: ' + esc(total.extra) + '</small>' : ''), { cls: 'stack' });
     html += ratesInfo(list);
-    html += UI.section('Por categoría', UI.card(UI.bars(byCat.map((x) => ({ label: D.EXPENSE[x[0]][0], emoji: D.EXPENSE[x[0]][1], value: x[1], display: U.money(x[1], main) })))));
+    // Reparto de un vistazo (barra de colores) y, debajo, cada categoría con su color y su %.
+    const catTotal = byCat.reduce((a, x) => a + x[1], 0);
+    html += UI.section('Por categoría', UI.card('<div class="stack">' + C.catStack(list) +
+      UI.bars(byCat.map((x) => ({ label: D.EXPENSE[x[0]][0], emoji: D.EXPENSE[x[0]][1], value: x[1], color: C.catColor(x[0]),
+        display: U.money(x[1], main) + ' · ' + C.pctText(x[1], catTotal) }))) + '</div>'));
     html += UI.section('Por ciudad', UI.card(UI.bars(byCity.map(function (x) {
       const c = s.cities[x[0]];
       return { label: c ? c.name : 'Sin ciudad / antes del viaje', value: x[1], display: U.money(x[1], main) + (c && c.budget ? ' / ' + U.money(c.budget, main, true) : '') };
@@ -125,13 +129,15 @@
     const me = travelers.find((x) => x.isMe) || travelers[0];
     const last = Object.values(s.expenses).filter((e) => !e.isSample).sort((a, b) => b.createdAt - a.createdAt)[0];
     const e = ex || {
-      currency: last ? last.currency : 'JPY', paymentMethod: last ? last.paymentMethod : undefined,
+      currency: def.currency || (last ? last.currency : 'JPY'), paymentMethod: last ? last.paymentMethod : undefined,
       date: def.date || t.now.date, cityId: def.cityId || (t.phase === 'during' && t.city ? t.city.id : undefined),
-      placeName: def.placeName, activityId: def.activityId, paidById: me && me.id, splitWithIds: me ? [me.id] : []
+      placeName: def.placeName, activityId: def.activityId, paidById: me && me.id, splitWithIds: me ? [me.id] : [],
+      // Desde una reserva o un trayecto con coste: llega ya relleno.
+      amount: def.amount, category: def.category, description: def.description, reservationId: def.reservationId, transportId: def.transportId
     };
     const main = s.trip.mainCurrency;
     const body = '<form id="fExp" class="stack" novalidate>' +
-      '<label class="field"><span class="field__label">Importe</span><input class="input input--lg" name="amount" inputmode="decimal" placeholder="0" value="' + esc(ex ? String(ex.amount).replace('.', ',') : '') + '"' + (ex ? '' : ' autofocus') + ' autocomplete="off"><span class="field__hint" id="conv"></span></label>' +
+      '<label class="field"><span class="field__label">Importe</span><input class="input input--lg" name="amount" inputmode="decimal" placeholder="0" value="' + esc(e.amount ? String(e.amount).replace('.', ',') : '') + '"' + (ex || e.amount ? '' : ' autofocus') + ' autocomplete="off"><span class="field__hint" id="conv"></span></label>' +
       UI.chips('currency', D.CURRENCIES.map((c) => ({ value: c, label: c })), e.currency) +
       UI.field('Categoría', UI.chips('category', D.options(D.EXPENSE), e.category)) +
       // Sólo para saber cómo se pagó: el total de gastos es uno solo, se pague como se pague.
@@ -169,7 +175,7 @@
           const splitIds = travelers.length > 1 ? UI.list(f.split) : e.splitWithIds;
           const paid = travelers.length > 1 ? f.paidById : e.paidById;
           const data = { amount: amount, currency: f.currency, category: f.category, description: f.description || undefined, date: f.date || e.date, cityId: f.cityId || undefined,
-            placeName: f.placeName || undefined, paymentMethod: f.paymentMethod || undefined, paidById: paid, splitWithIds: splitIds.length ? splitIds : paid ? [paid] : [], notes: f.notes || undefined, activityId: e.activityId };
+            placeName: f.placeName || undefined, paymentMethod: f.paymentMethod || undefined, paidById: paid, splitWithIds: splitIds.length ? splitIds : paid ? [paid] : [], notes: f.notes || undefined, activityId: e.activityId, reservationId: e.reservationId, transportId: e.transportId };
           if (ex) S.update('expenses', ex.id, data); else S.create('expenses', data);
           UI.toast('Gasto de ' + U.money(amount, f.currency) + ' guardado');
           close();

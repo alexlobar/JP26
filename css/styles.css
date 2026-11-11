@@ -25,6 +25,12 @@
   --shadow: 0 3px 12px rgba(0, 0, 0, .05);
   --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 22px;
   --tabbar-h: 62px;
+  /* Un color por apartado (cuadros de Inicio): [color, fondo suave] */
+  --t-red: #C8102E; --t-red-soft: #F9E7EA; --t-orange: #C2410C; --t-orange-soft: #FDEBDD;
+  --t-amber: #A16207; --t-amber-soft: #FBF0D0; --t-green: #2E7D5B; --t-green-soft: #E3F1EA;
+  --t-teal: #0F766E; --t-teal-soft: #DCF1EE; --t-blue: #1D5FBF; --t-blue-soft: #E1ECFA;
+  --t-indigo: #4338CA; --t-indigo-soft: #E7E6FA; --t-violet: #7E3AAE; --t-violet-soft: #F1E6F8;
+  --t-pink: #BE185D; --t-pink-soft: #FBE4EE; --t-slate: #475569; --t-slate-soft: #E7EAEE; --on-tone: #FFFFFF;
   --font: system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", sans-serif;
   color-scheme: light;
 }
@@ -33,12 +39,20 @@
     --bg: #111113; --surface: #1B1B1E; --surface-2: #26262A; --text: #F3F1EC; --muted: #A9A9AE; --faint: #76767B; --border: #2D2D32;
     --accent: #E5384F; --accent-soft: #3A1B21; --success: #5FBF8F; --success-soft: #1D3229; --warn: #E0A44A; --warn-soft: #3A2D18;
     --info: #6FB3B7; --info-soft: #1D3133; --overlay: rgba(0, 0, 0, .6); --shadow: none; color-scheme: dark;
+    --t-red: #F0596C; --t-red-soft: #3A1B21; --t-orange: #F59A5B; --t-orange-soft: #3A2416; --t-amber: #E9B949; --t-amber-soft: #382D14;
+    --t-green: #5FBF8F; --t-green-soft: #1D3229; --t-teal: #4FC1B5; --t-teal-soft: #16302E; --t-blue: #6FA8F0; --t-blue-soft: #1A2A40;
+    --t-indigo: #9C96F2; --t-indigo-soft: #25233F; --t-violet: #C18BEA; --t-violet-soft: #2E2140; --t-pink: #F07AAE; --t-pink-soft: #3A1A2A;
+    --t-slate: #A7B3C4; --t-slate-soft: #262B33; --on-tone: #111113;
   }
 }
 :root[data-theme="dark"] {
   --bg: #111113; --surface: #1B1B1E; --surface-2: #26262A; --text: #F3F1EC; --muted: #A9A9AE; --faint: #76767B; --border: #2D2D32;
   --accent: #E5384F; --accent-soft: #3A1B21; --success: #5FBF8F; --success-soft: #1D3229; --warn: #E0A44A; --warn-soft: #3A2D18;
   --info: #6FB3B7; --info-soft: #1D3133; --overlay: rgba(0, 0, 0, .6); --shadow: none; color-scheme: dark;
+  --t-red: #F0596C; --t-red-soft: #3A1B21; --t-orange: #F59A5B; --t-orange-soft: #3A2416; --t-amber: #E9B949; --t-amber-soft: #382D14;
+  --t-green: #5FBF8F; --t-green-soft: #1D3229; --t-teal: #4FC1B5; --t-teal-soft: #16302E; --t-blue: #6FA8F0; --t-blue-soft: #1A2A40;
+  --t-indigo: #9C96F2; --t-indigo-soft: #25233F; --t-violet: #C18BEA; --t-violet-soft: #2E2140; --t-pink: #F07AAE; --t-pink-soft: #3A1A2A;
+  --t-slate: #A7B3C4; --t-slate-soft: #262B33; --on-tone: #111113;
 }
 
 /* ── 2. Base ───────────────────────────────────────────────── */
@@ -83,7 +97,7 @@ h1, h2, h3, p { margin: 0; }
 /* ── 4. Layout ─────────────────────────────────────────────── */
 .main {
   display: flex; flex-direction: column; gap: 18px; width: 100%; max-width: 720px; margin: 0 auto;
-  padding: calc(env(safe-area-inset-top) + 10px) 16px calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 96px);
+  padding: calc(env(safe-area-inset-top) + 10px) 16px calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 110px);
   outline: none;
 }
 .row { display: flex; align-items: center; gap: 8px; }
@@ -107,6 +121,9 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 4px 0; width: 100%;
 .hdr__titles { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .hdr__titles h1 { overflow-wrap: anywhere; }
 .hdr__actions { display: flex; align-items: center; gap: 2px; }
+/* Icono pequeño con el color del apartado junto al título (discreto: sólo orienta) */
+.hdr__toned { display: flex; align-items: center; gap: 8px; }
+.hdr__badge { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 8px; flex: none; background: var(--c-soft); color: var(--c); }
 
 /* ── 6. Botones ────────────────────────────────────────────── */
 .btn {
@@ -262,11 +279,72 @@ details.more > .stack { margin-top: 12px; }
 }
 .quick__btn small { font-size: 11.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .quick__btn:active { transform: scale(.96); }
-.quick__icon { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); }
+.quick__icon { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 12px; background: var(--c-soft, var(--accent-soft)); color: var(--c, var(--accent)); }
 .quick__sub { font-size: 10.5px; color: var(--muted); line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+/* Tonos por apartado: cada cuadro con su color para distinguirlos de un vistazo */
+.tone-red { --c: var(--t-red); --c-soft: var(--t-red-soft); }
+.tone-orange { --c: var(--t-orange); --c-soft: var(--t-orange-soft); }
+.tone-amber { --c: var(--t-amber); --c-soft: var(--t-amber-soft); }
+.tone-green { --c: var(--t-green); --c-soft: var(--t-green-soft); }
+.tone-teal { --c: var(--t-teal); --c-soft: var(--t-teal-soft); }
+.tone-blue { --c: var(--t-blue); --c-soft: var(--t-blue-soft); }
+.tone-indigo { --c: var(--t-indigo); --c-soft: var(--t-indigo-soft); }
+.tone-violet { --c: var(--t-violet); --c-soft: var(--t-violet-soft); }
+.tone-pink { --c: var(--t-pink); --c-soft: var(--t-pink-soft); }
+.tone-slate { --c: var(--t-slate); --c-soft: var(--t-slate-soft); }
+/* «Tu viaje»: cuadro teñido con el icono relleno, distinto de los botones de añadir */
+.quick--hub .quick__btn { background: var(--c-soft); border-color: transparent; padding: 14px 4px 12px; }
+.quick--hub .quick__icon { background: var(--c); color: var(--on-tone); border-radius: 14px; width: 42px; height: 42px; }
+.quick--hub .quick__btn small { color: var(--text); }
+.quick--hub .quick__sub { color: var(--c); font-weight: 600; opacity: .9; }
 .hero { display: flex; align-items: center; gap: 10px; }
+/* Próxima actividad, compacta */
 .next { display: flex; gap: 12px; align-items: flex-start; }
-.next__emoji { font-size: 30px; line-height: 1.1; }
+.next__emoji { font-size: 28px; line-height: 1.15; }
+.next__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.next__top .eyebrow { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.next__top .pill { flex: none; }
+.next__title { display: block; font-size: 18px; font-weight: 700; line-height: 1.25; letter-spacing: -.2px; margin: 1px 0; }
+.next__acts { display: flex; align-items: center; gap: 6px; }
+.next__acts .btn { flex: 1; }
+.next__acts .iconbtn { width: 44px; height: 36px; border-radius: var(--r-sm); background: var(--surface-2); }
+.card--accent .next__acts .iconbtn { background: var(--surface); }
+.phrase__acts { display: flex; align-items: center; flex: none; }
+/* Franja del viaje: días coloreados por ciudad, lo pasado atenuado y una marca en hoy */
+.strip { display: flex; flex-direction: column; gap: 4px; width: 100%; padding: 0; border: 0; background: transparent; text-align: left; }
+.strip__bar { position: relative; display: block; height: 10px; }
+.strip__segs { display: flex; gap: 2px; height: 100%; border-radius: 5px; overflow: hidden; }
+.strip__segs > span { display: block; min-width: 3px; height: 100%; }
+.strip__past { position: absolute; left: 0; top: 0; bottom: 0; background: var(--surface); opacity: .55; border-radius: 5px 0 0 5px; pointer-events: none; }
+.strip__now { position: absolute; top: -4px; bottom: -4px; width: 4px; margin-left: -2px; border-radius: 2px; background: var(--text); box-shadow: 0 0 0 2px var(--surface); }
+.card--accent .strip__past { background: var(--accent-soft); }
+.strip__labels { display: flex; gap: 2px; font-size: 11px; font-weight: 600; color: var(--muted); }
+.strip__labels span { min-width: 3px; overflow: hidden; white-space: nowrap; text-overflow: clip; padding-right: 2px; }
+/* Conversor rápido (Modo viaje) */
+.conv { display: flex; align-items: center; gap: 8px; }
+.conv__sym { font-size: 24px; font-weight: 700; color: var(--muted); width: 22px; text-align: center; }
+.conv__in { flex: 1; min-width: 0; }
+.conv__out { font-size: 22px; font-weight: 700; letter-spacing: -.3px; font-variant-numeric: tabular-nums; }
+/* Diario */
+.diary__mood { font-size: 22px; line-height: 1; }
+.diary { border-left: 4px solid var(--city, transparent); }
+/* ¿Listo para el viaje? */
+.ready { display: flex; flex-direction: column; }
+.ready__row { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.ready__row:last-child { border-bottom: 0; }
+.ready__row .btn { flex: none; }
+.ready__dot { width: 24px; height: 24px; border-radius: 12px; flex: none; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; margin-top: 1px; }
+.ready__dot.is-ok { background: var(--success); color: #fff; }
+.ready__dot.is-warn { background: var(--warn-soft); color: var(--warn); }
+.ready__dot.is-wait { background: var(--surface-2); color: var(--muted); }
+/* Gastos: reparto por categoría en una barra de colores */
+.catstack { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--surface-2); gap: 2px; }
+.catstack span { display: block; min-width: 3px; }
+.catlegend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--muted); }
+.catlegend span { display: inline-flex; align-items: center; gap: 5px; }
+.catlegend i { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+.catlegend b { color: var(--text); font-weight: 600; }
+.exp__emoji[class*="tone-"] { background: var(--c-soft); }
 .mini-tl { display: flex; flex-direction: column; gap: 9px; }
 .mini-tl__row { display: flex; gap: 12px; align-items: center; border: 0; background: transparent; padding: 0; text-align: left; }
 .mini-tl__row > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -427,6 +505,11 @@ a.lr { text-decoration: none; color: inherit; }
   display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 18px rgba(200, 16, 46, .35); transition: transform .12s;
 }
 .fab:active { transform: scale(.94); }
+/* Al bajar por una lista se aparta para no tapar la última tarjeta; vuelve al subir o al llegar al final. */
+.fab { transition: transform .22s ease, opacity .22s ease; }
+.fab.is-away { transform: translateY(calc(100% + 30px)); opacity: 0; pointer-events: none; }
+/* En pantallas donde no se añade nada, no sale. */
+body[data-view="emergency"] .fab, body[data-view="settings"] .fab, body[data-view="phrases"] .fab { display: none; }
 @media (min-width: 760px) {
   .fab { right: calc(50% - 360px + 18px); }
   .tabbar { justify-content: center; }

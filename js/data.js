@@ -201,6 +201,9 @@ JT.data = (function () {
   ];
 
   /* Los mismos teléfonos que la ficha «Emergencias» de Información útil. */
+  /* Diario: cómo fue el día [etiqueta, emoji] */
+  const MOOD = { great: ['Genial', '😍'], good: ['Bien', '🙂'], ok: ['Normal', '😐'], tired: ['Agotador', '😴'], bad: ['Malo', '😣'] };
+
   const EMERGENCY_NUMBERS = [['119', 'Ambulancia y bomberos'], ['110', 'Policía'], ['+81-50-3816-2787', 'Japan Visitor Hotline (24 h, en inglés)']];
 
   /* ── Información práctica (editable, orientativa, NO oficial) ─ */
@@ -514,6 +517,6 @@ JT.data = (function () {
 
   return {
     ACTIVITY, PLACE, VISIT_MIN, CUISINE, PRICE, EXPENSE, PAYMENT, RESERVATION, TRANSPORT, MODE, PRIORITY, NOTE_SCOPE,
-    CHECK_SECTION, DOC_KIND, CURRENCIES, DEFAULT_SETTINGS, PHRASES, ALLERGENS, EMERGENCY_NUMBERS, emptyCollections, baseContent, sampleTrip, options
+    CHECK_SECTION, DOC_KIND, CURRENCIES, DEFAULT_SETTINGS, PHRASES, ALLERGENS, EMERGENCY_NUMBERS, MOOD, emptyCollections, baseContent, sampleTrip, options
   };
 })();

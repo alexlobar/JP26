@@ -355,6 +355,35 @@ JT.services = (function () {
     window.open(/^[a-z]+:/i.test(url) ? url : 'https://' + url, '_blank', 'noopener');
   }
 
+  /* ── Voz: leer en japonés con la voz del propio móvil ────────
+     Usa la síntesis de voz del sistema (en Android, la de Google).
+     No envía nada a ningún servidor de esta app. Sin conexión sólo
+     funciona si la voz japonesa está descargada en el móvil. */
+
+  function canSpeak() { return 'speechSynthesis' in window && typeof window.SpeechSynthesisUtterance === 'function'; }
+
+  function jaVoice() {
+    const voices = window.speechSynthesis.getVoices() || [];
+    return voices.find((v) => /^ja[-_]JP$/i.test(v.lang) && v.localService) || voices.find((v) => /^ja/i.test(v.lang)) || null;
+  }
+
+  /** Lee el texto en japonés. Devuelve 'ok', 'novoice' (no hay voz japonesa) o 'unsupported'. */
+  function speak(text, slow) {
+    if (!canSpeak() || !text) return 'unsupported';
+    const synth = window.speechSynthesis;
+    synth.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'ja-JP';
+    u.rate = slow ? 0.7 : 0.9;
+    const v = jaVoice();
+    if (v) u.voice = v;
+    synth.speak(u);
+    // Chrome carga la lista de voces tarde: sin lista no se sabe, así que se intenta igualmente.
+    return v || !synth.getVoices().length ? 'ok' : 'novoice';
+  }
+  // Pide la lista de voces pronto para que esté lista en el primer toque.
+  if (canSpeak()) { try { window.speechSynthesis.getVoices(); } catch (e) { /* sin voces */ } }
+
   /* ── Copias, espacio y datos protegidos ───────────────────────
      Ver Plantillas/Version-y-espacio.md. El tope que importa es el de
      localStorage: 5 MB por ORIGEN, y el origen es alexlobar.github.io
@@ -413,7 +442,7 @@ JT.services = (function () {
     online, rates, refreshRatesIfStale, fetchRates, nearby, geocode, getPlacesKey, setPlacesKey,
     vaultAvailable, vaultExists, vaultUnlocked, vaultUnlock, vaultLock, vaultGet, vaultSet, vaultReset,
     notificationsSupported, requestNotifications, dueReminders, showSystemNotification,
-    copy, share, download, pickFile, openUrl,
+    copy, share, download, pickFile, openUrl, canSpeak, speak,
     markExported, lastExport, storageUse, offlineCopy, persisted, requestPersist
   };
 })();

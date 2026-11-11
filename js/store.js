@@ -137,6 +137,8 @@ JT.store = (function () {
         if (a[field] !== id) return;
         if (a.auto === col) dropActivity(a.id); else delete a[field];
       });
+      // El gasto apuntado desde la reserva/trayecto se queda (ya está pagado); sólo pierde el enlace.
+      Object.values(s.expenses).forEach((e) => { if (e[field] === id) delete e[field]; });
     } else if (col === 'activities') {
       if (entity) reindex(dayActivities(entity.dayId));
       Object.values(s.expenses).forEach((e) => { if (e.activityId === id) delete e.activityId; });

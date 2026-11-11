@@ -78,7 +78,7 @@ JT.ui = (function () {
     const max = Math.max.apply(null, [1].concat(data.map((d) => d.value)));
     return '<div class="bars">' + data.map((d) =>
       '<div class="bars__row" aria-label="' + esc(d.label + ': ' + d.display) + '"><div class="bars__hdr"><span>' + (d.emoji ? d.emoji + '  ' : '') + esc(d.label) + '</span><strong class="mono">' + esc(d.display) + '</strong></div>' +
-      '<div class="bars__track"><div class="bars__fill" style="width:' + (d.value / max) * 100 + '%;' + (color ? 'background:' + color : '') + '"></div></div></div>').join('') + '</div>';
+      '<div class="bars__track"><div class="bars__fill" style="width:' + (d.value / max) * 100 + '%;' + (d.color || color ? 'background:' + (d.color || color) : '') + '"></div></div></div>').join('') + '</div>';
   }
 
   function listRow(o) {

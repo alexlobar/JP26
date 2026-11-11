@@ -117,7 +117,7 @@ JT.cards = (function () {
       '<div class="swipe__actions"><button type="button" class="swipe__btn" data-act="dupExpense" data-id="' + e.id + '">' + U.icon('copy', 18) + 'Duplicar</button>' +
       '<button type="button" class="swipe__btn swipe__btn--danger" data-act="delExpense" data-id="' + e.id + '">' + U.icon('trash', 18) + 'Eliminar</button></div>' +
       '<div class="swipe__content exp card--tap" tabindex="0" data-act="editExpense" data-id="' + e.id + '">' +
-      '<span class="exp__emoji" aria-hidden="true">' + c[1] + '</span><div class="grow"><strong>' + esc(e.description || c[0]) + '</strong><small class="muted">' + esc(meta) + '</small></div>' +
+      '<span class="exp__emoji tone-' + (CAT_TONE[e.category] || 'slate') + '" aria-hidden="true">' + c[1] + '</span><div class="grow"><strong>' + esc(e.description || c[0]) + '</strong><small class="muted">' + esc(meta) + '</small></div>' +
       '<div class="exp__amount"><strong class="mono">' + U.money(e.amount, e.currency) + '</strong>' + (mainValue ? '<small class="muted">' + esc(mainValue) + '</small>' : '') + '</div></div></div>';
   }
 
@@ -143,7 +143,8 @@ JT.cards = (function () {
       (stops.length ? '<div class="stops">' + stopRows + '</div>' : '') +
       '<div class="pills">' + (stops.length ? UI.pill(stops.length + (stops.length === 1 ? ' escala' : ' escalas') + ' · ' + U.fmtDur(wait) + ' de espera', 'info') : '') +
       (t.durationMinutes ? UI.pill(U.fmtDur(t.durationMinutes), 'neutral', 'clock') : '') + (t.seat ? UI.pill(t.seat) : '') + (t.bookingCode ? UI.pill(t.bookingCode, 'info') : '') + '</div>' +
-      '<div class="row">' + UI.btn('Añadir a Google Calendar', { icon: 'calendar', size: 'sm', variant: 'ghost', data: { act: 'gcal', col: 'transports', id: t.id } }) + '</div></div>';
+      '<div class="row row--wrap">' + UI.btn('Añadir a Google Calendar', { icon: 'calendar', size: 'sm', variant: 'ghost', data: { act: 'gcal', col: 'transports', id: t.id } }) +
+        (t.cost ? (JT.cards.costExpense && JT.cards.costExpense('transports', t.id) ? '<small class="success">✓ En Gastos</small>' : UI.btn('Apuntar en Gastos', { icon: 'wallet', size: 'sm', variant: 'ghost', data: { act: 'costToExpense', col: 'transports', id: t.id } })) : '') + '</div></div>';
   }
 
   function noteRef(n) {
@@ -163,10 +164,99 @@ JT.cards = (function () {
 
   /** Accesos rápidos grandes. items: [[emoji, label, data]] */
   /** Cuadritos de acceso: [icono de línea, texto, data-*, subtítulo opcional]. */
-  function quick(items) {
-    return '<div class="quick">' + items.map((it) => '<button type="button" class="quick__btn"' + UI.dataAttrs(it[2]) + '><span class="quick__icon">' + U.icon(it[0], 22) + '</span><small>' + esc(it[1]) + '</small>' +
+  /* Cada apartado tiene su color, el mismo en todas partes (Frases siempre rosa, Notas siempre ámbar…),
+     para reconocerlo de un vistazo sin leer. Los tonos están en styles.css (.tone-*). */
+  const TONE = {
+    city: 'violet', ticket: 'red', train: 'blue', note: 'amber', checklist: 'green', doc: 'slate', info: 'teal', chat: 'pink',
+    calendar: 'indigo', wallet: 'green', food: 'orange', bed: 'violet'
+  };
+  function quick(items, variant) {
+    return '<div class="quick' + (variant ? ' quick--' + variant : '') + '">' + items.map((it) => '<button type="button" class="quick__btn tone-' + (TONE[it[0]] || 'red') + '"' + UI.dataAttrs(it[2]) + '><span class="quick__icon">' + U.icon(it[0], 22) + '</span><small>' + esc(it[1]) + '</small>' +
       (it[3] ? '<span class="quick__sub">' + esc(it[3]) + '</span>' : '') + '</button>').join('') + '</div>';
   }
+
+  /** Botón 🔊 que lee un texto en japonés con la voz del móvil (vacío si el navegador no puede). */
+  function speakBtn(text, label) {
+    if (!JT.services.canSpeak() || !text) return '';
+    return '<button type="button" class="iconbtn speak" aria-label="' + esc(label || 'Escuchar en japonés') + '" title="' + esc(label || 'Escuchar en japonés') + '" data-act="speak" data-text="' + esc(text) + '">' + U.icon('speaker', 20) + '</button>';
+  }
+
+  /* Color de cada categoría de gasto (mismos tonos que los apartados). */
+  const CAT_TONE = { flights: 'blue', hotel: 'violet', transport: 'teal', food: 'orange', shopping: 'pink', tickets: 'red', cafe: 'amber', gifts: 'indigo', other: 'slate' };
+  const catColor = (cat) => 'var(--t-' + (CAT_TONE[cat] || 'slate') + ')';
+
+  /** Total por categoría en la moneda principal, de mayor a menor: [[cat, valor]]. */
+  function byCategory(list) {
+    const main = S.get().trip.mainCurrency, rates = JT.services.rates(), m = {};
+    list.forEach((e) => { const v = U.convert(e.amount, e.currency, main, rates); if (v !== null) m[e.category] = (m[e.category] || 0) + v; });
+    return Object.keys(m).map((k) => [k, m[k]]).filter((x) => x[1] > 0).sort((a, b) => b[1] - a[1]);
+  }
+
+  /** Barra apilada con el reparto del gasto por categoría y su leyenda (legend: cuántas categorías nombrar). */
+  function catStack(list, legend) {
+    const cats = byCategory(list), total = cats.reduce((a, x) => a + x[1], 0);
+    if (!total) return '';
+    const pct = (v) => pctText(v, total);
+    const shown = legend ? cats.slice(0, legend) : [];
+    return '<div class="catstack" role="img" aria-label="' + esc('Reparto por categoría: ' + cats.map((x) => D.EXPENSE[x[0]][0] + ' ' + pct(x[1])).join(', ')) + '">' +
+      cats.map((x) => '<span style="width:' + (x[1] / total) * 100 + '%;background:' + catColor(x[0]) + '"></span>').join('') + '</div>' +
+      (shown.length ? '<div class="catlegend">' + shown.map((x) => '<span><i style="background:' + catColor(x[0]) + '"></i>' + esc(D.EXPENSE[x[0]][0]) + ' <b>' + pct(x[1]) + '</b></span>').join('') +
+        (shown.length < cats.length ? '<span class="faint">+' + (cats.length - shown.length) + ' más</span>' : '') + '</div>' : '');
+  }
+
+  /** «48%», o «<1%» si es muy poco pero no cero. */
+  function pctText(v, total) {
+    const p = Math.round((v / total) * 100);
+    return p === 0 && v > 0 ? '<1%' : p + '%';
+  }
+
+  /** Franja con todos los días del viaje coloreados por ciudad y una marca en «hoy». Toca → Itinerario. */
+  function cityStrip(today) {
+    const s = S.get(), days = S.sortedDays();
+    if (days.length < 2) return '';
+    const groups = [];
+    days.forEach(function (d) {
+      const last = groups[groups.length - 1], cid = d.cityId || '';
+      if (last && last.cityId === cid) last.n++; else groups.push({ cityId: cid, n: 1 });
+    });
+    const idx = days.findIndex((d) => d.date === today), total = days.length;
+    const name = (g) => (s.cities[g.cityId] ? s.cities[g.cityId].name : 'Libre');
+    // Si el tramo es corto no cabe el nombre: sus dos primeras letras (el nombre completo va en aria-label).
+    const label = (g) => (g.n / total >= 0.14 ? name(g) : name(g).slice(0, g.n / total >= 0.07 ? 2 : 1));
+    return '<button type="button" class="strip" data-act="go" data-to="itinerary" aria-label="' + esc('Recorrido: ' + groups.map((g) => name(g) + ' ' + g.n + (g.n === 1 ? ' día' : ' días')).join(', ') + (idx > -1 ? '. Hoy es el día ' + (idx + 1) : '')) + '">' +
+      '<span class="strip__bar"><span class="strip__segs">' + groups.map((g) => '<span style="flex:' + g.n + ';background:' + esc(s.cities[g.cityId] ? s.cities[g.cityId].color || 'var(--accent)' : 'var(--border)') + '"></span>').join('') + '</span>' +
+        (idx > -1 ? '<span class="strip__past" style="width:' + (idx / total) * 100 + '%"></span><span class="strip__now" style="left:' + ((idx + 0.5) / total) * 100 + '%"></span>' : '') + '</span>' +
+      '<span class="strip__labels">' + groups.map((g) => '<span style="flex:' + g.n + '">' + esc(label(g)) + '</span>').join('') + '</span></button>';
+  }
+
+  /** Conversor rápido yen ⇄ moneda principal para el Modo viaje. Recuerda el importe y la dirección. */
+  function quickConverter() {
+    const st = JT.uiState.conv || (JT.uiState.conv = { dir: 'jpy', value: '' });
+    const main = S.get().trip.mainCurrency, other = main === 'JPY' ? 'EUR' : main;
+    const from = st.dir === 'jpy' ? 'JPY' : other, to = st.dir === 'jpy' ? other : 'JPY';
+    const rates = JT.services.rates(), rate = U.convert(1, from, to, rates);
+    if (!rate) return UI.card('<small class="eyebrow muted">CONVERSOR</small><p class="muted small">Sin tipo de cambio: conéctate una vez (se guarda para usarlo sin conexión) o defínelo en Ajustes.</p>', { cls: 'stack-sm' });
+    const n = U.parseAmount(st.value || '') || 0;
+    const sym = { JPY: '¥', EUR: '€', USD: '$' };
+    return UI.card('<div class="row row--between"><small class="eyebrow muted">CONVERSOR</small><small class="faint">1 ' + (from === 'JPY' ? other : from) + ' = ' + esc(U.money(U.convert(1, from === 'JPY' ? other : from, 'JPY', rates), 'JPY')) + '</small></div>' +
+      '<div class="conv"><span class="conv__sym" aria-hidden="true">' + (sym[from] || from) + '</span>' +
+        '<input class="input input--lg conv__in" inputmode="decimal" placeholder="' + (from === 'JPY' ? '1000' : '10') + '" value="' + esc(st.value || '') + '" data-input="quickConv" data-rate="' + rate + '" data-to="' + to + '" aria-label="Importe en ' + from + '" autocomplete="off">' +
+        UI.iconBtn('swap', 'Cambiar ' + from + ' ⇄ ' + to, { act: 'convSwap' }) + '</div>' +
+      '<div class="conv__out" id="qconvOut">' + (n ? '≈ ' + esc(U.money(n * rate, to)) : 'Escribe un importe en ' + from) + '</div>', { cls: 'stack-sm' });
+  }
+  JT.changes = JT.changes || {};
+  JT.changes.quickConv = function (el) {
+    JT.uiState.conv.value = el.value;
+    const n = U.parseAmount(el.value) || 0, out = document.getElementById('qconvOut');
+    if (out) out.textContent = n ? '≈ ' + U.money(n * Number(el.dataset.rate), el.dataset.to) : 'Escribe un importe';
+  };
+  JT.actions.convSwap = function () {
+    const st = JT.uiState.conv;
+    st.dir = st.dir === 'jpy' ? 'main' : 'jpy';
+    st.value = '';
+    JT.app.focusAfter = '.conv__in';
+    JT.app.render();
+  };
 
   /** «Tu viaje» en Inicio: ciudades, reservas, notas…, con cuántos hay de cada uno. */
   function tripHub() {
@@ -182,7 +272,7 @@ JT.cards = (function () {
       ['doc', 'Documentos', { act: 'go', to: 'documents' }, count('docs', 'dato', 'datos')],
       ['info', 'Info útil', { act: 'go', to: 'info' }, 'Enchufes, 110…'],
       ['chat', 'Frases', { act: 'go', to: 'phrases' }, 'Sin conexión']
-    ]));
+    ], 'hub'));
   }
 
   function cityOptions() {
@@ -239,5 +329,5 @@ JT.cards = (function () {
     });
   }
 
-  return { q, sampleBanner, offlineBanner, isNow, timelineItem, travelLeg, timeline, placeCard, restaurantCard, expenseRow, reservationCard, transportCard, noteCard, noteRef, quick, tripHub, cityOptions, moneySum, parseCoords, coordsField, bindCoords };
+  return { q, sampleBanner, offlineBanner, isNow, timelineItem, travelLeg, timeline, placeCard, restaurantCard, expenseRow, reservationCard, transportCard, noteCard, noteRef, quick, tripHub, speakBtn, TONE, catColor, byCategory, catStack, pctText, cityStrip, quickConverter, cityOptions, moneySum, parseCoords, coordsField, bindCoords };
 })();
