@@ -47,7 +47,7 @@
     const msg = rates
       ? (rates.source === 'manual' ? 'Tipo manual' : 'BCE vía Frankfurter' + (rates.date ? ', ' + rates.date : '')) + (rates.source === 'mixed' ? ' + manual' : '') +
         (rates.rounding ? ' · yen redondeado al alza' + (rates.rounding === 'up1' ? ' +1' : '') : '') + (SV.online() ? '' : ' · sin conexión (último guardado)')
-      : 'Conéctate para obtener el tipo de cambio o defínelo en Ajustes.';
+      : 'Conéctate una vez para obtener el tipo de cambio (se guarda para usarlo sin conexión).';
     return UI.banner(rates ? 'neutral' : 'warn', 'swap', line, msg, { action: SV.online() ? UI.btn('Actualizar', { size: 'sm', variant: 'ghost', data: { act: 'refreshRates' } }) : '' });
   }
 

@@ -74,7 +74,7 @@
       out.push(UI.banner('warn', 'download', 'Haz una copia de seguridad', daysAgo === null ? 'Aún no has exportado ninguna. Tus datos sólo están en este móvil.' : 'La última es de hace ' + daysAgo + ' días.',
         { action: UI.btn('Exportar', { size: 'sm', variant: 'secondary', data: { act: 'exportJson' } }) }));
     if (Object.values(s.expenses).some((e) => e.currency !== s.trip.mainCurrency) && !SV.rates())
-      out.push(UI.banner('neutral', 'swap', 'Sin tipo de cambio', 'Conéctate o define un tipo manual en Ajustes para sumar gastos en otras monedas.', { data: { act: 'go', to: 'settings' } }));
+      out.push(UI.banner('neutral', 'swap', 'Sin tipo de cambio', 'Conéctate una vez para descargar el tipo de cambio y sumar gastos en otras monedas.', { data: { act: 'go', to: 'settings' } }));
     const err = S.lastError();
     if (err) out.unshift(UI.banner('accent', 'alert', 'Aviso', err));
     return out.join('');
@@ -167,6 +167,7 @@
     // Por la noche: cómo fue el día, arriba para que no se olvide.
     if (day && n.minutes >= 18 * 60) html += diaryCard(day);
     html += C.quickConverter();
+    html += talkCard();
     // Volver al hotel: la tarjeta para el taxista a un toque.
     const hotel = S.hotelTonight(n.date);
     if (hotel) {
@@ -176,6 +177,9 @@
         '<div class="row row--wrap">' + UI.btn('Para el taxista', { icon: 'car', size: 'sm', data: { act: 'taxi', id: hotel.id } }) +
         (hdir ? '<a class="btn btn--secondary btn--sm" href="' + esc(hdir) + '" target="_blank" rel="noopener">' + U.icon('nav', 16) + '<span>Volver al hotel</span></a>' : '') + '</div>', { cls: 'stack' });
     }
+    // Regalos que apuntaste para comprar en esta ciudad.
+    const gifts = city && C.giftsPendingIn ? C.giftsPendingIn(city.id) : [];
+    if (gifts.length) html += UI.banner('accent', 'gift', 'En ' + city.name + ': ' + gifts.length + (gifts.length === 1 ? ' regalo por comprar' : ' regalos por comprar'), gifts.map((g) => g.idea).join(' · '), { data: { act: 'go', to: 'gifts' } });
     const spentToday = C.moneySum(Object.values(s.expenses).filter((e) => e.date === n.date));
     const spentAll = C.moneySum(Object.values(s.expenses));
     const budget = s.trip.totalBudget;
@@ -194,6 +198,15 @@
     // En el Modo viaje manda lo de ahora: los apartados del viaje van al final.
     html += C.tripHub();
     return html;
+  }
+
+  /** «Para comunicarte» en el Modo viaje: tus frases ♥ a un toque y, si tienes, tus alergias. */
+  function talkCard() {
+    const favs = Object.values(S.get().phrases).filter((p) => p.favorite).slice(0, 6);
+    const allergy = C.hasAllergies && C.hasAllergies() ? UI.btn('Mis alergias', { icon: 'alert', size: 'sm', variant: 'secondary', data: { act: 'allergyCard' } }) : '';
+    const rows = favs.map((p) => '<div class="talk__row"><button type="button" class="talk__main" data-act="bigPhrase" data-id="' + p.id + '"><span class="talk__ja" lang="ja">' + esc(p.ja) + '</span><small class="muted">' + esc(p.es) + '</small></button>' + C.speakBtn(p.ja) + '</div>').join('');
+    return UI.section('Para comunicarte', UI.card((rows || '<p class="muted small">Marca con ♥ las frases que más uses y saldrán aquí, a un toque.</p>') +
+      '<div class="row row--wrap">' + allergy + UI.btn(favs.length ? 'Todas las frases' : 'Elegir frases', { icon: 'chat', size: 'sm', variant: 'ghost', data: { act: 'go', to: 'phrases' } }) + '</div>', { cls: 'stack-sm talk' }));
   }
 
   A.travelMode = function (el) {

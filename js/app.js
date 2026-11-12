@@ -255,9 +255,8 @@ JT.app = (function () {
   /* ── Avisos y refrescos periódicos ────────────────────────── */
 
   function tick() {
-    SV.dueReminders().forEach(function (r) {
-      if (!SV.showSystemNotification(r)) UI.toast('🔔 ' + r.title + ' — ' + r.body);
-    });
+    // Los recordatorios por notificación se quitaron en la v1.6.0 (no se usaban): los avisos útiles
+    // (tren de mañana, reserva en menos de 3 h, check-out) salen en Inicio.
     // Las pantallas que dependen de la hora se refrescan si no estás escribiendo ni en una hoja.
     const v = document.body.dataset.view;
     const busy = document.querySelector('.sheet-wrap') || (document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName));

@@ -341,10 +341,38 @@ JT.services = (function () {
     setTimeout(() => URL.revokeObjectURL(url), 2000);
   }
 
+  /** Guarda una copia (texto). En el móvil abre Compartir (p. ej. a Drive); en el ordenador, la descarga.
+   *  Hay que llamarla DIRECTAMENTE desde el toque de un botón: si antes hay un await, el navegador
+   *  bloquea navigator.share con NotAllowedError.
+   *  - Sólo el archivo, sin title ni text: con texto, Drive se queda el texto y tira el archivo.
+   *  - Siempre .txt: Chrome en Android no deja compartir .json (canShare dice que sí y luego falla).
+   *    Importar acepta .txt y .json, el contenido es el mismo.
+   *  - Sólo en pantallas táctiles: en Windows el menú de compartir no ofrece Drive.
+   *  - AbortError = cerraste el menú: no es un fallo. Cualquier otro error → se descarga.
+   *  onDone(modo) se llama con 'shared' o 'downloaded' cuando la copia sale de verdad. */
+  function saveCopy(baseName, content, onDone) {
+    const done = typeof onDone === 'function' ? onDone : function () {};
+    const fallback = function () { download(baseName + '.json', content, 'application/json'); done('downloaded'); };
+    const touch = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    if (touch && navigator.share && navigator.canShare && typeof File === 'function') {
+      const file = new File([content], baseName + '.txt', { type: 'text/plain' });
+      let ok = false;
+      try { ok = navigator.canShare({ files: [file] }); } catch (e) { ok = false; }
+      if (ok) {
+        navigator.share({ files: [file] })
+          .then(function () { done('shared'); })
+          .catch(function (err) { if (err && err.name === 'AbortError') return; fallback(); });
+        return;
+      }
+    }
+    fallback();
+  }
+
   function pickFile(accept) {
     return new Promise(function (resolve) {
       const input = document.createElement('input');
-      input.type = 'file'; input.accept = accept || 'application/json,.json';
+      // .txt también: en el móvil la copia se comparte como .txt (Android no deja compartir .json).
+      input.type = 'file'; input.accept = accept || 'application/json,.json,text/plain,.txt';
       input.onchange = async function () { const f = input.files && input.files[0]; resolve(f ? { name: f.name, text: await f.text() } : null); };
       input.click();
     });
@@ -442,7 +470,7 @@ JT.services = (function () {
     online, rates, refreshRatesIfStale, fetchRates, nearby, geocode, getPlacesKey, setPlacesKey,
     vaultAvailable, vaultExists, vaultUnlocked, vaultUnlock, vaultLock, vaultGet, vaultSet, vaultReset,
     notificationsSupported, requestNotifications, dueReminders, showSystemNotification,
-    copy, share, download, pickFile, openUrl, canSpeak, speak,
+    copy, share, download, saveCopy, pickFile, openUrl, canSpeak, speak,
     markExported, lastExport, storageUse, offlineCopy, persisted, requestPersist
   };
 })();

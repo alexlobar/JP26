@@ -128,7 +128,8 @@
       title: 'Para el taxista',
       body: '<div class="taxi" lang="ja"><p class="taxi__ask">この住所までお願いします</p><div class="taxi__name">' + esc(nameBig) + '</div>' + (addrBig ? '<div class="taxi__addr">' + esc(addrBig) + '</div>' : '') + '</div>' +
         '<p class="muted center small">Kono jūsho made onegai shimasu · «A esta dirección, por favor»</p>' +
-        (SV.canSpeak() ? '<p class="center">' + UI.btn('Escuchar', { icon: 'speaker', size: 'sm', variant: 'ghost', data: { act: 'speak', text: 'この住所までお願いします。' + (r.nameJa || '') } }) + '</p>' : '') +
+        '<p class="row row--center row--wrap">' + (SV.canSpeak() ? UI.btn('Escuchar', { icon: 'speaker', size: 'sm', variant: 'ghost', data: { act: 'speak', text: 'この住所までお願いします。' + (r.nameJa || '') } }) : '') +
+          UI.btn('Pantalla completa', { icon: 'expand', size: 'sm', variant: 'ghost', data: { act: 'showcase', ja: [nameBig, addrBig].filter(Boolean).join('\n'), sub: 'この住所までお願いします', es: 'Para el taxista: ' + r.name } }) + '</p>' +
         (r.nameJa || r.addressJa ? '<p class="faint center small">' + esc([r.name, loc.address].filter(Boolean).join(' · ')) + '</p>' : '') +
         (r.addressJa ? '' : UI.banner('warn', 'alert', 'Falta la dirección en japonés', 'Edita la reserva y pégala: muchos taxistas no leen bien el alfabeto latino.')) +
         (r.phone ? '<p class="center"><a class="btn btn--ghost btn--sm" href="tel:' + esc(r.phone.replace(/[^\d+]/g, '')) + '">' + U.icon('phone', 16) + '<span>' + esc(r.phone) + '</span></a></p>' : ''),
@@ -438,27 +439,56 @@
 
   const giftExpense = (id) => Object.values(S.get().expenses).find((e) => e.giftId === id) || null;
 
+  /** Regalos por comprar en una ciudad (para avisar cuando estás allí). */
+  function giftsPendingIn(cityId) {
+    return cityId ? Object.values(S.get().gifts).filter((g) => !g.bought && g.cityId === cityId) : [];
+  }
+  JT.cards.giftsPendingIn = giftsPendingIn;
+
+  /** Tarjeta de un regalo: todo a la vista (idea, notas, dónde, precio y si está en Gastos). */
+  function giftCard(x) {
+    const s = S.get(), city = x.cityId && s.cities[x.cityId], ex = giftExpense(x.id);
+    const pills = (city ? UI.pill(city.name, 'neutral', 'pin') : '') +
+      (x.cost ? UI.pill((x.bought ? '' : '~') + U.money(x.cost, x.currency || 'JPY'), 'neutral') : '') +
+      (ex ? UI.pill('En Gastos ✓', 'success') : x.bought ? UI.pill('Sin apuntar en Gastos', 'warn') : '');
+    return '<div class="card gift' + (x.bought ? ' is-bought' : '') + '">' +
+      '<button type="button" class="gift__check" data-act="toggleGift" data-id="' + x.id + '" aria-pressed="' + !!x.bought + '" aria-label="' + esc((x.bought ? 'Comprado: ' : 'Marcar comprado: ') + x.idea) + '"><span class="check__box">' + U.icon('check', 14) + '</span></button>' +
+      '<button type="button" class="gift__main" data-act="editGift" data-id="' + x.id + '">' +
+        '<span class="gift__idea">' + esc(x.idea) + '</span>' +
+        (x.notes ? '<span class="gift__notes">' + esc(x.notes) + '</span>' : '') +
+        (pills ? '<span class="pills">' + pills + '</span>' : '') + '</button></div>';
+  }
+
   V.gifts = function () {
-    const s = S.get(), list = Object.values(s.gifts).sort((a, b) => a.bought - b.bought || (a.createdAt || 0) - (b.createdAt || 0));
-    const bought = list.filter((g) => g.bought).length;
-    const head = UI.header({ back: true, title: 'Regalos', subtitle: list.length ? bought + ' de ' + list.length + ' comprados' : 'Para quién, qué y dónde', actions: UI.iconBtn('plus', 'Nuevo regalo', { act: 'newGift' }) });
-    if (!list.length) return { html: head + UI.empty('🎁', 'Sin regalos apuntados', 'Apunta para quién quieres traer algo y una idea. Al comprarlo, se apunta en Gastos con un toque.', UI.btn('Añadir regalo', { data: { act: 'newGift' } })) };
-    const spent = C.moneySum(list.map((g) => giftExpense(g.id)).filter(Boolean));
+    const s = S.get(), t = S.today(), st = JT.uiState.gifts || (JT.uiState.gifts = { show: 'all' });
+    const all = Object.values(s.gifts).sort((a, b) => a.bought - b.bought || (a.createdAt || 0) - (b.createdAt || 0));
+    const bought = all.filter((g) => g.bought).length;
+    const head = UI.header({ back: true, title: 'Regalos', subtitle: all.length ? bought + ' de ' + all.length + ' comprados' : 'Para quién, qué y dónde', actions: UI.iconBtn('plus', 'Nuevo regalo', { act: 'newGift' }) });
+    if (!all.length) return { html: head + UI.empty('🎁', 'Sin regalos apuntados', 'Apunta para quién quieres traer algo, una idea y notas (talla, color, tienda…). Al comprarlo, se apunta en Gastos con un toque.', UI.btn('Añadir regalo', { data: { act: 'newGift' } })) };
+    const spent = C.moneySum(all.map((g) => giftExpense(g.id)).filter(Boolean));
+    const pendingCost = C.moneySum(all.filter((g) => !g.bought && g.cost).map((g) => ({ amount: g.cost, currency: g.currency || 'JPY' })));
+    let html = head + UI.card('<div class="stats">' + UI.stat('Comprados', bought + ' / ' + all.length, '', true) + UI.stat('Gastado', spent.total ? spent.text : '—') + UI.stat('Falta (aprox.)', pendingCost.total ? pendingCost.text : '—') + '</div>' +
+      UI.progress(bought / all.length, 'success'), { cls: 'stack' });
+    // Durante el viaje: lo que toca comprar en la ciudad donde estás.
+    const here = t.phase === 'during' && t.city ? giftsPendingIn(t.city.id) : [];
+    if (here.length) html += UI.banner('accent', 'gift', 'En ' + t.city.name + ': ' + here.length + (here.length === 1 ? ' regalo por comprar' : ' regalos por comprar'), here.map((g) => g.idea + (g.person ? ' (' + g.person + ')' : '')).join(' · '));
+    html += '<div class="seg" role="tablist">' + [['all', 'Todos'], ['pending', 'Por comprar · ' + (all.length - bought)], ['bought', 'Comprados · ' + bought]].map((o) =>
+      '<button type="button" role="tab" class="seg__item' + (st.show === o[0] ? ' is-on' : '') + '" aria-selected="' + (st.show === o[0]) + '" data-act="giftShow" data-value="' + o[0] + '">' + o[1] + '</button>').join('') + '</div>';
+    const list = all.filter((g) => st.show === 'all' || (st.show === 'bought' ? g.bought : !g.bought));
+    if (!list.length) return { html: html + '<p class="muted center">' + (st.show === 'bought' ? 'Aún no has comprado ninguno.' : 'Todo comprado 🎉') + '</p>' };
     const people = {};
     list.forEach((g) => { const k = (g.person || '').trim() || 'Sin asignar'; (people[k] = people[k] || []).push(g); });
-    let html = head + UI.card('<div class="stats">' + UI.stat('Comprados', bought + ' / ' + list.length) + UI.stat('Gastado en regalos', spent.total ? spent.text : '—') + '</div>' + UI.progress(bought / list.length, 'success'), { cls: 'stack' });
-    html += Object.keys(people).sort((a, b) => (a === 'Sin asignar') - (b === 'Sin asignar') || a.localeCompare(b, 'es')).map(function (p) {
-      const g = people[p], done = g.filter((x) => x.bought).length;
-      return UI.section(p, UI.card(g.map(function (x) {
-        const city = x.cityId && s.cities[x.cityId], ex = giftExpense(x.id);
-        const sub = [city ? 'En ' + city.name : '', x.cost ? (x.bought ? '' : '~') + U.money(x.cost, x.currency || 'JPY') : '', ex ? 'En Gastos ✓' : ''].filter(Boolean).join(' · ');
-        return '<div class="check' + (x.bought ? ' is-done' : '') + '"><button type="button" class="check__main gift__toggle" data-act="toggleGift" data-id="' + x.id + '" aria-pressed="' + !!x.bought + '" aria-label="' + esc((x.bought ? 'Comprado: ' : 'Marcar comprado: ') + x.idea) + '">' +
-          '<span class="check__box">' + U.icon('check', 14) + '</span></button>' +
-          '<button type="button" class="gift__body" data-act="editGift" data-id="' + x.id + '"><span class="gift__idea">' + esc(x.idea) + '</span>' + (sub ? '<small class="muted">' + esc(sub) + '</small>' : '') + '</button></div>';
-      }).join(''), { cls: 'card--list' }), '<small class="muted">' + done + '/' + g.length + '</small>');
+    const total = (p) => all.filter((g) => ((g.person || '').trim() || 'Sin asignar') === p);
+    html += Object.keys(people).sort((a, b) => (a === 'Sin asignar') - (b === 'Sin asignar') || a.localeCompare(b, 'es')).map(function (p, i) {
+      const mine = total(p), done = mine.filter((x) => x.bought).length;
+      const tone = ['indigo', 'pink', 'teal', 'orange', 'violet', 'blue', 'green', 'amber'][i % 8];
+      return '<section class="section"><div class="section__hdr"><h2 class="gift__person"><span class="avatar tone-' + tone + '" aria-hidden="true">' + esc(p.charAt(0).toUpperCase()) + '</span>' + esc(p) + '</h2>' +
+        '<small class="' + (done === mine.length ? 'success' : 'muted') + '">' + (done === mine.length ? '✓ Todo comprado' : done + ' de ' + mine.length) + '</small></div>' +
+        people[p].map(giftCard).join('') + '</section>';
     }).join('');
     return { html: html };
   };
+  A.giftShow = (el) => { (JT.uiState.gifts || (JT.uiState.gifts = {})).show = el.dataset.value; JT.app.render(); };
 
   A.toggleGift = async function (el) {
     const g = S.get().gifts[el.dataset.id];
@@ -479,10 +509,10 @@
       id: 'fGift', title: ex ? 'Editar regalo' : 'Nuevo regalo',
       body: UI.field('Para quién', '<input class="input" name="person" list="giftPeople" value="' + esc(g.person || '') + '" placeholder="p.ej. Mamá"' + (ex ? '' : ' autofocus') + ' autocomplete="off"><datalist id="giftPeople">' + people.map((p) => '<option value="' + esc(p) + '">').join('') + '</datalist>') +
         UI.field('Idea', UI.input('idea', g.idea || '', { placeholder: 'p.ej. Té matcha de Uji' })) +
+        UI.field('Notas', UI.textarea('notes', g.notes || '', 'Talla, color, marca, tienda, foto que te enseñaron…'), { optional: true, hint: 'Se ven en la lista, debajo de la idea.' }) +
         '<div class="row row--top">' + UI.field('Precio', UI.input('cost', g.cost ? String(g.cost).replace('.', ',') : '', { inputmode: 'decimal', placeholder: 'aprox.' }), { optional: true }) + UI.field('Moneda', UI.chips('currency', D.CURRENCIES.map((c) => ({ value: c, label: c })), g.currency || 'JPY')) + '</div>' +
         UI.field('Dónde comprarlo', UI.chips('cityId', C.cityOptions(), g.cityId, { allowNone: true, noneLabel: 'Donde sea' }), { optional: true }) +
         UI.chipsMulti('bought', [{ value: '1', label: '✓ Ya comprado' }], g.bought ? ['1'] : []) +
-        UI.field('Notas', UI.textarea('notes', g.notes || '', 'Talla, color, tienda…'), { optional: true }) +
         (ex2 ? UI.listRow({ icon: 'wallet', title: U.money(ex2.amount, ex2.currency), sub: 'Apuntado en Gastos · toca para verlo', data: { act: 'editExpense', id: ex2.id } }) : ''),
       onDelete: ex ? async () => { if (!(await UI.confirm('¿Eliminar regalo?', ex.idea))) return false; S.remove('gifts', ex.id); return true; } : null,
       onSave: function (f) {
@@ -505,7 +535,7 @@
     const jpyEur = U.convert(1, 'JPY', 'EUR', rates);
     const conv = UI.card('<small class="eyebrow muted">💱 CONVERSOR JPY → EUR</small>' + (jpyEur
       ? '<input class="input" inputmode="decimal" value="1000" data-input="convJpy" data-rate="' + jpyEur + '" aria-label="Yenes"><h2 class="title" id="convOut">' + U.money(1000, 'JPY') + ' ≈ ' + U.money(1000 * jpyEur, 'EUR') + '</h2><small class="faint">' + (rates.source === 'manual' ? 'Tipo manual' : 'BCE' + (rates.date ? ' · ' + rates.date : '') + (rates.rounding ? ' · yen redondeado al alza' : '')) + '</small>'
-      : '<p class="muted">Sin tipo de cambio: conéctate una vez para descargarlo (se guarda para usarlo sin conexión) o defínelo en Ajustes.</p>'), { tone: 'muted', cls: 'stack-sm' });
+      : '<p class="muted">Sin tipo de cambio: conéctate una vez para descargarlo (se guarda para usarlo sin conexión).</p>'), { tone: 'muted', cls: 'stack-sm' });
     return { html: UI.header({ back: true, title: 'Información útil', actions: UI.iconBtn('plus', 'Nueva ficha', { act: 'newInfo' }) }) +
       UI.banner('neutral', 'info', 'Orientativo, no oficial', 'Verifica normativa y datos vigentes en fuentes oficiales (JNTO, embajada, aerolínea). Puedes editar cada ficha.') + conv +
       list.map((a) => '<details class="card info"><summary><span aria-hidden="true">' + esc(a.icon) + '</span><strong class="grow">' + esc(a.title) + '</strong>' + U.icon('down', 16) + '</summary><p class="pre">' + esc(a.body) + '</p>' + UI.btn('Editar', { icon: 'edit', size: 'sm', variant: 'ghost', data: { act: 'editInfo', id: a.id } }) + '</details>').join('') };
@@ -536,23 +566,41 @@
   V.phrases = function () {
     const s = S.get(), st = JT.uiState.phrases, q = (st.q || '').trim(), nq = U.normalize(q);
     const all = Object.values(s.phrases);
-    const cats = Array.from(new Set(all.map((p) => p.category)));
+    // Categorías en el orden de la lista de serie (las nuevas, como «No hablo japonés», justo después de Básicas); las tuyas al final.
+    const ORDER = Array.from(new Set(D.PHRASES.map((p) => p[0]))), rank = (c) => (ORDER.indexOf(c) > -1 ? ORDER.indexOf(c) : 999);
+    const cats = Array.from(new Set(all.map((p) => p.category))).sort((a, b) => rank(a) - rank(b));
     const list = all.filter((p) => !st.cat || (st.cat === 'fav' ? p.favorite : p.category === st.cat))
       .filter((p) => !nq || U.normalize(p.es + ' ' + p.romaji).indexOf(nq) > -1 || p.ja.indexOf(q) > -1);
     const g = {};
     list.forEach((p) => (g[p.category] = (g[p.category] || []).concat(p)));
     return { html: UI.header({ back: true, title: 'Frases', subtitle: 'Funciona sin conexión · toca una frase para verla en grande', actions: UI.iconBtn('plus', 'Nueva frase', { act: 'newPhrase' }) }) +
       JT.searchBox('phrases', 'Buscar en español o romaji…') + JT.fchips('phrases', 'cat', [{ value: 'fav', label: '♥ Favoritas' }].concat(cats.map((c) => ({ value: c, label: c }))), 'Todas') +
-      Object.keys(g).map((c) => UI.section(c, g[c].map((p) => '<div class="card card--tap phrase" tabindex="0" data-act="bigPhrase" data-id="' + p.id + '"><div class="grow"><small class="muted">' + esc(p.es) + '</small><div class="phrase__ja">' + esc(p.ja) + '</div><span class="accent">' + esc(p.romaji) + '</span></div>' +
+      Object.keys(g).sort((a, b) => rank(a) - rank(b)).map((c) => UI.section(c, g[c].map((p) => '<div class="card card--tap phrase" tabindex="0" data-act="bigPhrase" data-id="' + p.id + '"><div class="grow"><small class="muted">' + esc(p.es) + '</small><div class="phrase__ja">' + esc(p.ja) + '</div><span class="accent">' + esc(p.romaji) + '</span></div>' +
         '<div class="phrase__acts">' + C.speakBtn(p.ja) + '<button type="button" class="iconbtn fav' + (p.favorite ? ' is-on' : '') + '" aria-pressed="' + !!p.favorite + '" aria-label="Favorita" data-act="fav" data-col="phrases" data-id="' + p.id + '">' + U.icon('heart', 20) + '</button></div></div>').join(''))).join('') };
   };
   A.bigPhrase = function (el) {
     const p = S.get().phrases[el.dataset.id];
     const voice = SV.canSpeak();
+    // Al girar el móvil a horizontal con la frase abierta, pasa sola a pantalla completa (y vuelve al girarlo de nuevo).
+    // Se mira con «resize» además de matchMedia: algunos navegadores no avisan del cambio de orientación.
+    const mq = window.matchMedia ? window.matchMedia('(orientation: landscape)') : null;
+    let rotated = null, wasLandscape = window.innerWidth > window.innerHeight;
+    const onRotate = function () {
+      const land = window.innerWidth > window.innerHeight;
+      if (land === wasLandscape) return;
+      wasLandscape = land;
+      if (land && !rotated && !document.querySelector('.showcase')) rotated = C.showcase({ ja: p.ja, sub: p.romaji, es: p.es }, { fullscreen: false, onClose: () => (rotated = null) });
+      else if (!land && rotated) rotated();
+    };
     const close = UI.sheet({ title: p.es, body: '<div class="bigphrase" lang="ja">' + esc(p.ja) + '</div><p class="title accent center">' + esc(p.romaji) + '</p>' +
-        (voice ? '<div class="row row--center">' + UI.btn('Escuchar', { icon: 'speaker', variant: 'secondary', data: { act: 'speak', text: p.ja } }) + UI.btn('Despacio', { icon: 'speaker', variant: 'ghost', data: { act: 'speak', text: p.ja, slow: '1' } }) + '</div>' : ''),
+        '<div class="row row--center row--wrap">' + (voice ? UI.btn('Escuchar', { icon: 'speaker', variant: 'secondary', data: { act: 'speak', text: p.ja } }) + UI.btn('Despacio', { icon: 'speaker', variant: 'ghost', data: { act: 'speak', text: p.ja, slow: '1' } }) : '') +
+          UI.btn('Pantalla completa', { icon: 'expand', variant: 'ghost', data: { act: 'showcase', ja: p.ja, sub: p.romaji, es: p.es } }) + '</div>' +
+        '<p class="faint small center">Consejo: gira el móvil y la frase ocupará toda la pantalla.</p>',
       footer: '<div class="row">' + UI.btn('Copiar', { icon: 'copy', variant: 'secondary', block: true, data: { cp: '1' } }) + (p.isCustom ? UI.btn('Eliminar', { icon: 'trash', variant: 'danger', data: { rm: '1' } }) : '') + '</div>',
+      onClose: function () { if (mq && mq.removeEventListener) mq.removeEventListener('change', onRotate); window.removeEventListener('resize', onRotate); if (rotated) rotated(); },
       onMount: function (root) {
+        if (mq && mq.addEventListener) mq.addEventListener('change', onRotate);
+        window.addEventListener('resize', onRotate);
         root.querySelector('[data-cp]').addEventListener('click', async () => { await SV.copy(p.ja); UI.toast('Copiado'); });
         const rm = root.querySelector('[data-rm]');
         if (rm) rm.addEventListener('click', async () => { if (await UI.confirm('¿Eliminar frase?', p.es)) { S.remove('phrases', p.id); close(); } });
@@ -611,6 +659,41 @@
       .map((p) => '<div class="row"><div class="sos__phrase grow"><span lang="ja">' + p[0] + '</span><small>' + esc(p[1]) + ' · ' + esc(p[2]) + '</small></div>' + C.speakBtn(p[0]) + '</div>').join(''), { cls: 'stack' }));
     html += '<p class="faint small">Esta ficha se guarda sin cifrar para poder verla sin PIN en una emergencia. No pongas aquí el pasaporte ni tarjetas: eso va en Documentos, cifrado.</p>';
     return { html: html };
+  };
+
+  /* ── Mis alergias: para enseñar en un restaurante, a pantalla completa ── */
+
+  /** Alergias de la ficha: { list: [[key, es, ja, romaji]], other } o null si no hay ninguna. */
+  function myAllergies() {
+    const e = S.get().emergency || {};
+    const list = D.ALLERGENS.filter((a) => (e.allergies || []).indexOf(a[0]) > -1);
+    return list.length || e.allergyOther ? { list: list, other: e.allergyOther || '' } : null;
+  }
+  JT.cards.hasAllergies = () => !!myAllergies();
+
+  A.allergyCard = function () {
+    const al = myAllergies();
+    if (!al) {
+      return UI.sheet({ title: 'Mis alergias', body: UI.empty('🥜', 'No hay alergias en tu ficha', 'Añádelas en la ficha de emergencia y aquí saldrán en japonés, listas para enseñar en un restaurante.'),
+        footer: UI.btn('Rellenar ficha', { icon: 'edit', block: true, data: { act: 'editEmergency' } }) });
+    }
+    const ja = al.list.map((a) => a[2]).join('、'), romaji = al.list.map((a) => a[3]).join(', '), es = al.list.map((a) => a[1].toLowerCase()).join(', ');
+    // Frases montadas con tus alergias (gramática fija: «この料理に X は入っていますか？»).
+    const phrases = ja ? [
+      ['この料理に' + ja + 'は入っていますか？', 'Kono ryōri ni ' + romaji + ' wa haitte imasu ka?', '¿Este plato lleva ' + es + '?'],
+      [ja + 'が入っていない料理はありますか？', romaji + ' ga haitte inai ryōri wa arimasu ka?', '¿Tienen algún plato sin ' + es + '?'],
+      ['少しでも食べられません', 'Sukoshi demo taberaremasen', 'No puedo comer ni un poco']
+    ] : [];
+    const main = (ja ? '次のものにアレルギーがあります：\n' + ja : '');
+    UI.sheet({
+      title: 'Mis alergias',
+      body: (ja ? '<div class="sos__alert" lang="ja"><p>次のものにアレルギーがあります：</p><strong>' + esc(ja) + '</strong><small>Tengo alergia a: ' + esc(es) + '</small></div>' : '') +
+        (al.other ? UI.banner('warn', 'alert', 'También: ' + al.other, 'Esto no está traducido (lo escribiste tú): enséñalo con el traductor del móvil.') : '') +
+        phrases.map((p) => '<div class="card stack-sm"><div class="row row--top"><div class="grow"><div class="phrase__ja" lang="ja">' + esc(p[0]) + '</div><span class="accent small">' + esc(p[1]) + '</span><small class="muted block">' + esc(p[2]) + '</small></div>' +
+          C.speakBtn(p[0]) + UI.iconBtn('expand', 'Pantalla completa', { act: 'showcase', ja: p[0], sub: p[1], es: p[2] }, { size: 20 }) + '</div></div>').join(''),
+      footer: '<div class="row">' + (main ? UI.btn('Enseñar a pantalla completa', { icon: 'expand', block: true, data: { act: 'showcase', ja: main, sub: 'Tengo alergia a: ' + es, es: 'Mis alergias' } }) : '') +
+        UI.btn('Editar', { icon: 'edit', variant: 'secondary', data: { act: 'editEmergency' } }) + '</div>'
+    });
   };
 
   F.emergency = function () {
@@ -897,66 +980,73 @@
     };
   };
 
+  /* Ajustes plegados: cada apartado se abre al tocarlo y recuerda si lo dejaste abierto. */
+  const FOLD = {
+    'Viaje': ['calendar', 'blue', 'Nombre, fechas, moneda y presupuesto'],
+    'Viajeros': ['users', 'violet', 'Quién viaja y quién eres tú'],
+    'Apariencia y unidades': ['eye', 'pink', 'Tema, tamaño de letra y distancias'],
+    'Modo viaje': ['nav', 'red', 'Cuándo se activa y simular un día'],
+    'Cambio de moneda': ['swap', 'green', 'Redondeo del yen y tipo del BCE'],
+    'Datos': ['download', 'amber', 'Copia de seguridad, importar y borrar'],
+    'Esta instalación': ['info', 'slate', 'Versión, espacio y si está lista para el viaje']
+  };
+  function fold(title, content) {
+    const m = FOLD[title] || ['settings', 'slate', ''], open = (JT.uiState.settingsOpen || {})[title];
+    return '<details class="fold" data-fold="' + esc(title) + '"' + (open ? ' open' : '') + '><summary class="fold__sum"><span class="fold__icon tone-' + m[1] + '">' + U.icon(m[0], 18) + '</span>' +
+      '<span class="grow"><strong class="block">' + esc(title) + '</strong><small class="muted">' + esc(title === 'Esta instalación' ? 'v' + U.VERSION + ' · ' + m[2] : m[2]) + '</small></span>' + U.icon('down', 18) + '</summary>' +
+      '<div class="fold__body">' + content + '</div></details>';
+  }
+
   V.settings = function () {
     const s = S.get(), t = s.trip, st = s.settings, rates = SV.rates();
     const seg = (act, value, opts) => '<div class="seg">' + opts.map((o) => '<button type="button" class="seg__item' + (o[0] === value ? ' is-on' : '') + '" aria-pressed="' + (o[0] === value) + '" data-act="' + act + '" data-value="' + o[0] + '">' + o[1] + '</button>').join('') + '</div>';
     const travelers = Object.values(s.travelers).sort((a, b) => a.createdAt - b.createdAt);
-    const pending = L.reminders(st.notifyLeadMinutes, Date.now()).length;
     let html = UI.header({ back: true, title: 'Configuración' });
 
-    html += UI.section('Viaje', UI.card('<form id="fTrip" class="stack">' +
+    html += fold('Viaje', UI.card('<form id="fTrip" class="stack">' +
       UI.field('Nombre del viaje', UI.input('name', t.name)) +
       '<div class="row row--top">' + UI.field('Inicio', UI.input('startDate', t.startDate, { type: 'date' })) + UI.field('Fin', UI.input('endDate', t.endDate, { type: 'date' })) + '</div>' +
       UI.field('Moneda principal', UI.chips('mainCurrency', D.CURRENCIES.map((c) => ({ value: c, label: c })), t.mainCurrency)) +
       UI.field('Presupuesto total (' + t.mainCurrency + ')', UI.input('totalBudget', t.totalBudget || '', { inputmode: 'decimal' }), { optional: true }) +
       UI.btn('Guardar viaje', { type: 'submit', variant: 'secondary' }) + '</form>'));
 
-    html += UI.section('Viajeros', UI.card(travelers.map((x) => '<div class="row"><span class="dot" style="background:' + esc(x.color) + '"></span><strong class="grow">' + esc(x.name) + '</strong>' +
+    html += fold('Viajeros', UI.card(travelers.map((x) => '<div class="row"><span class="dot" style="background:' + esc(x.color) + '"></span><strong class="grow">' + esc(x.name) + '</strong>' +
       (x.isMe ? UI.pill('Yo', 'accent') : UI.btn('Soy yo', { size: 'sm', variant: 'ghost', data: { act: 'setMe', id: x.id } })) + UI.iconBtn('trash', 'Eliminar ' + x.name, { act: 'delTraveler', id: x.id }, { size: 18 }) + '</div>').join('') +
       '<form id="fTraveler" class="row"><input class="input" name="name" placeholder="Nombre del viajero" aria-label="Nombre del viajero">' + UI.btn('Añadir', { type: 'submit', size: 'sm' }) + '</form>' +
       '<small class="faint">Con 2 o más viajeros puedes indicar quién pagó cada gasto y repartirlo.</small>', { cls: 'stack' }));
 
-    html += UI.section('Apariencia y unidades', UI.card(seg('setTheme', st.theme, [['system', 'Sistema'], ['light', 'Claro'], ['dark', 'Oscuro']]) +
+    html += fold('Apariencia y unidades', UI.card(seg('setTheme', st.theme, [['system', 'Sistema'], ['light', 'Claro'], ['dark', 'Oscuro']]) +
       '<span class="field__label">Tamaño de letra</span>' + seg('setTextSize', st.textSize || 'normal', [['normal', 'Normal'], ['large', 'Grande'], ['xl', 'Muy grande']]) +
       '<small class="muted">Agranda toda la app (textos, botones e iconos) para leer mejor en la calle o enseñar la pantalla. Sólo en este dispositivo.</small>' +
       seg('setUnits', st.units, [['km', 'Kilómetros'], ['mi', 'Millas']]), { cls: 'stack' }));
 
-    html += UI.section('Modo viaje', UI.card(seg('setTravel', st.travelMode, [['auto', 'Automático'], ['on', 'Siempre'], ['off', 'Nunca']]) +
+    html += fold('Modo viaje', UI.card(seg('setTravel', st.travelMode, [['auto', 'Automático'], ['on', 'Siempre'], ['off', 'Nunca']]) +
       '<small class="muted">Automático: Inicio cambia al Modo viaje durante las fechas del viaje.</small>' +
       '<form id="fSim" class="stack"><span class="field__label">Simular fecha y hora (para probar)</span><div class="row row--top">' + UI.field('Fecha', UI.input('simulatedDate', st.simulatedDate || '', { type: 'date' })) + UI.field('Hora', UI.input('simulatedTime', st.simulatedTime || '', { type: 'time' }), { optional: true }) + '</div>' +
       '<div class="row row--wrap">' + UI.btn('Aplicar', { type: 'submit', size: 'sm', variant: 'secondary' }) + UI.btn('Simular un día con plan a las 11:45', { size: 'sm', variant: 'secondary', data: { act: 'simulate' } }) + (st.simulatedDate ? UI.btn('Usar fecha real', { size: 'sm', variant: 'danger', data: { act: 'clearSim' } }) : '') + '</div></form>' +
       (st.simulatedDate ? UI.banner('warn', 'clock', 'Simulando ' + st.simulatedDate + (st.simulatedTime ? ' ' + st.simulatedTime : ''), 'Afecta a «hoy», al Modo viaje y a «abierto ahora».') : ''), { cls: 'stack' }));
 
-    html += UI.section('Recordatorios', UI.card((SV.notificationsSupported() ? '' : UI.banner('neutral', 'bell', 'Este navegador no muestra notificaciones', 'Los avisos aparecerán dentro de la app.')) +
-      seg('setNotif', st.notificationsEnabled ? 'on' : 'off', [['off', 'Desactivados'], ['on', 'Activados']]) +
-      '<span class="field__label">Avisar antes de reservas y trenes</span>' + UI.filterChips([15, 30, 60, 90].map((m) => ({ value: m, label: m + ' min' })), st.notifyLeadMinutes, 'setLead', { scroll: false }) +
-      '<small class="muted">Sólo avisos útiles: reservas con hora, trenes y vuelos (la víspera a las 20:00 y antes de salir), check-in online 24 h antes y entrada al hotel. ' + pending + ' próximos. ' +
-      'Una web no puede avisar con la app cerrada: los avisos salen mientras está abierta (o en segundo plano reciente).</small>', { cls: 'stack' }));
-
-    html += UI.section('APIs y datos externos', UI.card('<span class="field__label">Restaurantes cercanos</span>' +
-      UI.filterChips([{ value: 'auto', label: 'Automático' }, { value: 'google', label: 'Google Places' }, { value: 'osm', label: 'OpenStreetMap' }, { value: 'mock', label: 'Mock (pruebas)' }], st.placesProvider, 'setProvider', { scroll: false }) +
-      '<small class="muted">Automático usa Google Places si hay clave; si no, OpenStreetMap (gratis, sin clave, sin valoraciones). Mock genera datos inventados y etiquetados, sólo para desarrollo.</small>' +
-      '<form id="fKey" class="stack">' + UI.field('Clave de Google Places API (New)', '<input class="input" name="key" type="password" autocomplete="off" placeholder="' + (SV.getPlacesKey() ? '•••••••• (guardada)' : 'AIza…') + '">', { optional: true, hint: 'Se guarda sólo en este navegador; no va en el código ni en las exportaciones. Restríngela en Google Cloud a tu dominio de GitHub Pages.' }) +
-      '<div class="row">' + UI.btn('Guardar clave', { type: 'submit', size: 'sm' }) + (SV.getPlacesKey() ? UI.btn('Borrar clave', { size: 'sm', variant: 'danger', data: { act: 'delKey' } }) : '') + '</div></form>' +
-      '<hr><span class="field__label">Redondeo del yen</span>' +
+    // Sólo lo que se usa: el redondeo del yen. Recordatorios y APIs se quitaron en la v1.6.0 (no se usaban).
+    const manualSet = Object.keys(st.manualRates || {}).length > 0;
+    html += fold('Cambio de moneda', UI.card('<span class="field__label">Redondeo del yen</span>' +
       UI.filterChips([{ value: 'up', label: 'Al alza' }, { value: 'up1', label: 'Al alza +1 ¥' }, { value: 'exact', label: 'Exacto' }], st.yenRounding, 'setYenRounding', { scroll: false }) +
-      '<small class="muted">' + esc(yenRoundingExample(rates, t.mainCurrency)) + ' Se aplica al tipo del BCE, no a los manuales.</small>' +
-      '<hr><span class="field__label">Tipo de cambio manual (opcional)</span><small class="muted">Por defecto: tipo de referencia del BCE (Frankfurter, sin clave)' + (rates && rates.date ? ', último ' + rates.date : '') + '. Un valor manual tiene prioridad.</small>' +
-      '<form id="fRates" class="stack">' + D.CURRENCIES.filter((c) => c !== t.mainCurrency).map((c) => UI.field('1 ' + c + ' = ? ' + t.mainCurrency, UI.input('rate_' + c, st.manualRates[c] || '', { inputmode: 'decimal', placeholder: 'Automático' }), { optional: true })).join('') +
-      '<div class="row">' + UI.btn('Guardar tipos', { type: 'submit', size: 'sm', variant: 'secondary' }) + (SV.online() ? UI.btn('Actualizar BCE', { size: 'sm', variant: 'ghost', icon: 'refresh', data: { act: 'refreshRates' } }) : '') + '</div></form>', { cls: 'stack' }));
+      '<small class="muted">' + esc(yenRoundingExample(rates, t.mainCurrency)) + '</small>' +
+      '<small class="faint">Tipo de referencia del BCE' + (rates && rates.date ? ' del ' + esc(rates.date) : '') + '. Se guarda para usarlo sin conexión.</small>' +
+      '<div class="row row--wrap">' + (SV.online() ? UI.btn('Actualizar tipo de cambio', { size: 'sm', variant: 'ghost', icon: 'refresh', data: { act: 'refreshRates' } }) : '') +
+        (manualSet ? UI.btn('Quitar tipos manuales antiguos', { size: 'sm', variant: 'ghost', data: { act: 'clearManualRates' } }) : '') + '</div>', { cls: 'stack-sm' }));
 
     const lastExp = SV.lastExport();
-    html += UI.section('Datos', UI.card(UI.btn('Exportar todo (JSON)', { icon: 'download', variant: 'secondary', block: true, data: { act: 'exportJson' } }) +
-      '<small class="muted">' + (lastExp ? 'Última copia: ' + new Date(lastExp).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Todavía no has hecho ninguna copia.') + ' Guárdala fuera del móvil (Drive, correo…).</small>' +
+    html += fold('Datos', UI.card(UI.btn('Exportar copia de seguridad', { icon: 'download', variant: 'secondary', block: true, data: { act: 'exportJson' } }) +
+      '<small class="muted">' + (lastExp ? 'Última copia: ' + new Date(lastExp).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Todavía no has hecho ninguna copia.') + ' En el móvil se abre Compartir: elige Drive (se guarda como .txt). En el ordenador se descarga un .json. Importar acepta los dos.</small>' +
       UI.btn('Exportar gastos (CSV)', { icon: 'download', variant: 'secondary', block: true, data: { act: 'exportCsv' } }) +
-      UI.btn('Importar (JSON)', { icon: 'upload', variant: 'secondary', block: true, data: { act: 'importJson' } }) +
+      UI.btn('Importar copia (.json o .txt)', { icon: 'upload', variant: 'secondary', block: true, data: { act: 'importJson' } }) +
       '<small class="faint">Los datos sensibles cifrados de Documentos no se incluyen en la exportación. PC y móvil no se sincronizan: usa exportar e importar para pasar datos.</small><hr>' +
       (t.isSample ? UI.btn('Quitar datos de ejemplo', { icon: 'flag', variant: 'soft', block: true, data: { act: 'removeSample' } }) : UI.btn('Cargar viaje de ejemplo', { icon: 'flag', variant: 'soft', block: true, data: { act: 'loadSample' } })) +
       UI.btn('Empezar un viaje nuevo', { icon: 'plus', variant: 'soft', block: true, data: { act: 'newTrip' } }) +
       UI.btn('Borrar todos los datos', { icon: 'trash', variant: 'danger', block: true, data: { act: 'wipe' } }), { cls: 'stack' }));
 
     // Versión, tamaño, espacio y protección (receta de Plantillas/Version-y-espacio.md); se rellena en mount().
-    html += UI.section('Esta instalación', UI.card(UI.btn('¿Listo para el viaje? Repasar', { icon: 'check', variant: 'secondary', block: true, data: { act: 'go', to: 'ready' } }) + (JT.uiState.installPrompt ? UI.btn('Instalar la app en este dispositivo', { icon: 'download', variant: 'secondary', block: true, data: { act: 'installApp' } }) : '') +
+    html += fold('Esta instalación', UI.card(UI.btn('¿Listo para el viaje? Repasar', { icon: 'check', variant: 'secondary', block: true, data: { act: 'go', to: 'ready' } }) + (JT.uiState.installPrompt ? UI.btn('Instalar la app en este dispositivo', { icon: 'download', variant: 'secondary', block: true, data: { act: 'installApp' } }) : '') +
       '<div class="build"><span class="build__left"><span>Versión</span><small id="buildQuota"></small><small id="buildPersist" hidden></small></span><strong class="mono build__right" id="buildCache">—</strong></div>' +
       '<p class="small" id="buildHint" hidden></p>' +
       (S.isWritable() ? '' : '<p class="small warn">El navegador está BLOQUEANDO el almacenamiento: no se guardan cambios.</p>') +
@@ -992,28 +1082,11 @@
           S.setSettings({ simulatedDate: f.simulatedDate || '', simulatedTime: f.simulatedTime || '' });
           UI.toast(f.simulatedDate ? 'Simulación aplicada' : 'Usando la fecha real');
         });
-        root.querySelector('#fKey').addEventListener('submit', function (ev) {
-          ev.preventDefault();
-          const k = ev.target.key.value.trim();
-          if (!k) return;
-          SV.setPlacesKey(k);
-          UI.toast('Clave guardada en este navegador');
-          JT.app.render();
-        });
-        root.querySelector('#fRates').addEventListener('submit', function (ev) {
-          ev.preventDefault();
-          const f = UI.formData(ev.target), manual = {};
-          for (const c of D.CURRENCIES) {
-            const v = f['rate_' + c];
-            if (v === undefined || v === '') continue;
-            const n = Number(String(v).replace(',', '.'));
-            if (!(n > 0)) return UI.toast('Tipo no válido para ' + c);
-            manual[c] = n;
-          }
-          S.setSettings({ manualRates: manual });
-          UI.toast('Tipos guardados');
-        });
         renderBuildInfo(root);
+        // Recordar qué apartados están abiertos (al guardar algo se vuelve a pintar la pantalla).
+        root.querySelectorAll('details.fold').forEach((d) => d.addEventListener('toggle', function () {
+          (JT.uiState.settingsOpen = JT.uiState.settingsOpen || {})[d.dataset.fold] = d.open;
+        }));
       }
     };
   };
@@ -1100,6 +1173,7 @@
   A.clearSim = () => S.setSettings({ simulatedDate: '', simulatedTime: '' });
   A.setLead = (el) => S.setSettings({ notifyLeadMinutes: Number(el.dataset.value) });
   A.setProvider = (el) => S.setSettings({ placesProvider: el.dataset.value });
+  A.clearManualRates = () => { S.setSettings({ manualRates: {} }); UI.toast('Se usa el tipo del BCE'); };
   A.delKey = () => { SV.setPlacesKey(''); UI.toast('Clave borrada'); JT.app.render(); };
   A.setNotif = async function (el) {
     if (el.dataset.value === 'on' && SV.notificationsSupported()) await SV.requestNotifications();
@@ -1107,10 +1181,15 @@
   };
   A.setMe = (el) => { Object.values(S.get().travelers).forEach((x) => x.isMe && S.update('travelers', x.id, { isMe: false })); S.update('travelers', el.dataset.id, { isMe: true }); };
   A.delTraveler = async (el) => { const x = S.get().travelers[el.dataset.id]; if (await UI.confirm('¿Eliminar a ' + x.name + '?', 'Sus gastos se conservarán sin «quién pagó».')) S.remove('travelers', x.id); };
+  /** Copia de seguridad: en el móvil, Compartir → Drive (.txt); en el ordenador se descarga (.json).
+      Sin awaits antes de saveCopy: tiene que ir en el mismo toque del botón. */
   A.exportJson = function () {
-    SV.download('japon-travel-' + new Date().toISOString().slice(0, 10) + '.json', S.exportJson(), 'application/json');
-    SV.markExported();
-    JT.app.render();
+    SV.saveCopy('japon-travel-' + new Date().toISOString().slice(0, 10), S.exportJson(), function (how) {
+      // Sólo cuenta como copia si salió de verdad (cancelar el menú no la marca).
+      SV.markExported();
+      UI.toast(how === 'shared' ? 'Copia enviada' : 'Copia descargada');
+      JT.app.render();
+    });
   };
   A.importJson = async function () {
     const f = await SV.pickFile();

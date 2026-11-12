@@ -192,7 +192,8 @@
     html += '<div class="row row--wrap">' + (dir ? '<a class="btn btn--primary btn--sm" href="' + esc(dir) + '" target="_blank" rel="noopener">' + U.icon('nav', 16) + '<span>Cómo llegar</span></a>' : '') +
       UI.btn('Al itinerario', { icon: 'calendar', size: 'sm', variant: 'secondary', data: { act: 'newActivity', restaurant: r.id, title: r.name, category: r.cuisine === 'cafe' ? 'cafe' : 'restaurant' } }) +
       UI.btn('Gasto', { icon: 'plus', size: 'sm', variant: 'secondary', data: { act: 'newExpense', city: r.cityId, place: r.name } }) +
-      UI.btn('Reserva', { icon: 'ticket', size: 'sm', variant: 'secondary', data: { act: 'newReservation', type: 'restaurant', name: r.name } }) + '</div>';
+      UI.btn('Reserva', { icon: 'ticket', size: 'sm', variant: 'secondary', data: { act: 'newReservation', type: 'restaurant', name: r.name } }) +
+      (C.hasAllergies && C.hasAllergies() ? UI.btn('Mis alergias', { icon: 'alert', size: 'sm', variant: 'secondary', data: { act: 'allergyCard' } }) : '') + '</div>';
     html += UI.card('<div class="chips">' + [['want', '📌 Quiero ir'], ['tried', '✅ Probado']].map((o) => '<button type="button" class="chip chip--btn' + (r.status === o[0] ? ' is-on' : '') + '" aria-pressed="' + (r.status === o[0]) + '" data-act="restStatus" data-id="' + r.id + '" data-value="' + o[0] + '"><span>' + o[1] + '</span></button>').join('') + '</div>' +
       '<div class="stack-sm"><small class="muted">Mi valoración</small>' + UI.stars(r.rating, { act: 'rate', id: r.id }) + '</div>', { cls: 'stack' });
     html += UI.card('<div class="pills">' + UI.openBadge(r.hours) + '</div>' + (r.hours ? UI.listRow({ icon: 'clock', title: 'Horario', sub: r.hours }) : '') + (r.priceApprox ? UI.listRow({ icon: 'wallet', title: 'Precio', sub: r.priceApprox }) : '') +

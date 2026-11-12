@@ -121,8 +121,19 @@ JT.cards = (function () {
       '<div class="exp__amount"><strong class="mono">' + U.money(e.amount, e.currency) + '</strong>' + (mainValue ? '<small class="muted">' + esc(mainValue) + '</small>' : '') + '</div></div></div>';
   }
 
+  /* Billetes: vuelos y trenes con aspecto de billete (origen → destino en grande, hora, asiento y código),
+     más fáciles de leer en la estación o el aeropuerto. Color de la franja: vuelo azul, tren verde azulado, bus ámbar. */
+  const TICKET_TONE = { flight: 'blue', shinkansen: 'teal', train: 'teal', bus: 'amber' };
+  const stubCell = (label, value, cls) => (value ? '<div><small>' + label + '</small><b class="' + (cls || '') + '">' + esc(value) + '</b></div>' : '');
+
   function reservationCard(r) {
     const t = D.RESERVATION[r.type];
+    if (r.type === 'flight' || r.type === 'train') {
+      return '<div class="card card--tap ticket tone-' + (r.type === 'flight' ? 'blue' : 'teal') + '" tabindex="0" data-act="go" data-to="reservation/' + r.id + '">' +
+        '<div class="ticket__top"><span class="ticket__kind">' + t[1] + ' ' + esc(t[0].toUpperCase()) + '</span><span class="ticket__date">' + esc(U.fmtDay(r.date)) + '</span></div>' +
+        '<strong class="ticket__name">' + esc(r.name) + '</strong>' +
+        '<div class="ticket__stub">' + stubCell('HORA', r.time) + stubCell('CÓDIGO', r.confirmationCode, 'code') + (!r.time && !r.confirmationCode ? '<div><small>SIN CÓDIGO</small><b>—</b></div>' : '') + '</div></div>';
+    }
     return '<div class="item card card--tap" tabindex="0" data-act="go" data-to="reservation/' + r.id + '"><span class="item__emoji" aria-hidden="true">' + t[1] + '</span>' +
       '<div class="item__body"><strong>' + esc(r.name) + '</strong><small class="muted">' + esc([U.fmtDay(r.date), r.time, r.endDate ? '→ ' + U.fmtShort(r.endDate) : ''].filter(Boolean).join(' · ')) + '</small>' +
       (r.location && r.location.name ? '<small class="faint">📍 ' + esc(r.location.name) + '</small>' : '') + '</div>' + (r.confirmationCode ? UI.pill(r.confirmationCode, 'info') : '') + '</div>';
@@ -137,14 +148,25 @@ JT.cards = (function () {
       return '<div class="stops__row"><small class="grow"><b>Escala en ' + esc(st.place) + '</b><span class="muted block">Llegas ' + esc(st.arriveTime) + (st.departDate !== st.arriveDate ? ' (' + esc(U.fmtShort(st.arriveDate)) + ')' : '') +
         ' · sales ' + esc(st.departTime) + ' (' + esc(U.fmtShort(st.departDate)) + ')' + (st.number ? ' · ' + esc(st.number) : '') + '</span></small>' + UI.pill('⏳ ' + U.fmtDur(Math.max(0, w)), w >= 180 ? 'warn' : 'neutral') + '</div>';
     }).join('');
+    const actions = '<div class="row row--wrap">' + UI.btn('Añadir a Google Calendar', { icon: 'calendar', size: 'sm', variant: 'ghost', data: { act: 'gcal', col: 'transports', id: t.id } }) +
+      (t.cost ? (JT.cards.costExpense && JT.cards.costExpense('transports', t.id) ? '<small class="success">✓ En Gastos</small>' : UI.btn('Apuntar en Gastos', { icon: 'wallet', size: 'sm', variant: 'ghost', data: { act: 'costToExpense', col: 'transports', id: t.id } })) : '') + '</div>';
+    if (TICKET_TONE[t.kind]) {
+      return '<div class="card card--tap ticket tone-' + TICKET_TONE[t.kind] + '" tabindex="0" data-act="editTransport" data-id="' + t.id + '">' +
+        '<div class="ticket__top"><span class="ticket__kind">' + k[1] + ' ' + esc((k[0] + (t.number ? ' · ' + t.number : '')).toUpperCase()) + '</span><span class="ticket__date">' + esc(U.fmtDay(t.date)) + '</span></div>' +
+        '<div class="ticket__route"><div class="ticket__end"><span class="ticket__time mono">' + esc(t.departTime || '--:--') + '</span><span class="ticket__place">' + esc(t.origin) + '</span></div>' +
+          '<div class="ticket__line" aria-hidden="true"><span>' + k[1] + '</span>' + (t.durationMinutes ? '<small>' + esc(U.fmtDur(t.durationMinutes)) + '</small>' : '') + '</div>' +
+          '<div class="ticket__end ticket__end--to"><span class="ticket__time mono">' + esc(t.arriveTime || '--:--') + (plusDays > 0 ? '<sup>+' + plusDays + '</sup>' : '') + '</span><span class="ticket__place">' + esc(t.destination) + '</span></div></div>' +
+        (stops.length ? '<div class="stops">' + stopRows + '</div>' + UI.pill(stops.length + (stops.length === 1 ? ' escala' : ' escalas') + ' · ' + U.fmtDur(wait) + ' de espera', 'info') : '') +
+        '<div class="ticket__stub">' + stubCell('ASIENTO', t.seat) + stubCell('CÓDIGO', t.bookingCode, 'code') + stubCell('PRECIO', t.cost ? U.money(t.cost, t.currency || 'JPY') : '') +
+          (!t.seat && !t.bookingCode && !t.cost ? '<div><small>ASIENTO · CÓDIGO</small><b class="faint">Toca para añadirlos</b></div>' : '') + '</div>' + actions + '</div>';
+    }
     return '<div class="card card--tap" tabindex="0" data-act="editTransport" data-id="' + t.id + '"><div class="row"><span aria-hidden="true">' + k[1] + '</span><strong class="grow">' + esc(t.origin + ' → ' + t.destination) + '</strong>' +
       (t.cost ? '<strong class="mono">' + U.money(t.cost, t.currency || 'JPY') + '</strong>' : '') + '</div>' +
       '<div class="row row--between"><small class="muted">' + esc([k[0], t.number, U.fmtDay(t.date)].filter(Boolean).join(' · ')) + '</small><span class="mono">' + (t.departTime || '--:--') + ' → ' + (t.arriveTime || '--:--') + (plusDays > 0 ? '<sup>+' + plusDays + '</sup>' : '') + '</span></div>' +
       (stops.length ? '<div class="stops">' + stopRows + '</div>' : '') +
       '<div class="pills">' + (stops.length ? UI.pill(stops.length + (stops.length === 1 ? ' escala' : ' escalas') + ' · ' + U.fmtDur(wait) + ' de espera', 'info') : '') +
       (t.durationMinutes ? UI.pill(U.fmtDur(t.durationMinutes), 'neutral', 'clock') : '') + (t.seat ? UI.pill(t.seat) : '') + (t.bookingCode ? UI.pill(t.bookingCode, 'info') : '') + '</div>' +
-      '<div class="row row--wrap">' + UI.btn('Añadir a Google Calendar', { icon: 'calendar', size: 'sm', variant: 'ghost', data: { act: 'gcal', col: 'transports', id: t.id } }) +
-        (t.cost ? (JT.cards.costExpense && JT.cards.costExpense('transports', t.id) ? '<small class="success">✓ En Gastos</small>' : UI.btn('Apuntar en Gastos', { icon: 'wallet', size: 'sm', variant: 'ghost', data: { act: 'costToExpense', col: 'transports', id: t.id } })) : '') + '</div></div>';
+      actions + '</div>';
   }
 
   function noteRef(n) {
@@ -174,6 +196,67 @@ JT.cards = (function () {
     return '<div class="quick' + (variant ? ' quick--' + variant : '') + '">' + items.map((it) => '<button type="button" class="quick__btn tone-' + (TONE[it[0]] || 'red') + '"' + UI.dataAttrs(it[2]) + '><span class="quick__icon">' + U.icon(it[0], 22) + '</span><small>' + esc(it[1]) + '</small>' +
       (it[3] ? '<span class="quick__sub">' + esc(it[3]) + '</span>' : '') + '</button>').join('') + '</div>';
   }
+
+  /* ── Pantalla completa para enseñar una frase ─────────────────
+     Letra tan grande como quepa (se ajusta al girar el móvil). Si se abre
+     con un toque, pide pantalla completa y gira a horizontal (Android);
+     si el navegador no deja, queda igual a pantalla completa dentro de la app. */
+  let showcaseOpen = null;
+  function showcase(o, opts) {
+    opts = opts || {};
+    if (showcaseOpen) showcaseOpen();
+    const ov = document.createElement('div');
+    ov.className = 'showcase';
+    ov.setAttribute('role', 'dialog');
+    ov.setAttribute('aria-modal', 'true');
+    ov.setAttribute('aria-label', o.es || 'Frase a pantalla completa');
+    ov.innerHTML = '<button type="button" class="showcase__text" data-close aria-label="Cerrar"><span class="showcase__ja" lang="ja">' + esc(o.ja) + '</span>' +
+      (o.sub ? '<span class="showcase__sub">' + esc(o.sub) + '</span>' : '') + '</button>' +
+      '<div class="showcase__bar"><span class="showcase__es">' + esc(o.es || '') + '</span>' +
+      (JT.services.canSpeak() ? '<button type="button" class="iconbtn" data-say aria-label="Escuchar">' + U.icon('speaker', 22) + '</button>' : '') +
+      '<button type="button" class="btn btn--secondary btn--sm" data-close>' + U.icon('x', 16) + '<span>Cerrar</span></button></div>';
+    document.body.appendChild(ov);
+    document.body.classList.add('has-showcase');
+    const text = ov.querySelector('.showcase__text'), ja = ov.querySelector('.showcase__ja');
+    // Prueba tamaños de mayor a menor hasta que el japonés quepa entero.
+    const fit = function () {
+      let size = Math.min(240, Math.round(Math.min(window.innerWidth, window.innerHeight) * 0.6));
+      ja.style.fontSize = size + 'px';
+      while (size > 18 && (text.scrollHeight > text.clientHeight + 1 || ja.scrollWidth > text.clientWidth + 1)) { size -= 4; ja.style.fontSize = size + 'px'; }
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    let entered = false;
+    const close = function () {
+      if (!ov.isConnected) return;
+      window.removeEventListener('resize', fit);
+      document.removeEventListener('fullscreenchange', onFs);
+      window.removeEventListener('hashchange', close);
+      ov.remove();
+      document.body.classList.remove('has-showcase');
+      showcaseOpen = null;
+      try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (e) { /* sin bloqueo */ }
+      if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+      if (opts.onClose) opts.onClose();
+    };
+    // Si sales de la pantalla completa con «atrás», se cierra también.
+    const onFs = function () { if (entered && !document.fullscreenElement) close(); };
+    document.addEventListener('fullscreenchange', onFs);
+    window.addEventListener('hashchange', close);
+    ov.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', close));
+    const say = ov.querySelector('[data-say]');
+    if (say) say.addEventListener('click', () => JT.services.speak(o.speak || o.ja));
+    if (opts.fullscreen !== false && ov.requestFullscreen) {
+      // Tiene que ir en el mismo toque: nada de esperas antes.
+      ov.requestFullscreen({ navigationUI: 'hide' }).then(function () {
+        entered = true;
+        if (screen.orientation && screen.orientation.lock) return screen.orientation.lock('landscape').catch(() => {});
+      }).then(fit).catch(() => {});
+    }
+    showcaseOpen = close;
+    return close;
+  }
+  JT.actions.showcase = (el) => showcase({ ja: el.dataset.ja, sub: el.dataset.sub, es: el.dataset.es });
 
   /** Botón 🔊 que lee un texto en japonés con la voz del móvil (vacío si el navegador no puede). */
   function speakBtn(text, label) {
@@ -260,7 +343,7 @@ JT.cards = (function () {
     const main = S.get().trip.mainCurrency, other = main === 'JPY' ? 'EUR' : main;
     const from = st.dir === 'jpy' ? 'JPY' : other, to = st.dir === 'jpy' ? other : 'JPY';
     const rates = JT.services.rates(), rate = U.convert(1, from, to, rates);
-    if (!rate) return UI.card('<small class="eyebrow muted">CONVERSOR</small><p class="muted small">Sin tipo de cambio: conéctate una vez (se guarda para usarlo sin conexión) o defínelo en Ajustes.</p>', { cls: 'stack-sm' });
+    if (!rate) return UI.card('<small class="eyebrow muted">CONVERSOR</small><p class="muted small">Sin tipo de cambio: conéctate una vez (se guarda para usarlo sin conexión).</p>', { cls: 'stack-sm' });
     const n = U.parseAmount(st.value || '') || 0;
     const sym = { JPY: '¥', EUR: '€', USD: '$' };
     return UI.card('<div class="row row--between"><small class="eyebrow muted">CONVERSOR</small><small class="faint">1 ' + (from === 'JPY' ? other : from) + ' = ' + esc(U.money(U.convert(1, from === 'JPY' ? other : from, 'JPY', rates), 'JPY')) + '</small></div>' +
@@ -360,5 +443,5 @@ JT.cards = (function () {
     });
   }
 
-  return { q, sampleBanner, offlineBanner, isNow, timelineItem, travelLeg, timeline, placeCard, restaurantCard, expenseRow, reservationCard, transportCard, noteCard, noteRef, quick, tripHub, speakBtn, TONE, catColor, byCategory, catStack, pctText, cityStrip, quickConverter, cityRanges, byCityGroups, cityOptions, moneySum, parseCoords, coordsField, bindCoords };
+  return { q, sampleBanner, offlineBanner, isNow, timelineItem, travelLeg, timeline, placeCard, restaurantCard, expenseRow, reservationCard, transportCard, noteCard, noteRef, quick, tripHub, speakBtn, showcase, TONE, catColor, byCategory, catStack, pctText, cityStrip, quickConverter, cityRanges, byCityGroups, cityOptions, moneySum, parseCoords, coordsField, bindCoords };
 })();
