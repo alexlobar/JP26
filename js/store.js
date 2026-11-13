@@ -33,9 +33,31 @@ JT.store = (function () {
     out.settings = Object.assign({}, D.DEFAULT_SETTINGS, data.settings || {});
     out.trip = Object.assign({ timezoneOffsetMinutes: 540, mainCurrency: 'JPY', emoji: '🇯🇵' }, data.trip || {});
     out.emergency = Object.assign({}, data.emergency || {}); // ficha de emergencia (sin cifrar: se ve sin PIN)
+    fixPhrases(out.phrases); // antes de añadir las que falten, para no duplicar las corregidas
     addMissingPhrases(out.phrases);
+    addMissingFoods(out.foods);
     out.schema = SCHEMA;
     return out;
+  }
+
+  /** Corrige frases de serie ya guardadas (conserva favorita e id). Las tuyas no se tocan. */
+  function fixPhrases(phrases) {
+    D.PHRASE_FIXES.forEach(function (f) {
+      Object.values(phrases).forEach(function (p) {
+        if (!p.isCustom && p.ja === f[0]) { p.ja = f[2]; p.romaji = f[3]; p.es = f[1]; }
+      });
+    });
+  }
+
+  /** Comidas que probar: las de serie llegan a todos los viajes (por su clave); las tuyas se quedan. */
+  function addMissingFoods(foods) {
+    const known = new Set(Object.values(foods).map((x) => x.key).filter(Boolean));
+    const ts = Date.now();
+    D.FOODS.forEach(function (f, i) {
+      if (known.has(f[0])) return;
+      const id = U.uid('fo');
+      foods[id] = { id: id, key: f[0], name: f[1], emoji: f[2], where: f[3] || undefined, order: i, tried: false, createdAt: ts, updatedAt: ts };
+    });
   }
 
   /** Las frases de serie nuevas llegan también a los viajes ya guardados (no se pueden borrar, así que no se duplican). */

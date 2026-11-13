@@ -11,8 +11,8 @@ JT.utils = (function () {
 
   /* Tiene que coincidir con CACHE en sw.js y con data-build en index.html.
      BUILD_DATE es la fecha de esta versión (se ve en Ajustes → Esta instalación). */
-  const VERSION = '1.7.0';
-  const BUILD_DATE = '2026-11-12';
+  const VERSION = '1.8.0';
+  const BUILD_DATE = '2026-11-13';
 
   /* ── Texto y DOM ──────────────────────────────────────────── */
 

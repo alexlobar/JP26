@@ -38,14 +38,16 @@
      Una pestaña con dos listas: «Para visitar» (#/places) y
      «Para comer» (#/food). #/sites abre la última que usaste. */
 
-  V.sites = (p, q) => (JT.uiState.sites.kind === 'food' ? V.food : V.places)(p, q);
+  V.sites = (p, q) => (JT.uiState.sites.kind === 'food' ? V.food : JT.uiState.sites.kind === 'dishes' ? V.dishes : V.places)(p, q);
 
   function sitesHeader(kind) {
     const s = S.get();
     JT.uiState.sites.kind = kind;
-    const tabs = [['visit', 'places', '📍 Para visitar', Object.keys(s.places).length], ['food', 'food', '🍜 Para comer', Object.keys(s.restaurants).length]];
+    const foods = Object.values(s.foods), tried = foods.filter((f) => f.tried).length;
+    const tabs = [['visit', 'places', '📍 Visitar', Object.keys(s.places).length], ['food', 'food', '🍜 Comer', Object.keys(s.restaurants).length], ['dishes', 'dishes', '🍱 Probar', tried + '/' + foods.length]];
     const seg = '<div class="seg" role="tablist">' + tabs.map((t) => '<button type="button" role="tab" class="seg__item' + (t[0] === kind ? ' is-on' : '') + '" aria-selected="' + (t[0] === kind) + '" data-act="go" data-to="' + t[1] + '">' + t[2] + ' · ' + t[3] + '</button>').join('') + '</div>';
     const add = kind === 'food' ? UI.iconBtn('plus', 'Nuevo restaurante', { act: 'newRestaurant', city: JT.uiState.food.city })
+      : kind === 'dishes' ? UI.iconBtn('plus', 'Nueva comida', { act: 'newFood' })
       : UI.iconBtn('plus', 'Nuevo lugar', { act: 'newPlace', city: JT.uiState.places.city });
     return UI.header({ title: 'Sitios', subtitle: 'Qué ver y dónde comer', actions: UI.iconBtn('clipboard', 'Importar texto o enlace', { act: 'go', to: 'import' }) + add }) + C.sampleBanner() + seg;
   }
@@ -174,6 +176,83 @@
       : UI.empty('🍜', 'Nada por aquí', 'Guarda restaurantes que quieras probar o busca cerca de tu próxima actividad.', UI.btn('Añadir restaurante', { data: { act: 'newRestaurant', city: st.city } }));
     return { html: html };
   };
+
+  /* ── Por probar: comidas típicas para ir tachando ──
+     Al tacharla se guarda la fecha y la ciudad de ese día. Las de serie no se borran; las tuyas sí. */
+
+  function foodRow(f) {
+    const s = S.get(), city = f.cityId && s.cities[f.cityId];
+    const done = f.tried ? 'Probado' + (f.triedDate ? ' el ' + U.fmtShort(f.triedDate) : '') + (city ? ' en ' + city.name : '') : f.where;
+    return '<div class="dish' + (f.tried ? ' is-tried' : '') + '">' +
+      '<button type="button" class="dish__check" data-act="toggleFood" data-id="' + f.id + '" aria-pressed="' + !!f.tried + '" aria-label="' + esc((f.tried ? 'Probado: ' : 'Marcar probado: ') + f.name) + '"><span class="check__box">' + U.icon('check', 14) + '</span></button>' +
+      '<button type="button" class="dish__main" data-act="editFood" data-id="' + f.id + '"><span class="dish__emoji" aria-hidden="true">' + esc(f.emoji || '🍽️') + '</span>' +
+        '<span class="grow"><span class="dish__name">' + esc(f.name) + '</span>' + (done ? '<small class="' + (f.tried ? 'success' : 'muted') + '">' + esc(done) + '</small>' : '') +
+        (f.note ? '<small class="dish__note">' + esc(f.note) + '</small>' : '') + '</span></button></div>';
+  }
+
+  V.dishes = function () {
+    const s = S.get(), t = S.today(), st = JT.uiState.dishes || (JT.uiState.dishes = { show: 'pending' });
+    const all = Object.values(s.foods).sort((a, b) => (a.order === undefined ? 999 : a.order) - (b.order === undefined ? 999 : b.order) || (a.createdAt || 0) - (b.createdAt || 0));
+    const tried = all.filter((f) => f.tried).length;
+    let html = sitesHeader('dishes');
+    html += UI.card('<div class="row row--between"><strong>' + tried + ' de ' + all.length + ' probadas</strong><small class="muted">' + (tried === all.length && all.length ? '¡Todas! 🎉' : 'Tacha cada una al probarla') + '</small></div>' + UI.progress(all.length ? tried / all.length : 0, 'success'), { cls: 'stack-sm' });
+    html += '<div class="seg" role="tablist">' + [['pending', 'Por probar · ' + (all.length - tried)], ['tried', 'Probadas · ' + tried], ['all', 'Todas']].map((o) =>
+      '<button type="button" role="tab" class="seg__item' + (st.show === o[0] ? ' is-on' : '') + '" aria-selected="' + (st.show === o[0]) + '" data-act="dishShow" data-value="' + o[0] + '">' + o[1] + '</button>').join('') + '</div>';
+    const list = all.filter((f) => st.show === 'all' || (st.show === 'tried' ? f.tried : !f.tried));
+    // Durante el viaje, arriba lo típico de la ciudad donde estás.
+    const here = t.phase === 'during' && t.city ? list.filter((f) => f.where && (L.matchCity(f.where) || {}).id === t.city.id) : [];
+    if (here.length) html += UI.section('Típico de ' + t.city.name, UI.card(here.map(foodRow).join(''), { cls: 'card--list dishes' }));
+    const rest = list.filter((f) => here.indexOf(f) === -1);
+    html += rest.length ? UI.section(here.length ? 'El resto' : '', UI.card(rest.map(foodRow).join(''), { cls: 'card--list dishes' }))
+      : !here.length ? '<p class="muted center">' + (st.show === 'tried' ? 'Aún no has tachado ninguna.' : '¡Las has probado todas! 🎉') + '</p>' : '';
+    return { html: html };
+  };
+  A.dishShow = (el) => { JT.uiState.dishes.show = el.dataset.value; JT.app.render(); };
+
+  A.toggleFood = function (el) {
+    const f = S.get().foods[el.dataset.id];
+    if (!f) return;
+    if (f.tried) return S.update('foods', f.id, { tried: false, triedDate: undefined, cityId: undefined });
+    const t = S.today();
+    S.update('foods', f.id, { tried: true, triedDate: S.now().date, cityId: t.phase === 'during' && t.city ? t.city.id : f.cityId });
+    UI.toast(f.emoji + ' ' + f.name + ': ¡probado!');
+  };
+
+  F.food = function (id) {
+    const s = S.get(), ex = id ? s.foods[id] : null;
+    const f = ex || { name: '', emoji: '🍽️', tried: false };
+    const custom = !ex || !ex.key;
+    const close = UI.sheet({
+      title: ex ? f.emoji + ' ' + f.name : 'Nueva comida',
+      body: '<form id="fFood" class="stack" novalidate>' +
+        (custom ? UI.field('Nombre', UI.input('name', f.name || '', { placeholder: 'p.ej. Anguila (unagi)', autofocus: !ex })) + UI.field('Emoji', UI.input('emoji', f.emoji || '🍽️'), { optional: true }) +
+          UI.field('Dónde es típica', UI.input('where', f.where || ''), { optional: true }) : (f.where ? '<p class="muted">Típico: ' + esc(f.where) + '</p>' : '')) +
+        UI.chipsMulti('tried', [{ value: '1', label: '✓ Ya la he probado' }], f.tried ? ['1'] : []) +
+        '<div class="row row--top">' + UI.field('Fecha', UI.input('triedDate', f.triedDate || '', { type: 'date' }), { optional: true }) + '</div>' +
+        UI.field('Ciudad', UI.chips('cityId', C.cityOptions(), f.cityId, { allowNone: true, noneLabel: '—' }), { optional: true }) +
+        UI.field('¿Qué tal? ¿Dónde?', UI.textarea('note', f.note || '', 'p.ej. El mejor, en un puesto de Dotonbori'), { optional: true }) +
+        '<p class="error" hidden></p></form>',
+      footer: '<div class="row">' + (ex && custom ? UI.btn('Eliminar', { variant: 'danger', icon: 'trash', data: { del: '1' } }) : '') + UI.btn('Guardar', { type: 'submit', form: 'fFood', block: true }) + '</div>',
+      onMount: function (root) {
+        const form = root.querySelector('#fFood');
+        const del = root.querySelector('[data-del]');
+        if (del) del.addEventListener('click', async () => { if (await UI.confirm('¿Eliminar comida?', ex.name)) { S.remove('foods', ex.id); close(); } });
+        form.addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          const d = UI.formData(form), err = form.querySelector('.error');
+          if (custom && !d.name) { err.textContent = 'Escribe un nombre'; err.hidden = false; return; }
+          const isTried = !!d.tried;
+          const data = { tried: isTried, triedDate: isTried ? d.triedDate || f.triedDate || S.now().date : undefined, cityId: d.cityId || undefined, note: d.note || undefined };
+          if (custom) Object.assign(data, { name: d.name, emoji: d.emoji || '🍽️', where: d.where || undefined });
+          if (ex) S.update('foods', ex.id, data); else S.create('foods', data);
+          UI.toast('Guardado');
+          close();
+        });
+      }
+    });
+  };
+  A.newFood = () => F.food(null);
+  A.editFood = (el) => F.food(el.dataset.id);
 
   A.nearPlan = function () {
     const t = S.today(), nx = S.upcoming(t.now, 1)[0], loc = nx && S.resolveLocation(nx.activity);

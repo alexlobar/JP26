@@ -57,9 +57,21 @@ JT.cards = (function () {
       r ? UI.pill(r.confirmationCode ? 'Reserva ' + r.confirmationCode : 'Reservado', 'info') : '',
       a.estimatedCost ? UI.pill(U.money(a.estimatedCost, a.costCurrency || 'JPY')) : ''
     ].join('');
-    return '<div class="tl' + (o.now ? ' tl--now' : '') + (done ? ' tl--done' : '') + '">' +
+    const head = '<div class="tl' + (o.now ? ' tl--now' : '') + (done ? ' tl--done' : '') + '">' +
       '<div class="tl__time"><span class="mono">' + (a.startTime || '··:··') + '</span>' + (a.endTime ? '<small>' + a.endTime + '</small>' : '') + '</div>' +
-      '<div class="tl__line"><button type="button" class="tl__dot" role="checkbox" aria-checked="' + done + '" aria-label="' + esc((done ? 'Marcar pendiente: ' : 'Marcar hecha: ') + a.title) + '" data-act="toggleDone" data-id="' + a.id + '">' + (done ? U.icon('check', 10) : '') + '</button>' + (o.last ? '' : '<span class="tl__rail"></span>') + '</div>' +
+      '<div class="tl__line"><button type="button" class="tl__dot" role="checkbox" aria-checked="' + done + '" aria-label="' + esc((done ? 'Marcar pendiente: ' : 'Marcar hecha: ') + a.title) + '" data-act="toggleDone" data-id="' + a.id + '">' + (done ? U.icon('check', 10) : '') + '</button>' + (o.last ? '' : '<span class="tl__rail"></span>') + '</div>';
+    // Vuelos, trenes y autobuses: como billete también dentro del día.
+    const tr = a.transportId && s.transports[a.transportId];
+    if (tr && TICKET_TONE[tr.kind]) {
+      const k = D.TRANSPORT[tr.kind], plus = tr.arriveDate ? Math.round((Date.parse(tr.arriveDate) - Date.parse(tr.date)) / 86400000) : 0;
+      return head + '<div class="tl__card card--tap ticket ticket--tl tone-' + TICKET_TONE[tr.kind] + '" tabindex="0" data-act="go" data-to="activity/' + a.id + '" data-hold="activityMenu" data-id="' + a.id + '">' +
+        '<div class="ticket__top"><span class="ticket__kind">' + k[1] + ' ' + esc((k[0] + (tr.number ? ' · ' + tr.number : '')).toUpperCase()) + '</span>' + (o.now ? UI.pill('Ahora', 'accent') : '') + '</div>' +
+        '<div class="ticket__route"><div class="ticket__end"><span class="ticket__time mono">' + esc(tr.departTime || '--:--') + '</span><span class="ticket__place">' + esc(tr.origin) + '</span></div>' +
+          '<div class="ticket__line" aria-hidden="true"><span>' + k[1] + '</span>' + (tr.durationMinutes ? '<small>' + esc(U.fmtDur(tr.durationMinutes)) + '</small>' : '') + '</div>' +
+          '<div class="ticket__end ticket__end--to"><span class="ticket__time mono">' + esc(tr.arriveTime || '--:--') + (plus > 0 ? '<sup>+' + plus + '</sup>' : '') + '</span><span class="ticket__place">' + esc(tr.destination) + '</span></div></div>' +
+        (tr.seat || tr.bookingCode ? '<div class="ticket__stub">' + stubCell('ASIENTO', tr.seat) + stubCell('CÓDIGO', tr.bookingCode, 'code') + '</div>' : '') + '</div></div>';
+    }
+    return head +
       '<div class="tl__card card--tap" tabindex="0" data-act="go" data-to="activity/' + a.id + '" data-hold="activityMenu" data-id="' + a.id + '">' +
       '<div class="tl__top"><span class="tl__emoji" aria-hidden="true">' + cat[1] + '</span><div class="grow"><strong class="tl__title">' + esc(a.title) + '</strong>' +
       (loc.name && loc.name !== a.title ? '<small class="muted">📍 ' + esc(loc.name) + '</small>' : '') + '</div>' +
@@ -71,7 +83,8 @@ JT.cards = (function () {
   function travelLeg(from, to, mode) {
     if (!from.coords || !to.coords) return '<div class="tl-gap"></div>';
     const e = U.estimateTravel(from.coords, to.coords, mode);
-    if (e.straightKm < 0.05) return '<div class="tl-gap"></div>';
+    // Más de 50 km: entre medias hay un tren o un vuelo (p. ej. Shinkansen Tokio → Kioto); no es un tramo en metro.
+    if (e.straightKm < 0.05 || e.straightKm > 50) return '<div class="tl-gap"></div>';
     const m = D.MODE[e.mode] || D.MODE.train;
     const url = U.directionsUrl(to, from.coords, e.mode);
     return '<a class="tl-leg" href="' + esc(url) + '" target="_blank" rel="noopener" aria-label="' + esc(m[0] + ', unos ' + U.fmtDur(e.minutes) + '. Abrir ruta') + '">' +

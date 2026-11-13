@@ -575,9 +575,19 @@
     list.forEach((p) => (g[p.category] = (g[p.category] || []).concat(p)));
     return { html: UI.header({ back: true, title: 'Frases', subtitle: 'Funciona sin conexión · toca una frase para verla en grande', actions: UI.iconBtn('plus', 'Nueva frase', { act: 'newPhrase' }) }) +
       JT.searchBox('phrases', 'Buscar en español o romaji…') + JT.fchips('phrases', 'cat', [{ value: 'fav', label: '♥ Favoritas' }].concat(cats.map((c) => ({ value: c, label: c }))), 'Todas') +
-      Object.keys(g).sort((a, b) => rank(a) - rank(b)).map((c) => UI.section(c, g[c].map((p) => '<div class="card card--tap phrase" tabindex="0" data-act="bigPhrase" data-id="' + p.id + '"><div class="grow"><small class="muted">' + esc(p.es) + '</small><div class="phrase__ja">' + esc(p.ja) + '</div><span class="accent">' + esc(p.romaji) + '</span></div>' +
-        '<div class="phrase__acts">' + C.speakBtn(p.ja) + '<button type="button" class="iconbtn fav' + (p.favorite ? ' is-on' : '') + '" aria-pressed="' + !!p.favorite + '" aria-label="Favorita" data-act="fav" data-col="phrases" data-id="' + p.id + '">' + U.icon('heart', 20) + '</button></div></div>').join(''))).join('') };
+      // Cada categoría con su color (punto en el título y franja en cada frase) para encontrarlas antes.
+      Object.keys(g).sort((a, b) => rank(a) - rank(b)).map((c) => '<section class="section phrases-cat tone-' + phraseTone(c) + '"><div class="section__hdr"><h2 class="section__title phrases-cat__title"><span class="dot" aria-hidden="true"></span>' + esc(c) + '</h2><small class="muted">' + g[c].length + '</small></div>' +
+        g[c].map((p) => '<div class="card card--tap phrase" tabindex="0" data-act="bigPhrase" data-id="' + p.id + '"><div class="grow"><small class="muted">' + esc(p.es) + '</small><div class="phrase__ja">' + esc(p.ja) + '</div><span class="accent">' + esc(p.romaji) + '</span></div>' +
+        '<div class="phrase__acts">' + C.speakBtn(p.ja) + '<button type="button" class="iconbtn fav' + (p.favorite ? ' is-on' : '') + '" aria-pressed="' + !!p.favorite + '" aria-label="Favorita" data-act="fav" data-col="phrases" data-id="' + p.id + '">' + U.icon('heart', 20) + '</button></div></div>').join('') + '</section>').join('') };
   };
+
+  /* Color de cada categoría de frases (mismos tonos que el resto de la app). Las vecinas no repiten color. */
+  const PHRASE_TONE = {
+    'Básicas': 'slate', 'No hablo japonés': 'pink', 'Cortesía y disculpas': 'violet', 'Direcciones': 'teal', 'Restaurante': 'orange',
+    'Compras': 'green', 'Emergencias': 'red', 'Conversación': 'indigo', 'Transporte': 'blue', 'Hotel': 'amber',
+    'Templos y onsen': 'violet', 'Números y tiempo': 'teal', 'Carteles': 'slate', 'Mis frases': 'pink'
+  };
+  const phraseTone = (c) => PHRASE_TONE[c] || 'slate';
   A.bigPhrase = function (el) {
     const p = S.get().phrases[el.dataset.id];
     const voice = SV.canSpeak();
@@ -648,7 +658,10 @@
     } else {
       html += UI.card((me ? '<div class="sos__who">' + esc(me.name) + '</div>' : '') +
         (allergens.length || e.allergyOther ? '<div class="sos__alert" lang="ja"><div class="row row--between"><p>次のものにアレルギーがあります：</p>' + (allergens.length ? C.speakBtn('次のものにアレルギーがあります。' + allergens.map((a) => a[2]).join('、'), 'Escuchar las alergias') : '') + '</div><strong>' + esc(allergens.map((a) => a[2]).join('、') || e.allergyOther) + '</strong>' +
-          '<small>Tengo alergia a: ' + esc(allergens.map((a) => a[1]).concat(e.allergyOther && allergens.length ? [e.allergyOther] : []).join(', ')) + '</small></div>' : '') +
+          '<small>Tengo alergia a: ' + esc(allergens.map((a) => a[1]).concat(e.allergyOther && allergens.length ? [e.allergyOther] : []).join(', ')) + '</small>' +
+          // Para enseñarlo de lejos (mostrador, camarero) y las frases del restaurante.
+          '<div class="row row--wrap">' + (allergens.length ? UI.btn('Pantalla completa', { icon: 'expand', size: 'sm', variant: 'secondary', data: { act: 'showcase', ja: '次のものにアレルギーがあります：\n' + allergens.map((a) => a[2]).join('、'), sub: 'Tengo alergia a: ' + allergens.map((a) => a[1].toLowerCase()).join(', '), es: 'Mis alergias' } }) : '') +
+            UI.btn('Frases para el restaurante', { icon: 'food', size: 'sm', variant: 'ghost', data: { act: 'allergyCard' } }) + '</div></div>' : '') +
         row('持病', 'Jibyō', 'Enfermedades', e.conditions) + row('服用中の薬', 'Fukuyō-chū no kusuri', 'Medicación', e.meds) +
         row('血液型', 'Ketsueki-gata', 'Grupo sanguíneo', e.blood ? e.blood + (e.rh ? ' Rh' + e.rh : '') + '型' : '') +
         row('保険', 'Hoken', 'Seguro', [e.insurer, e.policy].filter(Boolean).join(' · '), e.insurerPhone) +

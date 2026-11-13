@@ -16,7 +16,7 @@ JT.app = (function () {
     [/^activity\/([\w-]+)$/, 'activity', 'itinerary'], [/^planner$/, 'planner', 'itinerary'],
     // Sitios = lugares para visitar + restaurantes, en una sola pestaña.
     [/^sites$/, 'sites', 'sites'], [/^places$/, 'places', 'sites'], [/^place\/([\w-]+)$/, 'place', 'sites'],
-    [/^food$/, 'food', 'sites'], [/^restaurant\/([\w-]+)$/, 'restaurant', 'sites'], [/^nearby$/, 'nearby', 'sites'],
+    [/^food$/, 'food', 'sites'], [/^dishes$/, 'dishes', 'sites'], [/^restaurant\/([\w-]+)$/, 'restaurant', 'sites'], [/^nearby$/, 'nearby', 'sites'],
     // Sin pestaña «Más»: Planificar está en el Itinerario e Importar en Sitios y en el botón (+). #/more antiguo → Inicio.
     [/^expenses$/, 'expenses', 'expenses'], [/^import$/, 'import', 'sites'], [/^emergency$/, 'emergency', 'home'],
     // Se abren desde Inicio («Tu viaje» y los iconos de arriba): la pestaña marcada es Inicio.

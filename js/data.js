@@ -80,7 +80,7 @@ JT.data = (function () {
     ['No hablo japonés', 'Perdón, no le he entendido', 'すみません、よくわかりませんでした', 'Sumimasen, yoku wakarimasen deshita'],
     ['No hablo japonés', '¿Puedo usar el traductor del móvil?', '翻訳アプリを使ってもいいですか？', 'Hon\'yaku apuri o tsukatte mo ii desu ka?'],
     ['No hablo japonés', '¿Me lo puede escribir aquí? (en el móvil)', 'ここに書いてもらえますか？', 'Koko ni kaite moraemasu ka?'],
-    ['No hablo japonés', '¿Me lo puede señalar?', '指でさしてもらえますか？', 'Yubi de sashite moraemasu ka?'],
+    ['No hablo japonés', '¿Me lo puede señalar?', '指さしてもらえますか？', 'Yubisashite moraemasu ka?'],
     ['No hablo japonés', '¿Me lo enseña en el mapa?', '地図で教えてもらえますか？', 'Chizu de oshiete moraemasu ka?'],
     ['No hablo japonés', '¿Qué significa esto?', 'これはどういう意味ですか？', 'Kore wa dō iu imi desu ka?'],
     ['No hablo japonés', '¿Cómo se dice en japonés?', '日本語で何と言いますか？', 'Nihongo de nan to iimasu ka?'],
@@ -96,7 +96,7 @@ JT.data = (function () {
     ['Cortesía y disculpas', 'No se preocupe', '気にしないでください', 'Ki ni shinaide kudasai'],
     ['Direcciones', '¿Dónde está la estación?', '駅はどこですか？', 'Eki wa doko desu ka?'],
     ['Direcciones', '¿Dónde está el baño?', 'トイレはどこですか？', 'Toire wa doko desu ka?'],
-    ['Direcciones', '¿Dónde está esto?', 'これはどこですか？', 'Kore wa doko desu ka?'],
+    ['Direcciones', '¿Dónde está esto? (señalando el mapa o una foto)', 'これはどこですか？', 'Kore wa doko desu ka?'],
     ['Direcciones', 'Derecha', '右', 'Migi'],
     ['Direcciones', 'Izquierda', '左', 'Hidari'],
     ['Direcciones', 'Todo recto', 'まっすぐ', 'Massugu'],
@@ -146,7 +146,7 @@ JT.data = (function () {
     ['Transporte', 'Un billete a…, por favor', '…までの切符をください', '… made no kippu o kudasai'],
     ['Transporte', '¿De qué andén sale el tren a…?', '…行きは何番線ですか？', '… yuki wa nan-bansen desu ka?'],
     ['Transporte', '¿Para en…?', '…に止まりますか？', '… ni tomarimasu ka?'],
-    ['Transporte', '¿Cuál es la próxima estación?', '次は何駅ですか？', 'Tsugi wa nani-eki desu ka?'],
+    ['Transporte', '¿Cuál es la próxima estación?', '次の駅はどこですか？', 'Tsugi no eki wa doko desu ka?'],
     ['Transporte', '¿A qué hora sale el último tren?', '終電は何時ですか？', 'Shūden wa nan-ji desu ka?'],
     ['Transporte', 'Quiero recargar la tarjeta (Suica)', 'チャージしたいです', 'Chāji shitai desu'],
     ['Transporte', 'Asiento reservado', '指定席', 'Shitei-seki'],
@@ -174,7 +174,7 @@ JT.data = (function () {
     ['Restaurante', 'Soy vegetariano/a', 'ベジタリアンです', 'Bejitarian desu'],
     ['Restaurante', 'Para llevar', '持ち帰りで', 'Mochikaeri de'],
     ['Restaurante', 'Para tomar aquí', '店内で', 'Tennai de'],
-    ['Restaurante', '¿Podemos pagar por separado?', '別々に払えますか？', 'Betsubetsu ni haraemasu ka?'],
+    ['Restaurante', '¿Podemos pagar por separado?', 'お会計は別々にできますか？', 'Okaikei wa betsubetsu ni dekimasu ka?'],
     ['Restaurante', '¡Salud! (brindis)', '乾杯！', 'Kanpai!'],
     ['Compras', '¿Tiene otra talla?', '他のサイズはありますか？', 'Hoka no saizu wa arimasu ka?'],
     ['Compras', '¿Me lo puedo probar?', '試着してもいいですか？', 'Shichaku shite mo ii desu ka?'],
@@ -184,7 +184,7 @@ JT.data = (function () {
     ['Compras', '¿Hay un cajero cerca?', '近くにATMはありますか？', 'Chikaku ni ē-tī-emu wa arimasu ka?'],
     ['Templos y onsen', 'Dos entradas de adulto, por favor', '大人二枚お願いします', 'Otona ni-mai onegai shimasu'],
     ['Templos y onsen', '¿Hasta qué hora está abierto?', '何時まで開いていますか？', 'Nan-ji made aite imasu ka?'],
-    ['Templos y onsen', '¿Hay que quitarse los zapatos?', '靴を脱ぐ必要がありますか？', 'Kutsu o nugu hitsuyō ga arimasu ka?'],
+    ['Templos y onsen', '¿Hay que quitarse los zapatos?', '靴は脱いだほうがいいですか？', 'Kutsu wa nuida hō ga ii desu ka?'],
     ['Templos y onsen', '¿Dónde dan el goshuin (sello del templo)?', '御朱印はどこでいただけますか？', 'Goshuin wa doko de itadakemasu ka?'],
     ['Templos y onsen', '¿Se puede entrar con tatuajes?', 'タトゥーがあっても入れますか？', 'Tatū ga atte mo hairemasu ka?'],
     ['Emergencias', 'Me duele aquí', 'ここが痛いです', 'Koko ga itai desu'],
@@ -224,6 +224,45 @@ JT.data = (function () {
   ];
 
   /* Los mismos teléfonos que la ficha «Emergencias» de Información útil. */
+  /* Correcciones de frases de serie (v1.8.0), para que sean más naturales o no se presten a confusión.
+     Se aplican también a los viajes ya guardados: [japonés antiguo, español, japonés nuevo, romaji]. */
+  const PHRASE_FIXES = [
+    ['次は何駅ですか？', '¿Cuál es la próxima estación?', '次の駅はどこですか？', 'Tsugi no eki wa doko desu ka?'], // «何駅» también es «¿cuántas estaciones?»
+    ['別々に払えますか？', '¿Podemos pagar por separado?', 'お会計は別々にできますか？', 'Okaikei wa betsubetsu ni dekimasu ka?'],
+    ['靴を脱ぐ必要がありますか？', '¿Hay que quitarse los zapatos?', '靴は脱いだほうがいいですか？', 'Kutsu wa nuida hō ga ii desu ka?'],
+    ['指でさしてもらえますか？', '¿Me lo puede señalar?', '指さしてもらえますか？', 'Yubisashite moraemasu ka?']
+  ];
+
+  /* Comidas que probar: [clave, nombre, emoji, dónde es típica]. Las de serie no se borran (se ocultan con «tachar»). */
+  const FOODS = [
+    ['ramen', 'Ramen', '🍜', 'En todo Japón; cada zona tiene su caldo'],
+    ['sushi', 'Sushi', '🍣', 'Mejor en un mercado o en un kaitenzushi'],
+    ['tempura', 'Tempura', '🍤', ''],
+    ['yakitori', 'Yakitori', '🍢', 'En un izakaya o en los callejones de Shinjuku'],
+    ['tonkatsu', 'Tonkatsu', '🐖', ''],
+    ['gyoza', 'Gyoza', '🥟', ''],
+    ['udon', 'Udon', '🍲', ''],
+    ['soba', 'Soba', '🥢', ''],
+    ['curry', 'Curry japonés', '🍛', ''],
+    ['karaage', 'Karaage (pollo frito)', '🍗', 'También en konbini'],
+    ['onigiri', 'Onigiri de konbini', '🍙', '7-Eleven, Lawson, FamilyMart'],
+    ['monjayaki', 'Monjayaki', '🥘', 'Tokio (Tsukishima)'],
+    ['hidagyu', 'Wagyu de Hida', '🥩', 'Takayama'],
+    ['mitarashi', 'Mitarashi dango', '🍡', 'Takayama'],
+    ['kaisendon', 'Kaisendon (bol de marisco)', '🦀', 'Kanazawa (mercado de Omicho)'],
+    ['goldice', 'Helado con pan de oro', '🍦', 'Kanazawa'],
+    ['yudofu', 'Yudofu (tofu hervido)', '🍲', 'Kioto'],
+    ['matcha', 'Matcha y dulces de té', '🍵', 'Kioto y Uji'],
+    ['kaiseki', 'Kaiseki', '🍱', 'Kioto'],
+    ['takoyaki', 'Takoyaki', '🐙', 'Osaka (Dotonbori)'],
+    ['okonomiyaki', 'Okonomiyaki', '🥞', 'Osaka'],
+    ['kushikatsu', 'Kushikatsu', '🍢', 'Osaka (Shinsekai)'],
+    ['taiyaki', 'Taiyaki', '🐟', 'Puestos callejeros'],
+    ['mochi', 'Mochi', '🍡', ''],
+    ['melonpan', 'Melon pan', '🍈', 'Panaderías y konbini'],
+    ['sake', 'Sake', '🍶', '']
+  ];
+
   /* Diario: cómo fue el día [etiqueta, emoji] */
   const MOOD = { great: ['Genial', '😍'], good: ['Bien', '🙂'], ok: ['Normal', '😐'], tired: ['Agotador', '😴'], bad: ['Malo', '😣'] };
 
@@ -254,7 +293,7 @@ JT.data = (function () {
   function emptyCollections() {
     return {
       travelers: {}, cities: {}, days: {}, activities: {}, places: {}, restaurants: {}, expenses: {}, notes: {},
-      reservations: {}, transports: {}, checklists: {}, checklistItems: {}, infoArticles: {}, phrases: {}, docs: {}, gifts: {}
+      reservations: {}, transports: {}, checklists: {}, checklistItems: {}, infoArticles: {}, phrases: {}, docs: {}, gifts: {}, foods: {}
     };
   }
 
@@ -540,6 +579,6 @@ JT.data = (function () {
 
   return {
     ACTIVITY, PLACE, VISIT_MIN, CUISINE, PRICE, EXPENSE, PAYMENT, RESERVATION, TRANSPORT, MODE, PRIORITY, NOTE_SCOPE,
-    CHECK_SECTION, DOC_KIND, CURRENCIES, DEFAULT_SETTINGS, PHRASES, ALLERGENS, EMERGENCY_NUMBERS, MOOD, emptyCollections, baseContent, sampleTrip, options
+    CHECK_SECTION, DOC_KIND, CURRENCIES, DEFAULT_SETTINGS, PHRASES, PHRASE_FIXES, FOODS, ALLERGENS, EMERGENCY_NUMBERS, MOOD, emptyCollections, baseContent, sampleTrip, options
   };
 })();

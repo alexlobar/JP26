@@ -405,6 +405,28 @@ body.has-showcase { overflow: hidden; }
 .ticket__stub b { font-size: 16px; }
 .ticket__stub b.code { letter-spacing: 1.5px; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
 .ticket .row--wrap { margin-top: -4px; }
+/* Billete dentro de la línea de tiempo del día (más compacto) */
+.tl__card.ticket--tl { border-top: 4px solid var(--c); padding: 10px 12px; gap: 8px; }
+.ticket--tl .ticket__time { font-size: 20px; }
+.ticket--tl .ticket__line { min-width: 44px; }
+.ticket--tl .ticket__stub { margin: 2px -12px 0; padding: 10px 12px 0; }
+.ticket--tl .ticket__stub b { font-size: 14px; }
+/* Frases: color por categoría (punto en el título y franja en cada frase) */
+.phrases-cat__title { display: flex; align-items: center; gap: 8px; }
+.phrases-cat .dot { width: 10px; height: 10px; border-radius: 5px; background: var(--c); }
+.phrases-cat .phrase { border-left: 4px solid var(--c); }
+/* Por probar (comidas) */
+.dishes .dish + .dish { border-top: 1px solid var(--border); }
+.dish { display: flex; align-items: center; gap: 10px; padding: 8px 0; }
+.dish__check { flex: none; border: 0; background: transparent; padding: 4px 0; }
+.dish__check .check__box { width: 24px; height: 24px; border-radius: 7px; }
+.dish.is-tried .check__box { background: var(--success); border-color: var(--success); }
+.dish__main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; border: 0; background: transparent; padding: 0; text-align: left; }
+.dish__main .grow { display: flex; flex-direction: column; gap: 1px; }
+.dish__emoji { font-size: 24px; width: 32px; text-align: center; flex: none; }
+.dish__name { font-weight: 600; }
+.dish.is-tried .dish__name { color: var(--muted); }
+.dish__note { color: var(--text); font-style: italic; }
 /* Gastos: reparto por categoría en una barra de colores */
 .catstack { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--surface-2); gap: 2px; }
 .catstack span { display: block; min-width: 3px; }
