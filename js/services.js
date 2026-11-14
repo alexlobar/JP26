@@ -110,110 +110,9 @@ JT.services = (function () {
     return true;
   }
 
-  /* ── Restaurantes cercanos ────────────────────────────────── */
-
-  const CUISINE_RULES = [
-    [/ramen|ラーメン|らーめん|拉麺|つけめん|tsukemen/, 'ramen'], [/sushi|kaitenzushi|寿司|鮨|すし/, 'sushi'], [/yakitori|焼き?鳥|やきとり/, 'yakitori'],
-    [/izakaya|居酒屋/, 'izakaya'], [/udon|うどん|饂飩|製麺/, 'udon'], [/soba|そば|蕎麦/, 'soba'], [/yakiniku|焼肉|barbecue/, 'yakiniku'],
-    [/tonkatsu|katsu|とんかつ/, 'tonkatsu'], [/tempura|天ぷら|天麩羅/, 'tempura'], [/okonomiyaki|takoyaki|monja|お好み焼|たこ焼|もんじゃ/, 'okonomiyaki'],
-    [/curry|indian|カレー/, 'curry'], [/kaiseki|懐石|会席|割烹|fine_dining/, 'kaiseki'], [/coffee|cafe|café|tea|カフェ|喫茶|珈琲/, 'cafe'],
-    [/dessert|ice_cream|cake|pastry|bakery|confectionery|wagashi|crepe|甘味|パフェ|ケーキ/, 'dessert']
-  ];
-  function mapCuisine(raw, fallback) {
-    const s = String(raw || '').toLowerCase();
-    for (const r of CUISINE_RULES) if (r[0].test(s)) return r[1];
-    return fallback || 'other';
-  }
-
-  function getPlacesKey() { return lsGet(PLACES_KEY) || ''; }
-  function setPlacesKey(k) { if (k) lsSet(PLACES_KEY, k.trim()); else lsDel(PLACES_KEY); }
-
-  /** OpenStreetMap vía Overpass: datos reales y abiertos, sin clave (sin valoraciones ni precios). */
-  async function overpass(q) {
-    const r = Math.round(q.radius);
-    const query = '[out:json][timeout:20];(node["amenity"~"^(restaurant|fast_food|cafe)$"]["name"](around:' + r + ',' + q.lat + ',' + q.lng + ');way["amenity"~"^(restaurant|fast_food|cafe)$"]["name"](around:' + r + ',' + q.lat + ',' + q.lng + '););out center 80;';
-    const endpoints = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
-    let lastErr;
-    for (const ep of endpoints) {
-      try {
-        const j = await fetchJson(ep, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'data=' + encodeURIComponent(query) }, 25000);
-        return (j.elements || []).map(function (el) {
-          const t = el.tags || {};
-          const lat = el.lat !== undefined ? el.lat : el.center && el.center.lat, lng = el.lon !== undefined ? el.lon : el.center && el.center.lon;
-          if (lat === undefined) return null;
-          const coords = { lat: lat, lng: lng };
-          const st = U.openStatus(t.opening_hours, q.weekday, q.minutes);
-          const name = t['name:es'] || t['name:en'] || t.name;
-          const addr = t['addr:full'] || [t['addr:province'], t['addr:city'], t['addr:quarter'] || t['addr:suburb'], t['addr:neighbourhood'], t['addr:block_number'], t['addr:housenumber']].filter(Boolean).join(' ');
-          return {
-            id: el.type + '/' + el.id, source: 'osm', name: name + (t.name && t.name !== name ? ' (' + t.name + ')' : ''), coords: coords,
-            km: U.haversine(q, coords), cuisine: mapCuisine((t.cuisine || '') + ' ' + (t.name || ''), t.amenity === 'cafe' ? 'cafe' : 'other'),
-            cuisineLabel: t.cuisine ? t.cuisine.replace(/[_;]/g, ' ') : undefined,
-            openNow: st.state === 'unknown' ? undefined : st.state === 'open', hours: t.opening_hours, address: addr || undefined,
-            website: t.website || t['contact:website'], mapsUrl: 'https://www.openstreetmap.org/' + el.type + '/' + el.id
-          };
-        }).filter(Boolean).sort((a, b) => a.km - b.km).slice(0, 40);
-      } catch (e) { lastErr = e; }
-    }
-    throw lastErr;
-  }
-
-  /** Google Places API (New). Requiere clave con "Places API (New)" (Ajustes → APIs). */
-  async function googlePlaces(q) {
-    const key = getPlacesKey();
-    if (!key) throw new Error('Falta la clave de Google Places (Ajustes → APIs)');
-    const mask = ['id', 'displayName', 'shortFormattedAddress', 'location', 'rating', 'userRatingCount', 'priceLevel', 'primaryType', 'types', 'currentOpeningHours.openNow', 'regularOpeningHours.weekdayDescriptions', 'googleMapsUri', 'websiteUri'].map((f) => 'places.' + f).join(',');
-    const j = await fetchJson('https://places.googleapis.com/v1/places:searchNearby', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': key, 'X-Goog-FieldMask': mask },
-      body: JSON.stringify({ includedTypes: ['restaurant', 'cafe'], maxResultCount: 20, rankPreference: 'DISTANCE', languageCode: 'es', locationRestriction: { circle: { center: { latitude: q.lat, longitude: q.lng }, radius: q.radius } } })
-    });
-    const PRICE = { PRICE_LEVEL_INEXPENSIVE: 1, PRICE_LEVEL_MODERATE: 2, PRICE_LEVEL_EXPENSIVE: 3, PRICE_LEVEL_VERY_EXPENSIVE: 4 };
-    const today = (q.weekday + 6) % 7; // Google empieza en lunes
-    return (j.places || []).filter((p) => p.location).map(function (p) {
-      const coords = { lat: p.location.latitude, lng: p.location.longitude };
-      const name = p.displayName ? p.displayName.text : 'Sin nombre';
-      return {
-        id: p.id, source: 'google', name: name, coords: coords, km: U.haversine(q, coords),
-        cuisine: mapCuisine([p.primaryType].concat(p.types || [], [name]).join(' ')), cuisineLabel: p.primaryType ? p.primaryType.replace(/_/g, ' ') : undefined,
-        priceLevel: PRICE[p.priceLevel], rating: p.rating, ratingCount: p.userRatingCount,
-        openNow: p.currentOpeningHours ? p.currentOpeningHours.openNow : undefined,
-        hours: p.regularOpeningHours && p.regularOpeningHours.weekdayDescriptions ? p.regularOpeningHours.weekdayDescriptions[today] : undefined,
-        address: p.shortFormattedAddress, website: p.websiteUri, mapsUrl: p.googleMapsUri
-      };
-    }).sort((a, b) => a.km - b.km);
-  }
-
-  /** MOCK sólo para desarrollo: datos inventados y etiquetados como tales. */
-  async function mock(q) {
-    let seed = Math.abs(Math.round(q.lat * 1000) * 31 + Math.round(q.lng * 1000));
-    const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
-    const kinds = ['ramen', 'sushi', 'izakaya', 'udon', 'cafe', 'tonkatsu', 'curry', 'yakitori'];
-    const out = kinds.map(function (c, i) {
-      const ang = rnd() * Math.PI * 2, dist = (0.1 + rnd() * 0.9) * (q.radius / 1000);
-      const coords = { lat: q.lat + (dist / 111) * Math.cos(ang), lng: q.lng + (dist / (111 * Math.cos((q.lat * Math.PI) / 180))) * Math.sin(ang) };
-      return { id: 'mock-' + i, source: 'mock', name: '[MOCK] ' + c[0].toUpperCase() + c.slice(1) + ' ' + (i + 1), coords: coords, km: U.haversine(q, coords), cuisine: c, priceLevel: 1 + (i % 3), rating: Math.round((3.5 + rnd() * 1.5) * 10) / 10, openNow: rnd() > 0.3, hours: 'Mo-Su 11:00-22:00 (mock)', address: 'Dirección de prueba' };
-    });
-    return out.sort((a, b) => a.km - b.km);
-  }
-
-  const PROVIDERS = { google: ['Google Places', googlePlaces], osm: ['OpenStreetMap', overpass], mock: ['Datos de prueba (MOCK)', mock] };
-  const nearbyCache = {};
-
-  /** Automático: Google si hay clave; si no, OpenStreetMap. Caché en memoria 15 min. */
-  async function nearby(center, radius) {
-    const pref = S.get().settings.placesProvider;
-    const id = pref === 'auto' ? (getPlacesKey() ? 'google' : 'osm') : pref;
-    const n = S.now();
-    const key = [id, center.lat.toFixed(3), center.lng.toFixed(3), radius].join('|');
-    const hit = nearbyCache[key];
-    if (hit && Date.now() - hit.at < 15 * 60000) return hit.value;
-    if (id !== 'mock' && !online()) throw new Error('Sin conexión: descubrir restaurantes necesita Internet');
-    const results = await PROVIDERS[id][1]({ lat: center.lat, lng: center.lng, radius: radius, weekday: U.weekday(n.date), minutes: n.minutes });
-    const value = { results: results, source: id, label: PROVIDERS[id][0] };
-    nearbyCache[key] = { at: Date.now(), value: value };
-    return value;
-  }
+  /* Restaurantes cercanos (OpenStreetMap / Google Places): quitado en la v1.9.0, no se usaba.
+     Se borra la clave de Google que pudiera quedar guardada en este navegador. */
+  lsDel(PLACES_KEY);
 
   /* ── Geocodificación (Nominatim/OSM, sin clave, uso moderado) ─ */
 
@@ -467,7 +366,7 @@ JT.services = (function () {
   }
 
   return {
-    online, rates, refreshRatesIfStale, fetchRates, nearby, geocode, getPlacesKey, setPlacesKey,
+    online, rates, refreshRatesIfStale, fetchRates, geocode,
     vaultAvailable, vaultExists, vaultUnlocked, vaultUnlock, vaultLock, vaultGet, vaultSet, vaultReset,
     notificationsSupported, requestNotifications, dueReminders, showSystemNotification,
     copy, share, download, saveCopy, pickFile, openUrl, canSpeak, speak,

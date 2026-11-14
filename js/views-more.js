@@ -1037,7 +1037,14 @@
       '<small class="muted">Automático: Inicio cambia al Modo viaje durante las fechas del viaje.</small>' +
       '<form id="fSim" class="stack"><span class="field__label">Simular fecha y hora (para probar)</span><div class="row row--top">' + UI.field('Fecha', UI.input('simulatedDate', st.simulatedDate || '', { type: 'date' })) + UI.field('Hora', UI.input('simulatedTime', st.simulatedTime || '', { type: 'time' }), { optional: true }) + '</div>' +
       '<div class="row row--wrap">' + UI.btn('Aplicar', { type: 'submit', size: 'sm', variant: 'secondary' }) + UI.btn('Simular un día con plan a las 11:45', { size: 'sm', variant: 'secondary', data: { act: 'simulate' } }) + (st.simulatedDate ? UI.btn('Usar fecha real', { size: 'sm', variant: 'danger', data: { act: 'clearSim' } }) : '') + '</div></form>' +
-      (st.simulatedDate ? UI.banner('warn', 'clock', 'Simulando ' + st.simulatedDate + (st.simulatedTime ? ' ' + st.simulatedTime : ''), 'Afecta a «hoy», al Modo viaje y a «abierto ahora».') : ''), { cls: 'stack' }));
+      (st.simulatedDate ? UI.banner('warn', 'clock', 'Simulando ' + st.simulatedDate + (st.simulatedTime ? ' ' + st.simulatedTime : ''), 'Afecta a «hoy», al Modo viaje y a «abierto ahora».') : '') +
+      // Qué bloques se ven en el Modo viaje y en qué orden.
+      '<hr><span class="field__label">Qué se ve en el Modo viaje</span><small class="muted">Marca lo que quieres ver y ordénalo con las flechas. Los avisos (check-out, simulación) salen siempre arriba.</small>' +
+      '<div class="tblocks">' + C.travelLayout().map((b, i, arr) => '<div class="tblock' + (b.on ? '' : ' is-off') + '">' +
+        '<button type="button" class="tblock__toggle" data-act="tbToggle" data-id="' + b.id + '" aria-pressed="' + b.on + '"><span class="check__box">' + U.icon('check', 14) + '</span><span>' + esc(b.label) + '</span></button>' +
+        UI.iconBtn('up', 'Subir ' + b.label, { act: 'tbMove', id: b.id, dir: '-1' }, { size: 18 }).replace('<button', '<button' + (i === 0 ? ' disabled' : '')) +
+        UI.iconBtn('down', 'Bajar ' + b.label, { act: 'tbMove', id: b.id, dir: '1' }, { size: 18 }).replace('<button', '<button' + (i === arr.length - 1 ? ' disabled' : '')) + '</div>').join('') + '</div>' +
+      UI.btn('Restablecer el orden', { size: 'sm', variant: 'ghost', icon: 'refresh', data: { act: 'tbReset' } }), { cls: 'stack' }));
 
     // Sólo lo que se usa: el redondeo del yen. Recordatorios y APIs se quitaron en la v1.6.0 (no se usaban).
     const manualSet = Object.keys(st.manualRates || {}).length > 0;
@@ -1181,13 +1188,29 @@
   A.setYenRounding =(el) => S.setSettings({ yenRounding: el.dataset.value });
   A.setTheme = (el) => S.setSettings({ theme: el.dataset.value });
   A.setTextSize = (el) => S.setSettings({ textSize: el.dataset.value });
+
+  /* Bloques del Modo viaje: mostrar/ocultar y ordenar (se guarda en settings.travelBlocks). */
+  function saveTravelLayout(list) {
+    S.setSettings({ travelBlocks: { order: list.map((b) => b.id), off: list.filter((b) => !b.on).map((b) => b.id) } });
+  }
+  A.tbToggle = function (el) {
+    const list = C.travelLayout(), b = list.find((x) => x.id === el.dataset.id);
+    if (!b) return;
+    b.on = !b.on;
+    saveTravelLayout(list);
+  };
+  A.tbMove = function (el) {
+    const list = C.travelLayout(), i = list.findIndex((x) => x.id === el.dataset.id), j = i + Number(el.dataset.dir);
+    if (i < 0 || j < 0 || j >= list.length) return;
+    const tmp = list[i]; list[i] = list[j]; list[j] = tmp;
+    saveTravelLayout(list);
+  };
+  A.tbReset = () => { S.setSettings({ travelBlocks: undefined }); UI.toast('Modo viaje como al principio'); };
   A.setUnits = (el) => S.setSettings({ units: el.dataset.value });
   A.setTravel = (el) => S.setSettings({ travelMode: el.dataset.value });
   A.clearSim = () => S.setSettings({ simulatedDate: '', simulatedTime: '' });
   A.setLead = (el) => S.setSettings({ notifyLeadMinutes: Number(el.dataset.value) });
-  A.setProvider = (el) => S.setSettings({ placesProvider: el.dataset.value });
   A.clearManualRates = () => { S.setSettings({ manualRates: {} }); UI.toast('Se usa el tipo del BCE'); };
-  A.delKey = () => { SV.setPlacesKey(''); UI.toast('Clave borrada'); JT.app.render(); };
   A.setNotif = async function (el) {
     if (el.dataset.value === 'on' && SV.notificationsSupported()) await SV.requestNotifications();
     S.setSettings({ notificationsEnabled: el.dataset.value === 'on' });

@@ -29,7 +29,6 @@
         (est ? '<small class="faint block">' + D.MODE[est.mode][1] + ' ~' + U.fmtDur(est.minutes) + ' · ' + U.fmtKm(est.routeKm, S.get().settings.units) + (fromLabel ? ' desde ' + esc(fromLabel) : '') + ' (estimado)</small>' : '') +
       '</div></div>' +
       '<div class="next__acts">' + (dirUrl ? '<a class="btn btn--primary btn--sm" href="' + esc(dirUrl) + '" target="_blank" rel="noopener">' + U.icon('nav', 16) + '<span>Cómo llegar</span></a>' : '<span class="grow"></span>') +
-        (loc.coords ? UI.iconBtn('food', 'Comer cerca', { act: 'go', to: 'nearby?' + C.q({ lat: loc.coords.lat, lng: loc.coords.lng, label: loc.name || a.title }) }, { size: 20 }) : '') +
         // Marcarla como hecha (o saltarla) hace que la siguiente pase a primer plano.
         UI.iconBtn('check', 'Marcar como hecha', { act: 'doneNext', id: a.id }, { size: 20 }) + '</div>',
       { tone: item.inProgress ? 'accent' : '', data: { act: 'go', to: 'activity/' + a.id }, cls: 'stack-sm next-card' }
@@ -143,62 +142,94 @@
 
   /* ── Modo viaje: lo que necesitas en 5 segundos en la calle ── */
 
+  /* El Modo viaje está hecho de bloques que eliges y ordenas en Ajustes → Modo viaje.
+     Los avisos (simulación, check-out) van siempre arriba. */
+  const TRAVEL_BLOCKS = [
+    ['where', 'Dónde estás (día y ciudades)'], ['now', 'Ahora y siguiente plan'], ['quick', 'Accesos rápidos'],
+    ['diary', 'Diario (por la noche)'], ['converter', 'Conversor ¥ ⇄ €'], ['talk', 'Para comunicarte (frases y alergias)'],
+    ['hotel', 'Esta noche duermes en'], ['gifts', 'Regalos por comprar aquí'], ['money', 'Gasto de hoy'],
+    ['reservations', 'Reservas de hoy'], ['later', 'Más tarde hoy'], ['notes', 'Notas de la ciudad'], ['hub', 'Tu viaje (apartados)']
+  ];
+
+  /** [{ id, label, on }] en tu orden; los bloques nuevos de futuras versiones se añaden al final, visibles. */
+  function travelLayout() {
+    const cfg = S.get().settings.travelBlocks || {}, off = cfg.off || [];
+    const known = TRAVEL_BLOCKS.map((b) => b[0]);
+    const order = (cfg.order || []).filter((id) => known.indexOf(id) > -1);
+    known.forEach((id) => { if (order.indexOf(id) === -1) order.push(id); });
+    return order.map((id) => ({ id: id, label: TRAVEL_BLOCKS.find((b) => b[0] === id)[1], on: off.indexOf(id) === -1 }));
+  }
+  C.travelLayout = travelLayout;
+
   function travelMode(t) {
     const s = S.get(), n = t.now, day = t.day, city = t.city;
     const up = S.upcoming(n, 4);
     // «Dónde estás» sale del plan (última parada de hoy o el hotel), no del GPS: para moverse se usa Google Maps.
     const here = S.inferArea(day, n);
     const current = up.find((u) => u.inProgress), next = up.find((u) => !u.inProgress);
+    const hotel = S.hotelTonight(n.date);
     let html = '';
     if (n.simulated) html += UI.banner('warn', 'clock', 'Simulando ' + n.date + ' a las ' + n.time, 'Cámbialo o desactívalo en Ajustes → Modo viaje.', { data: { act: 'go', to: 'settings' } });
     html += checkoutAlerts(n);
-    const strip = C.cityStrip(n.date);
-    if (strip && t.phase === 'during') html += UI.card('<small class="muted">Día ' + t.dayNumber + ' de ' + t.totalDays + (city ? ' · ' + esc(city.name) : '') + (t.nextCity ? ' · después: ' + esc(t.nextCity.name) : '') + '</small>' + strip, { cls: 'stack-sm' });
-    if (current) html += nextUpCard(current, 'AHORA');
-    if (next) html += nextUpCard(next, 'SIGUIENTE', here, current ? 'la actividad actual' : 'tu última parada');
-    else if (!current) html += UI.empty('🍵', 'Nada más por hoy', 'Disfruta. Puedes buscar dónde cenar cerca o planificar mañana.');
-    const nearTo = here || (city && city.coords);
-    html += C.quick([
-      ['wallet', 'Gasto', { act: 'newExpense' }],
-      ['food', 'Comer cerca', nearTo ? { act: 'go', to: 'nearby?' + C.q({ lat: nearTo.lat, lng: nearTo.lng, label: city && city.name }) } : { act: 'go', to: 'food' }],
-      ['calendar', 'Día de hoy', day ? { act: 'go', to: 'day/' + day.id } : { act: 'go', to: 'itinerary' }],
-      ['chat', 'Frases', { act: 'go', to: 'phrases' }]
-    ]);
-    // Por la noche: cómo fue el día, arriba para que no se olvide.
-    if (day && n.minutes >= 18 * 60) html += diaryCard(day);
-    html += C.quickConverter();
-    html += talkCard();
-    // Volver al hotel: la tarjeta para el taxista a un toque.
-    const hotel = S.hotelTonight(n.date);
-    if (hotel) {
-      const hl = hotel.location || {}, hdir = hl.coords || hl.name || hl.address ? U.directionsUrl(hl) : null;
-      html += UI.card('<div class="row"><span class="quick__icon tone-violet">' + U.icon('bed', 20) + '</span><div class="grow"><small class="eyebrow muted">ESTA NOCHE DUERMES EN</small><strong class="block">' + esc(hotel.name) + '</strong>' +
-        (hotel.nameJa ? '<small class="muted" lang="ja">' + esc(hotel.nameJa) + '</small>' : '') + '</div></div>' +
-        '<div class="row row--wrap">' + UI.btn('Para el taxista', { icon: 'car', size: 'sm', data: { act: 'taxi', id: hotel.id } }) +
-        (hdir ? '<a class="btn btn--secondary btn--sm" href="' + esc(hdir) + '" target="_blank" rel="noopener">' + U.icon('nav', 16) + '<span>Volver al hotel</span></a>' : '') + '</div>', { cls: 'stack' });
-    }
-    // Regalos que apuntaste para comprar en esta ciudad.
-    const gifts = city && C.giftsPendingIn ? C.giftsPendingIn(city.id) : [];
-    if (gifts.length) html += UI.banner('accent', 'gift', 'En ' + city.name + ': ' + gifts.length + (gifts.length === 1 ? ' regalo por comprar' : ' regalos por comprar'), gifts.map((g) => g.idea).join(' · '), { data: { act: 'go', to: 'gifts' } });
-    const spentToday = C.moneySum(Object.values(s.expenses).filter((e) => e.date === n.date));
-    const spentAll = C.moneySum(Object.values(s.expenses));
-    const budget = s.trip.totalBudget;
-    html += UI.card('<div class="stats">' + UI.stat('Hoy', spentToday.text, '', true) + UI.stat('Total viaje', spentAll.text, budget ? 'de ' + U.money(budget, spentAll.main) : '') + '</div>' + (budget ? UI.progress(spentAll.total / budget, spentAll.total > budget ? 'accent' : 'info') : ''), { cls: 'stack' });
-    const resv = day ? S.reservationsOffTimeline(day).filter((r) => !hotel || r.id !== hotel.id) : []; // el hotel de esta noche ya tiene su tarjeta
-    if (resv.length) html += UI.section('Reservas de hoy', resv.map(C.reservationCard).join(''), UI.btn('Todas', { size: 'sm', variant: 'ghost', data: { act: 'go', to: 'reservations' } }));
-    const near = here ? S.savedNear(here, 1.5).slice(0, 3) : [];
-    html += UI.section('Comer cerca',
-      near.length ? near.map((x) => C.restaurantCard(x.restaurant, x.km)).join('') : '<p class="muted small">Ningún restaurante guardado a menos de 1,5 km. Pulsa «Buscar más» para ver opciones cercanas (requiere conexión).</p>',
-      nearTo ? UI.btn('Buscar más', { size: 'sm', variant: 'ghost', icon: 'search', data: { act: 'go', to: 'nearby?' + C.q({ lat: nearTo.lat, lng: nearTo.lng, label: city && city.name }) } }) : '');
-    const later = day ? S.dayActivities(day.id).filter((a) => a.status !== 'done' && a !== (current && current.activity) && a !== (next && next.activity) && (!a.startTime || U.toMin(a.startTime) >= n.minutes)) : [];
-    if (later.length) html += UI.section('Más tarde hoy', UI.card('<div class="mini-tl">' + later.map((a) => '<button type="button" class="mini-tl__row" data-act="go" data-to="activity/' + a.id + '"><span class="mono">' + (a.startTime || '··:··') + '</span><span>' + D.ACTIVITY[a.category][1] + ' ' + esc(a.title) + '</span></button>').join('') + '</div>'),
-      UI.btn('Día completo', { size: 'sm', variant: 'ghost', data: { act: 'go', to: 'day/' + day.id } }));
-    const notes = Object.values(s.notes).filter((x) => (city && x.scope === 'city' && x.refId === city.id) || (day && x.scope === 'day' && x.refId === day.id)).sort((a, b) => b.pinned - a.pinned).slice(0, 3);
-    if (notes.length) html += UI.section('Notas · ' + (city ? city.name : 'hoy'), notes.map((x) => C.noteCard(x)).join(''), UI.btn('Todas', { size: 'sm', variant: 'ghost', data: { act: 'go', to: 'notes' } }));
-    // En el Modo viaje manda lo de ahora: los apartados del viaje van al final.
-    html += C.tripHub();
+    const blocks = {
+      where: function () {
+        const strip = C.cityStrip(n.date);
+        return strip && t.phase === 'during' ? UI.card('<small class="muted">Día ' + t.dayNumber + ' de ' + t.totalDays + (city ? ' · ' + esc(city.name) : '') + (t.nextCity ? ' · después: ' + esc(t.nextCity.name) : '') + '</small>' + strip, { cls: 'stack-sm' }) : '';
+      },
+      now: function () {
+        return (current ? nextUpCard(current, 'AHORA') : '') + (next ? nextUpCard(next, 'SIGUIENTE', here, current ? 'la actividad actual' : 'tu última parada') : '') +
+          (!current && !next ? UI.empty('🍵', 'Nada más por hoy', 'Disfruta. Puedes escribir el diario o planificar mañana.') : '');
+      },
+      quick: () => C.quick([
+        ['wallet', 'Gasto', { act: 'newExpense' }],
+        ['calendar', 'Día de hoy', day ? { act: 'go', to: 'day/' + day.id } : { act: 'go', to: 'itinerary' }],
+        ['chat', 'Frases', { act: 'go', to: 'phrases' }],
+        hotel ? ['car', 'Taxi al hotel', { act: 'taxi', id: hotel.id }] : ['ticket', 'Reservas', { act: 'go', to: 'reservations' }]
+      ]),
+      diary: () => (day && n.minutes >= 18 * 60 ? diaryCard(day) : ''),
+      converter: () => C.quickConverter(),
+      talk: () => talkCard(),
+      hotel: function () {
+        if (!hotel) return '';
+        const hl = hotel.location || {}, hdir = hl.coords || hl.name || hl.address ? U.directionsUrl(hl) : null;
+        return UI.card('<div class="row"><span class="quick__icon tone-violet">' + U.icon('bed', 20) + '</span><div class="grow"><small class="eyebrow muted">ESTA NOCHE DUERMES EN</small><strong class="block">' + esc(hotel.name) + '</strong>' +
+          (hotel.nameJa ? '<small class="muted" lang="ja">' + esc(hotel.nameJa) + '</small>' : '') + '</div></div>' +
+          '<div class="row row--wrap">' + UI.btn('Para el taxista', { icon: 'car', size: 'sm', data: { act: 'taxi', id: hotel.id } }) +
+          (hdir ? '<a class="btn btn--secondary btn--sm" href="' + esc(hdir) + '" target="_blank" rel="noopener">' + U.icon('nav', 16) + '<span>Volver al hotel</span></a>' : '') + '</div>', { cls: 'stack' });
+      },
+      gifts: function () {
+        const gifts = city && C.giftsPendingIn ? C.giftsPendingIn(city.id) : [];
+        return gifts.length ? UI.banner('accent', 'gift', 'En ' + city.name + ': ' + gifts.length + (gifts.length === 1 ? ' regalo por comprar' : ' regalos por comprar'), gifts.map((g) => g.idea).join(' · '), { data: { act: 'go', to: 'gifts' } }) : '';
+      },
+      money: function () {
+        const spentToday = C.moneySum(Object.values(s.expenses).filter((e) => e.date === n.date)), spentAll = C.moneySum(Object.values(s.expenses)), budget = s.trip.totalBudget;
+        return UI.card('<div class="stats">' + UI.stat('Hoy', spentToday.text, '', true) + UI.stat('Total viaje', spentAll.text, budget ? 'de ' + U.money(budget, spentAll.main) : '') + '</div>' + (budget ? UI.progress(spentAll.total / budget, spentAll.total > budget ? 'accent' : 'info') : ''), { cls: 'stack' });
+      },
+      reservations: function () {
+        const resv = day ? S.reservationsOffTimeline(day).filter((r) => !hotel || r.id !== hotel.id) : []; // el hotel de esta noche ya tiene su tarjeta
+        return resv.length ? UI.section('Reservas de hoy', resv.map(C.reservationCard).join(''), UI.btn('Todas', { size: 'sm', variant: 'ghost', data: { act: 'go', to: 'reservations' } })) : '';
+      },
+      later: function () {
+        const later = day ? S.dayActivities(day.id).filter((a) => a.status !== 'done' && a !== (current && current.activity) && a !== (next && next.activity) && (!a.startTime || U.toMin(a.startTime) >= n.minutes)) : [];
+        return later.length ? UI.section('Más tarde hoy', UI.card('<div class="mini-tl">' + later.map((a) => '<button type="button" class="mini-tl__row" data-act="go" data-to="activity/' + a.id + '"><span class="mono">' + (a.startTime || '··:··') + '</span><span>' + D.ACTIVITY[a.category][1] + ' ' + esc(a.title) + '</span></button>').join('') + '</div>'),
+          UI.btn('Día completo', { size: 'sm', variant: 'ghost', data: { act: 'go', to: 'day/' + day.id } })) : '';
+      },
+      notes: function () {
+        const notes = Object.values(s.notes).filter((x) => (city && x.scope === 'city' && x.refId === city.id) || (day && x.scope === 'day' && x.refId === day.id)).sort((a, b) => b.pinned - a.pinned).slice(0, 3);
+        return notes.length ? UI.section('Notas · ' + (city ? city.name : 'hoy'), notes.map((x) => C.noteCard(x)).join(''), UI.btn('Todas', { size: 'sm', variant: 'ghost', data: { act: 'go', to: 'notes' } })) : '';
+      },
+      hub: () => C.tripHub()
+    };
+    travelLayout().forEach((b) => { if (b.on) html += blocks[b.id](); });
+    html += '<p class="center">' + UI.btn('Personalizar el Modo viaje', { icon: 'settings', size: 'sm', variant: 'ghost', data: { act: 'customizeTravel' } }) + '</p>';
     return html;
   }
+
+  A.customizeTravel = function () {
+    (JT.uiState.settingsOpen = JT.uiState.settingsOpen || {})['Modo viaje'] = true;
+    JT.go('settings');
+    setTimeout(function () { const el = document.querySelector('details.fold[data-fold="Modo viaje"]'); if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' }); }, 120);
+  };
 
   /** «Para comunicarte» en el Modo viaje: tus frases ♥ a un toque y, si tienes, tus alergias. */
   function talkCard() {
@@ -284,12 +315,6 @@
     const est = C.moneySum(list.filter((a) => a.estimatedCost).map((a) => ({ amount: a.estimatedCost, currency: a.costCurrency || 'JPY' })));
     const resv = S.reservationsOffTimeline(day);
     const notes = Object.values(s.notes).filter((x) => (x.scope === 'day' && x.refId === day.id) || (city && x.scope === 'city' && x.refId === city.id));
-    // Restaurantes guardados a menos de 1 km de alguna actividad del día (offline).
-    const near = {};
-    locs.forEach((l) => { if (l.coords) S.savedNear(l.coords, 1).forEach((x) => { if (!near[x.restaurant.id] || near[x.restaurant.id].km > x.km) near[x.restaurant.id] = x; }); });
-    const used = new Set(list.map((a) => a.restaurantId));
-    const nearList = Object.values(near).filter((x) => !used.has(x.restaurant.id)).sort((a, b) => a.km - b.km).slice(0, 4);
-    const firstLoc = locs.find((l) => l.coords);
 
     let html = UI.header({ back: true, eyebrow: 'DÍA ' + num + (city ? ' · ' + city.name.toUpperCase() : '') + (n.date === day.date ? ' · HOY' : ''), title: U.fmtLong(day.date), subtitle: day.title,
       actions: UI.iconBtn('share', 'Compartir día', { act: 'shareDay', id: day.id }) + UI.iconBtn('edit', 'Editar día', { act: 'editDay', id: day.id }) });
@@ -301,8 +326,6 @@
     html += UI.section('Timeline', list.length
       ? '<div class="timeline">' + C.timeline(day.id) + '</div><p class="faint small tl-hint">Mantén pulsada una actividad para más opciones (mover, duplicar, reordenar…). Tiempos de desplazamiento estimados.</p>'
       : UI.empty('🗓️', 'Día libre', 'Añade actividades o usa la planificación inteligente para ordenar varios sitios.', UI.btn('Añadir actividad', { data: { act: 'newActivity', day: day.id } })));
-    html += UI.section('Comer cerca', nearList.length ? nearList.map((x) => C.restaurantCard(x.restaurant, x.km)).join('') : '<p class="muted small">No hay restaurantes guardados a menos de 1 km de las actividades del día.</p>',
-      firstLoc ? UI.btn('Buscar', { size: 'sm', variant: 'ghost', icon: 'search', data: { act: 'go', to: 'nearby?' + C.q({ lat: firstLoc.coords.lat, lng: firstLoc.coords.lng, label: city && city.name }) } }) : '');
     html += UI.section('Notas', notes.length ? notes.map((x) => C.noteCard(x)).join('') : '<p class="muted small">Sin notas para este día.</p>', UI.btn('Nota', { size: 'sm', variant: 'ghost', icon: 'plus', data: { act: 'newNote', scope: 'day', ref: day.id } }));
     const mood = day.mood && D.MOOD[day.mood];
     html += UI.section('Diario', day.diary || mood
@@ -419,7 +442,6 @@
       actions: UI.iconBtn('edit', 'Editar', { act: 'editActivity', id: a.id }) + UI.iconBtn('more', 'Más opciones', { act: 'activityMenu', id: a.id }) });
     html += '<div class="row row--wrap">' + UI.btn(done ? 'Hecha' : 'Marcar hecha', { icon: 'check', size: 'sm', variant: done ? 'soft' : 'primary', data: { act: 'toggleDone', id: a.id } }) +
       (dir ? '<a class="btn btn--secondary btn--sm" href="' + esc(dir) + '" target="_blank" rel="noopener">' + U.icon('nav', 16) + '<span>Cómo llegar</span></a>' : '') +
-      (loc.coords ? UI.btn('Restaurantes cerca', { icon: 'food', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'nearby?' + C.q({ lat: loc.coords.lat, lng: loc.coords.lng, label: loc.name || a.title }) } }) : '') +
       UI.btn('Gasto', { icon: 'plus', size: 'sm', variant: 'secondary', data: { act: 'newExpense', date: day && day.date, city: day && day.cityId, place: loc.name || a.title, activity: a.id } }) + '</div>';
     html += UI.card((loc.name ? UI.listRow({ icon: 'pin', title: loc.name, sub: loc.address || (loc.coords ? loc.coords.lat.toFixed(4) + ', ' + loc.coords.lng.toFixed(4) : 'Sin coordenadas'), data: place ? { act: 'go', to: 'place/' + place.id } : rest ? { act: 'go', to: 'restaurant/' + rest.id } : null }) : '<p class="muted">Sin ubicación</p>') +
       '<div class="pills">' + UI.pill('Prioridad ' + D.PRIORITY[a.priority][0].toLowerCase(), a.priority === 'high' ? 'accent' : 'neutral') + (a.estimatedCost ? UI.pill('≈ ' + U.money(a.estimatedCost, a.costCurrency || 'JPY')) : '') +
@@ -450,7 +472,6 @@
       { icon: 'up', label: 'Subir', hint: a.startTime ? 'Tiene hora: mejor cámbiala en Editar y se recoloca sola' : '', run: () => S.shiftActivity(a.id, -1) },
       { icon: 'down', label: 'Bajar', hint: a.startTime ? 'Tiene hora: mejor cámbiala en Editar y se recoloca sola' : '', run: () => S.shiftActivity(a.id, 1) }
     ];
-    if (loc.coords) items.push({ icon: 'food', label: 'Restaurantes cerca', run: () => JT.go('nearby?' + C.q({ lat: loc.coords.lat, lng: loc.coords.lng, label: loc.name || a.title })) });
     const dir = U.directionsUrl(loc, null, a.transportMode);
     if (dir) items.push({ icon: 'nav', label: 'Cómo llegar', run: () => SV.openUrl(dir) });
     items.push({ icon: 'trash', label: 'Eliminar', destructive: true, run: async () => { if (await UI.confirm('¿Eliminar actividad?', a.title)) { S.remove('activities', a.id); UI.toast('Actividad eliminada'); if (location.hash.indexOf(a.id) > -1) history.back(); } } });
@@ -664,7 +685,7 @@
       if (it.kind === 'visit') S.addActivity({ dayId: day.id, title: it.stop.name, category: 'visit', placeId: it.stop.id, startTime: U.toTime(it.start), endTime: U.toTime(it.end), transportMode: mode });
       else S.addActivity({ dayId: day.id, title: (it.meal === 'lunch' ? 'Almuerzo' : 'Cena') + (it.suggestion ? ': ' + it.suggestion.name : ''), category: 'restaurant', restaurantId: it.suggestion ? it.suggestion.id : undefined,
         location: it.suggestion || !it.coords ? undefined : { name: 'Zona de la parada anterior', coords: it.coords }, startTime: U.toTime(it.start), endTime: U.toTime(it.end), transportMode: it.suggestion ? 'walk' : undefined,
-        notes: it.suggestion ? undefined : 'Sin restaurante guardado cerca: usa «Restaurantes cerca».' });
+        notes: it.suggestion ? undefined : 'Sin restaurante guardado cerca.' });
       mode = undefined;
     });
     st.result = null; st.selected = [];

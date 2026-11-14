@@ -18,7 +18,7 @@ js/utils.js         Fechas en hora de Japón, dinero, distancias, horarios, icon
 js/data.js          Categorías, frases, información útil y viaje de ejemplo
 js/store.js         localStorage, CRUD con cascadas, selectores, exportar/importar
 js/logic.js         Planificador del día, reparto de gastos, búsqueda, importar texto, recordatorios
-js/services.js      Red y APIs del navegador: OpenStreetMap, Google Places, BCE, geocodificación,
+js/services.js      Red y APIs del navegador: BCE, geocodificación,
                     cofre cifrado, avisos, compartir, ficheros
 js/ui.js            Componentes: tarjetas, chips, campos, hojas inferiores, menús, toasts
 js/views-common.js  Navegación y tarjetas compartidas (timeline, lugares, gastos…)
@@ -87,13 +87,12 @@ Si no lo haces, el móvil seguirá usando la copia antigua de la caché. *Ajuste
 | **Pantalla completa** ⛶ | Para enseñar una frase, la tarjeta del taxista o tus alergias: la letra se ajusta al máximo que cabe y, en Android, pasa a pantalla completa en horizontal. Con una frase abierta, basta girar el móvil. |
 | **Emergencia** 🆘 | Alergias (con su nombre en japonés, a pantalla completa y con las frases para el restaurante), enfermedades, medicación, grupo sanguíneo, seguro, contacto y embajada, con las etiquetas en japonés y en grande, botones para llamar al 119 / 110 / Japan Visitor Hotline y frases para pedir ayuda. Se guarda sin cifrar para verla sin PIN: no pongas pasaporte ni tarjetas. |
 | **Para el taxista** 🚕 | En cada reserva (y en el Modo viaje, «Esta noche duermes en…»): «A esta dirección, por favor» con el nombre y la dirección del hotel en japonés, en grande. El japonés lo pegas tú en la reserva (de la confirmación o de Google Maps en japonés). Botón 🔊 para que el móvil lo diga en voz alta. |
-| **Modo viaje** | Se activa solo durante el viaje. Muestra la actividad actual y la siguiente, cuánto falta y cuánto se tarda en llegar, restaurantes guardados cerca de tu última parada (o del hotel), **«Para comunicarte»** (tus frases ♥ a un toque, con 🔊, y el botón **Mis alergias**), un **conversor rápido** ¥ ⇄ € (con el tipo y el redondeo de Ajustes, sin conexión), gasto de hoy, reservas de hoy, el resto del día y las notas de la ciudad. Para probarlo antes: *Ajustes → Simular un día con plan a las 11:45*. |
+| **Modo viaje** | Se activa solo durante el viaje. Está hecho de **bloques que eliges y ordenas** (*Ajustes → Modo viaje → Qué se ve*, o el botón «Personalizar el Modo viaje» al final): dónde estás, la actividad actual y la siguiente con cuánto falta y cuánto se tarda en llegar, accesos rápidos (gasto, día de hoy, frases y taxi al hotel), diario, **«Para comunicarte»** (tus frases ♥ a un toque, con 🔊, y el botón **Mis alergias**), un **conversor rápido** ¥ ⇄ € (con el tipo y el redondeo de Ajustes, sin conexión), esta noche duermes en, regalos por comprar, gasto de hoy, reservas de hoy, el resto del día, las notas de la ciudad y «Tu viaje». Para probarlo antes: *Ajustes → Simular un día con plan a las 11:45*. |
 | **Todo en el itinerario** 🔗 | Cada reserva y cada trayecto con fecha dentro del viaje sale solo en el itinerario de su día, en Inicio y en el Modo viaje. Si cambias la reserva, cambia su actividad; si mueves la actividad de día u hora, se mueve la reserva. Si ya tenías planificada esa actividad (mismo día, hora y sitio), se enlaza en vez de duplicarse. Y al revés: si pones un «Nº de reserva» en una actividad, aparece en *Inicio → Tu viaje → Reservas*. Para que una reserva no salga en el día: desmarca «Mostrar en el itinerario del día». |
 | **Itinerario** | Días agrupados por ciudad, con el color de cada ciudad, el nombre de la ciudad fijo arriba al bajar, y en cada día sus traslados (🚄 Tokio → Takayama), el check-in (🏨 Check-in 15:00 · hotel) el día que llegas, el check-out (🧳) y dónde dormís. Durante el viaje los días pasados se pliegan y hay un botón «Ir a hoy». Cada actividad guarda: título, descripción, día, inicio/fin, ubicación (enlazada a un lugar o restaurante, o libre), categoría, notas, coste, reserva, URL, prioridad, estado y transporte. Se puede crear, editar, eliminar, duplicar, marcar como hecha, mover de día y reordenar (pulsación larga → subir/bajar, u «Ordenar por hora»). |
-| **Vista del día** | Timeline vertical (los vuelos y trenes, como billete; los tramos de más de 50 km no se calculan porque entre medias hay un tren o un vuelo) con el «ahora» marcado y la distancia, tiempo y medio entre actividades; tocarlo abre la ruta real en Google Maps. También muestra reservas del día, restaurantes guardados cerca, notas, gasto y la opción de compartir. |
+| **Vista del día** | Timeline vertical (los vuelos y trenes, como billete; los tramos de más de 50 km no se calculan porque entre medias hay un tren o un vuelo) con el «ahora» marcado y la distancia, tiempo y medio entre actividades; tocarlo abre la ruta real en Google Maps. También muestra reservas del día, notas, diario, gasto y la opción de compartir. |
 | **Planificar día** ✨ | Eliges de 2 a 8 sitios y la app propone el orden: minimiza desplazamientos y esperas, respeta los horarios, deja huecos para comer con un restaurante guardado cerca y lo añade al itinerario. |
 | **Sitios** 📍 | Una pestaña con tres listas: *Visitar* (lugares), *Comer* (restaurantes) y *Probar* (comidas típicas para ir tachando; las dos primeras agrupadas por ciudad en el orden del viaje, con su color, sus fechas y cuántos hay; el nombre de la ciudad se queda fijo arriba al bajar). **Probar**: 26 comidas de serie (ramen, takoyaki, wagyu de Hida, helado con pan de oro…) más las que añadas; al tacharla se guarda la fecha y la ciudad, y durante el viaje sale arriba «Típico de Osaka». Categorías, horario con «abierto ahora» (en hora de Japón), precio, URL, notas, prioridad, visitado / quiero ir / probado, valoración y favoritos. |
-| **Restaurantes cerca** 🍜 | Primero tus guardados (sin conexión); después «Descubrir», con datos reales de OpenStreetMap (gratis y sin clave). Muestra distancia, tipo, precio, valoración, horario, si está abierto, dirección, «Ir» y «Guardar». |
 | **Gastos** | JPY/EUR/USD con tipo de cambio del BCE (el yen se redondea al alza por defecto: 177,32 → 178; configurable en Ajustes), total, hoy, media diaria y presupuesto, una barra de colores con el reparto por categoría (también en Inicio, con las 3 mayores), y gráficos por categoría (cada una con su color y su %), ciudad y día. Cada gasto indica con qué se pagó (efectivo, tarjeta, Suica…); el total es uno solo. Desliza para duplicar o borrar. Exporta a CSV. |
 | **Reparto** | Quién pagó y entre quién se divide; balances y transferencias mínimas para quedar en paz. |
 | **Ciudades** | Las fechas salen de los días asignados (Tokyo puede aparecer dos veces). Incluye noches, alojamiento, lugares, restaurantes, notas y presupuesto frente a gasto. |
@@ -118,14 +117,11 @@ Ninguno es obligatorio y **no hay ninguna clave en el código**.
 
 | Servicio | Para qué | Clave |
 |---|---|---|
-| OpenStreetMap (Overpass) | Restaurantes cercanos (por defecto) | No |
-| Google Places API (New) | Ya no se configura (desde la v1.6.0 Ajustes no tiene apartado de APIs): los restaurantes cercanos salen de OpenStreetMap. | — |
-| Frankfurter (BCE) | Tipos de cambio. El último se guarda para usarlo offline; también puedes fijar un tipo manual. | No |
+| Frankfurter (BCE) | Tipos de cambio. El último se guarda para usarlo sin conexión. | No |
 | Nominatim (OSM) | Buscar coordenadas por nombre | No |
 | Google Maps (enlace) | «Cómo llegar» con rutas reales. La app no tiene mapa propio ni usa el GPS: para moverte, Google Maps. | No |
 
 **Necesita conexión:**
-- descubrir restaurantes;
 - actualizar el tipo de cambio;
 - buscar coordenadas.
 
@@ -136,7 +132,7 @@ Ninguno es obligatorio y **no hay ninguna clave en el código**.
 - **Avisos:** la app no envía notificaciones (se quitaron en la v1.6.0). Los avisos útiles —tren de mañana, reserva en menos de 3 h, check-out, regalos por comprar— salen en Inicio y en el Modo viaje.
 - **Tiempos de desplazamiento:** son estimaciones (línea recta × 1,3 y velocidades medias). El tiempo real lo da «Cómo llegar».
 - **«Abierto ahora»:** solo funciona con horarios en formato tipo `Mo-Su 09:00-17:00; Tu off`. Los festivos no se modelan.
-- **OpenStreetMap:** no tiene valoraciones ni precios.
+- **Buscar cerca:** la búsqueda de restaurantes cercanos (OpenStreetMap / Google Places) se quitó en la v1.9.0; para eso, Google Maps.
 - **Enlaces cortos** (`maps.app.goo.gl`): no se pueden leer desde el navegador. Ábrelos y copia la dirección larga.
 - **Almacenamiento:** `localStorage` tiene un límite de unos 5 MB, de sobra para un viaje. Si borras los datos del navegador se pierde todo, así que exporta copias de vez en cuando.
 - **Reordenar:** se hace con el menú (subir/bajar), no arrastrando.

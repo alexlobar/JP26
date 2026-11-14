@@ -80,13 +80,11 @@
     const dir = U.directionsUrl(x, null, 'train');
     const linked = Object.values(s.activities).filter((a) => a.placeId === x.id);
     const notes = Object.values(s.notes).filter((n) => n.scope === 'place' && n.refId === x.id);
-    const near = x.coords ? S.savedNear(x.coords, 1).slice(0, 3) : [];
     let html = UI.header({ back: true, eyebrow: (c[1] + ' ' + c[0] + (city ? ' · ' + city.name : '')).toUpperCase(), title: x.name, subtitle: x.neighborhood,
       actions: UI.iconBtn('heart', 'Favorito', { act: 'fav', col: 'places', id: x.id }, { active: x.favorite }) + UI.iconBtn('share', 'Compartir', { act: 'sharePlace', id: x.id }) + UI.iconBtn('edit', 'Editar', { act: 'editPlace', id: x.id }) });
     if (x.imageUrl) html += '<img class="hero-img" src="' + esc(x.imageUrl) + '" alt="' + esc(x.name) + '" loading="lazy" onerror="this.remove()">';
     html += '<div class="row row--wrap">' + UI.btn(x.status === 'visited' ? 'Visitado' : 'Marcar visitado', { icon: 'check', size: 'sm', variant: x.status === 'visited' ? 'soft' : 'primary', data: { act: 'toggleVisited', id: x.id } }) +
       (dir ? '<a class="btn btn--secondary btn--sm" href="' + esc(dir) + '" target="_blank" rel="noopener">' + U.icon('nav', 16) + '<span>Cómo llegar</span></a>' : '') +
-      (x.coords ? UI.btn('Restaurantes cerca', { icon: 'food', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'nearby?' + C.q({ lat: x.coords.lat, lng: x.coords.lng, label: x.name }) } }) : '') +
       UI.btn('Al itinerario', { icon: 'calendar', size: 'sm', variant: 'secondary', data: { act: 'newActivity', place: x.id, title: x.name } }) + '</div>';
     html += UI.card('<div class="pills">' + UI.pill('Prioridad ' + D.PRIORITY[x.priority][0].toLowerCase(), x.priority === 'high' ? 'accent' : 'neutral') + UI.openBadge(x.hours) + (x.priceApprox ? UI.pill(x.priceApprox) : '') + '</div>' +
       (x.hours ? UI.listRow({ icon: 'clock', title: 'Horario', sub: x.hours }) : '') +
@@ -95,7 +93,6 @@
     if (x.description) html += UI.section('Descripción', '<p class="pre">' + esc(x.description) + '</p>');
     if (x.notes) html += UI.section('Notas personales', UI.card('<p class="pre">' + esc(x.notes) + '</p>', { tone: 'warn' }));
     if (linked.length) html += UI.section('En el itinerario', UI.card(linked.map((a) => UI.listRow({ icon: 'calendar', title: a.title, sub: (s.days[a.dayId] ? U.fmtDay(s.days[a.dayId].date) : '') + (a.startTime ? ' · ' + a.startTime : ''), data: { act: 'go', to: 'activity/' + a.id } })).join('')));
-    if (near.length) html += UI.section('Restaurantes guardados cerca', near.map((n) => C.restaurantCard(n.restaurant, n.km)).join(''));
     html += UI.section('Notas', notes.map((n) => C.noteCard(n, false)).join(''), UI.btn('Nota', { size: 'sm', variant: 'ghost', icon: 'plus', data: { act: 'newNote', scope: 'place', ref: x.id } }));
     return { html: html };
   };
@@ -168,7 +165,6 @@
       .filter((r) => !nq || U.normalize(r.name + ' ' + (r.neighborhood || '') + ' ' + D.CUISINE[r.cuisine][0] + ' ' + (r.notes || '')).indexOf(nq) > -1)
       .sort((a, b) => b.favorite - a.favorite || a.name.localeCompare(b.name));
     let html = sitesHeader('food');
-    html += UI.btn('Restaurantes cerca de tu próximo plan', { icon: 'calendar', variant: 'secondary', block: true, data: { act: 'nearPlan' } });
     html += searchBox('food', 'Buscar restaurantes…') +
       fchips('food', 'status', [{ value: 'want', label: 'Quiero ir' }, { value: 'tried', label: 'Probados' }, { value: 'fav', label: '♥ Favoritos' }]) +
       fchips('food', 'city', C.cityOptions(), 'Todas las ciudades') + fchips('food', 'cuisine', D.options(D.CUISINE), 'Toda la comida');
@@ -254,11 +250,6 @@
   A.newFood = () => F.food(null);
   A.editFood = (el) => F.food(el.dataset.id);
 
-  A.nearPlan = function () {
-    const t = S.today(), nx = S.upcoming(t.now, 1)[0], loc = nx && S.resolveLocation(nx.activity);
-    const c = (loc && loc.coords) || S.inferArea(t.day, t.now) || (t.city && t.city.coords);
-    if (c) JT.go('nearby?' + C.q({ lat: c.lat, lng: c.lng, label: (loc && loc.name) || (t.city && t.city.name) })); else UI.toast('No hay ubicación en tu itinerario');
-  };
 
   V.restaurant = function (p) {
     const s = S.get(), r = s.restaurants[p.id];
@@ -333,75 +324,7 @@
   A.newRestaurant = (el) => F.restaurant(null, { cityId: el.dataset.city || (S.today().phase === 'during' && S.today().city ? S.today().city.id : undefined) });
   A.editRestaurant = (el) => F.restaurant(el.dataset.id);
 
-  /* ══ RESTAURANTES CERCA ══════════════════════════════════════
-     Primero tus guardados (offline); después «Descubrir» con un
-     proveedor externo (OpenStreetMap por defecto, sin clave). */
-
-  const nearbyState = { radius: 1000, cuisine: '', open: false, result: null, error: null, loading: false, key: '' };
-
-  V.nearby = function (p, q) {
-    const center = q.lat && q.lng ? { lat: Number(q.lat), lng: Number(q.lng) } : null;
-    if (!center || !U.validCoords(center)) return { html: UI.header({ back: true, title: 'Restaurantes cerca' }) + UI.empty('📍', 'Sin ubicación', 'Abre esta pantalla desde un lugar o actividad con coordenadas.') };
-    const st = nearbyState, units = S.get().settings.units;
-    const key = center.lat + ',' + center.lng + ',' + st.radius;
-    if (st.key !== key) { st.key = key; st.result = null; st.error = null; st.loading = false; }
-    const saved = S.savedNear(center, st.radius / 1000).filter((x) => !st.cuisine || x.restaurant.cuisine === st.cuisine);
-    const savedNames = new Set(Object.values(S.get().restaurants).map((r) => r.name.toLowerCase()));
-    const results = st.result ? st.result.results.filter((r) => (!st.cuisine || r.cuisine === st.cuisine) && (!st.open || r.openNow === true)) : [];
-
-    let html = UI.header({ back: true, eyebrow: 'RESTAURANTES CERCA', title: q.label || 'Esta zona', subtitle: center.lat.toFixed(4) + ', ' + center.lng.toFixed(4) });
-    html += UI.filterChips([500, 1000, 2000].map((r) => ({ value: r, label: U.fmtKm(r / 1000, units) })), st.radius, 'nearRadius', { scroll: false }) +
-      '<div class="chips">' + '<button type="button" class="chip chip--btn' + (st.open ? ' is-on' : '') + '" aria-pressed="' + st.open + '" data-act="nearOpen"><span>🟢 Abierto ahora</span></button></div>' +
-      UI.filterChips([{ value: '', label: 'Toda la comida' }].concat(D.options(D.CUISINE)), st.cuisine, 'nearCuisine');
-    html += UI.section('Tus guardados (' + saved.length + ')', saved.length ? saved.map((x) => C.restaurantCard(x.restaurant, x.km)).join('') : '<p class="muted small">Ninguno en este radio.</p>');
-    let disc = C.offlineBanner('Descubrir restaurantes');
-    if (st.result && st.result.source === 'mock') disc += UI.banner('warn', 'alert', 'Datos de prueba (MOCK)', 'Resultados inventados para desarrollo. Cambia el proveedor en Ajustes → APIs.');
-    if (st.result && st.result.source === 'osm') disc += '<p class="faint small">Datos de OpenStreetMap (sin valoraciones ni precios). Para valoraciones y «abierto ahora» más fiable, configura Google Places en Ajustes.</p>';
-    if (st.loading) disc += '<div class="loading"><span class="spinner"></span><small class="muted">Buscando…</small></div>';
-    if (st.error) disc += UI.banner('accent', 'alert', 'No se pudo buscar', st.error, { action: UI.btn('Reintentar', { size: 'sm', variant: 'secondary', data: { act: 'nearRetry' } }) });
-    if (st.result && !results.length) disc += '<p class="muted small">Sin resultados con estos filtros.</p>';
-    disc += results.map((r) => externalCard(r, savedNames.has(r.name.toLowerCase()), center)).join('');
-    if (st.result) disc += '<p class="faint small">' + esc(st.result.label) + ' · los horarios y datos pueden no estar actualizados.</p>';
-    html += UI.section('Descubrir', disc, st.result ? UI.pill('Fuente: ' + st.result.label, st.result.source === 'mock' ? 'warn' : 'neutral') : '');
-    return {
-      html: html,
-      mount: function () {
-        if (!st.result && !st.loading && !st.error && (SV.online() || S.get().settings.placesProvider === 'mock')) {
-          st.loading = true;
-          SV.nearby(center, st.radius).then((r) => { if (st.key === key) { st.result = r; st.loading = false; JT.app.render(); } })
-            .catch((e) => { if (st.key === key) { st.error = e.message; st.loading = false; JT.app.render(); } });
-          JT.app.render();
-        }
-      }
-    };
-  };
-
-  function externalCard(r, saved, origin) {
-    const c = D.CUISINE[r.cuisine], units = S.get().settings.units;
-    const dir = U.directionsUrl({ coords: r.coords, name: r.name }, origin, 'walk');
-    nearbyState.byId = nearbyState.byId || {};
-    nearbyState.byId[r.id] = r;
-    return UI.card('<div class="row row--top"><span class="item__emoji" aria-hidden="true">' + c[1] + '</span><div class="grow"><strong>' + esc(r.name) + '</strong>' +
-      '<small class="muted block">' + esc([r.cuisineLabel || c[0], r.priceLevel ? D.PRICE[r.priceLevel] : '', U.fmtKm(r.km, units)].filter(Boolean).join(' · ')) + '</small>' +
-      (r.address ? '<small class="faint block">' + esc(r.address) + '</small>' : '') + '</div></div>' +
-      '<div class="pills">' + UI.openBadge(r.source === 'google' ? undefined : r.hours, r.openNow) + (r.rating ? UI.stars(Math.round(r.rating)) + '<small class="muted">' + r.rating.toFixed(1) + (r.ratingCount ? ' (' + r.ratingCount + ')' : '') + '</small>' : '') + '</div>' +
-      (r.hours ? '<small class="faint">🕐 ' + esc(r.hours) + '</small>' : '') +
-      '<div class="row row--wrap"><a class="btn btn--primary btn--sm" href="' + esc(dir) + '" target="_blank" rel="noopener">' + U.icon('nav', 16) + '<span>Ir</span></a>' +
-      UI.btn(saved ? 'Guardado' : 'Guardar', { icon: saved ? 'check' : 'plus', size: 'sm', variant: 'secondary', disabled: saved, data: { act: 'saveExternal', id: r.id } }) +
-      (r.website || r.mapsUrl ? UI.btn('Ficha', { icon: 'link', size: 'sm', variant: 'ghost', data: { act: 'openUrl', url: r.website || r.mapsUrl } }) : '') + '</div>', { cls: 'stack' });
-  }
-
-  A.nearRadius = (el) => { nearbyState.radius = Number(el.dataset.value); JT.app.render(); };
-  A.nearCuisine = (el) => { nearbyState.cuisine = el.dataset.value; JT.app.render(); };
-  A.nearOpen = () => { nearbyState.open = !nearbyState.open; JT.app.render(); };
-  A.nearRetry = () => { nearbyState.error = null; nearbyState.key = ''; JT.app.render(); };
-  A.saveExternal = function (el) {
-    const r = nearbyState.byId && nearbyState.byId[el.dataset.id];
-    if (!r) return;
-    const city = L.matchCity(r.address || '');
-    F.restaurant(null, { name: r.name, cuisine: r.cuisine, coords: r.coords, address: r.address, hours: r.hours, url: r.website || r.mapsUrl, priceLevel: r.priceLevel, cityId: city && city.id, openAfter: true,
-      notes: r.source === 'mock' ? 'Creado desde datos MOCK' : 'Guardado desde ' + (r.source === 'google' ? 'Google Places' : 'OpenStreetMap') });
-  };
+  /* «Restaurantes cerca» (buscar en OpenStreetMap / Google) se quitó en la v1.9.0: no se usaba. */
 
   /* ══ CIUDADES ════════════════════════════════════════════════
      Las fechas de una ciudad se derivan de los días asignados. */
@@ -435,7 +358,6 @@
     let html = UI.header({ back: true, eyebrow: c.nameJa, title: c.name, subtitle: stays.map((x) => U.fmtRange(x.start, x.end)).join(' · ') || 'Sin días asignados', actions: UI.iconBtn('edit', 'Editar ciudad', { act: 'editCity', id: c.id }) });
     html += UI.card('<div class="stats">' + UI.stat('Noches', String(nights)) + UI.stat('Gastado', spent.text, '', true) + UI.stat('Presupuesto', c.budget ? U.money(c.budget, main) : '—') + '</div>' + (c.budget ? UI.progress(spent.total / c.budget, spent.total > c.budget ? 'accent' : 'info') : ''), { cls: 'stack' });
     html += '<div class="row row--wrap">' + (stays[0] ? UI.btn('Ver días', { icon: 'calendar', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'day/' + stays[0].dayIds[0] } }) : '') +
-      (c.coords ? UI.btn('Comer cerca', { icon: 'food', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'nearby?' + C.q({ lat: c.coords.lat, lng: c.coords.lng, label: c.name }) } }) : '') +
       UI.btn('Planificar día', { icon: 'sparkle', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'planner' + (stays[0] ? '?day=' + stays[0].dayIds[0] : '') } }) + '</div>';
     html += UI.section('Alojamiento', hotels.length ? hotels.map(C.reservationCard).join('') : '<p class="muted small">Sin alojamiento guardado.</p>', UI.btn('Añadir', { size: 'sm', variant: 'ghost', icon: 'plus', data: { act: 'newReservation', type: 'hotel', date: stays[0] && stays[0].start, city: c.id } }));
     html += UI.section('Lugares (' + places.length + ')', places.map((x) => C.placeCard(x)).join(''), UI.btn('Añadir', { size: 'sm', variant: 'ghost', icon: 'plus', data: { act: 'newPlace', city: c.id } }));

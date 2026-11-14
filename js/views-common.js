@@ -203,7 +203,7 @@ JT.cards = (function () {
      para reconocerlo de un vistazo sin leer. Los tonos están en styles.css (.tone-*). */
   const TONE = {
     city: 'violet', ticket: 'red', train: 'blue', note: 'amber', checklist: 'green', doc: 'slate', info: 'teal', chat: 'pink',
-    calendar: 'indigo', wallet: 'green', food: 'orange', bed: 'violet', gift: 'indigo'
+    calendar: 'indigo', wallet: 'green', food: 'orange', bed: 'violet', gift: 'indigo', car: 'violet'
   };
   function quick(items, variant) {
     return '<div class="quick' + (variant ? ' quick--' + variant : '') + '">' + items.map((it) => '<button type="button" class="quick__btn tone-' + (TONE[it[0]] || 'red') + '"' + UI.dataAttrs(it[2]) + '><span class="quick__icon">' + U.icon(it[0], 22) + '</span><small>' + esc(it[1]) + '</small>' +
