@@ -38,6 +38,13 @@
      Una pestaña con dos listas: «Para visitar» (#/places) y
      «Para comer» (#/food). #/sites abre la última que usaste. */
 
+  /* Sitios en lista o en cuadrícula (se recuerda en este dispositivo mientras la app está abierta). */
+  const gridOn = () => JT.uiState.sites.layout === 'grid';
+  function layoutToggle() {
+    return '<div class="layout-toggle" role="group" aria-label="Vista">' + UI.iconBtn('rows', 'Ver en lista', { act: 'sitesLayout', value: 'list' }, { size: 18, active: !gridOn() }) + UI.iconBtn('grid', 'Ver en cuadrícula', { act: 'sitesLayout', value: 'grid' }, { size: 18, active: gridOn() }) + '</div>';
+  }
+  A.sitesLayout = (el) => { JT.uiState.sites.layout = el.dataset.value; JT.app.render(); };
+
   V.sites = (p, q) => (JT.uiState.sites.kind === 'food' ? V.food : JT.uiState.sites.kind === 'dishes' ? V.dishes : V.places)(p, q);
 
   function sitesHeader(kind) {
@@ -63,12 +70,12 @@
       .filter((p) => !nq || U.normalize(p.name + ' ' + (p.neighborhood || '') + ' ' + (p.description || '')).indexOf(nq) > -1)
       .sort((a, b) => b.favorite - a.favorite || (a.priority === 'high' ? -1 : 0) - (b.priority === 'high' ? -1 : 0) || a.name.localeCompare(b.name));
     let html = sitesHeader('visit');
-    html += searchBox('places', 'Buscar lugares…') +
+    html += '<div class="row search-row">' + searchBox('places', 'Buscar lugares…') + layoutToggle() + '</div>' +
       fchips('places', 'status', [{ value: 'pending', label: 'Pendientes' }, { value: 'visited', label: 'Visitados' }, { value: 'fav', label: '♥ Favoritos' }]) +
       fchips('places', 'city', C.cityOptions(), 'Todas las ciudades') +
       fchips('places', 'cat', D.options(D.PLACE), 'Todas las categorías');
     // Agrupados por ciudad en el orden del viaje, con su color y sus fechas (como el Itinerario).
-    html += list.length ? C.byCityGroups(list, (p) => C.placeCard(p))
+    html += list.length ? (gridOn() ? C.byCityGroups(list, (p) => C.siteTile(p, false), 'tiles') : C.byCityGroups(list, (p) => C.placeCard(p)))
       : UI.empty('📍', 'Sin lugares', 'Guarda templos, barrios, miradores… o pega un enlace de Google Maps.', UI.btn('Añadir lugar', { data: { act: 'newPlace', city: st.city } }));
     return { html: html };
   };
@@ -165,10 +172,10 @@
       .filter((r) => !nq || U.normalize(r.name + ' ' + (r.neighborhood || '') + ' ' + D.CUISINE[r.cuisine][0] + ' ' + (r.notes || '')).indexOf(nq) > -1)
       .sort((a, b) => b.favorite - a.favorite || a.name.localeCompare(b.name));
     let html = sitesHeader('food');
-    html += searchBox('food', 'Buscar restaurantes…') +
+    html += '<div class="row search-row">' + searchBox('food', 'Buscar restaurantes…') + layoutToggle() + '</div>' +
       fchips('food', 'status', [{ value: 'want', label: 'Quiero ir' }, { value: 'tried', label: 'Probados' }, { value: 'fav', label: '♥ Favoritos' }]) +
       fchips('food', 'city', C.cityOptions(), 'Todas las ciudades') + fchips('food', 'cuisine', D.options(D.CUISINE), 'Toda la comida');
-    html += list.length ? C.byCityGroups(list, (r) => C.restaurantCard(r))
+    html += list.length ? (gridOn() ? C.byCityGroups(list, (r) => C.siteTile(r, true), 'tiles') : C.byCityGroups(list, (r) => C.restaurantCard(r)))
       : UI.empty('🍜', 'Nada por aquí', 'Guarda restaurantes que quieras probar o busca cerca de tu próxima actividad.', UI.btn('Añadir restaurante', { data: { act: 'newRestaurant', city: st.city } }));
     return { html: html };
   };
@@ -338,7 +345,7 @@
       if (!c) return '';
       const np = Object.values(s.places).filter((p) => p.cityId === c.id).length, nr = Object.values(s.restaurants).filter((r) => r.cityId === c.id).length;
       return '<div class="card card--tap city" tabindex="0" data-act="go" data-to="city/' + c.id + '"><span class="city__bar" style="background:' + esc(c.color || '#C8102E') + '"></span><div class="grow">' +
-        '<div class="row"><h2 class="title">' + esc(c.name) + '</h2>' + (c.nameJa ? '<span class="faint">' + esc(c.nameJa) + '</span>' : '') + '</div>' +
+        '<div class="row"><h2 class="title">' + esc(c.name) + '</h2>' + (C.cityJa(c) ? '<span class="ja-name" lang="ja">' + esc(C.cityJa(c)) + '</span>' : '') + '</div>' +
         '<p class="muted">' + U.fmtRange(st.start, st.end) + '</p><small class="muted">' + esc([st.nights + (st.nights === 1 ? ' noche' : ' noches'), c.budget ? U.money(c.budget, main) + ' presupuesto' : '', np + ' lugares', nr + ' restaurantes'].filter(Boolean).join(' · ')) + '</small></div></div>';
     }).join('');
     html += Object.values(s.cities).filter((c) => !scheduled.has(c.id)).map((c) => UI.card('<strong>' + esc(c.name) + '</strong><small class="muted block">Sin días asignados</small>', { tone: 'muted', data: { act: 'go', to: 'city/' + c.id } })).join('');
@@ -355,7 +362,12 @@
     const hotels = Object.values(s.reservations).filter((r) => JT.data.isLodging(r.type) && r.cityId === c.id);
     const places = Object.values(s.places).filter((x) => x.cityId === c.id), rests = Object.values(s.restaurants).filter((x) => x.cityId === c.id);
     const notes = Object.values(s.notes).filter((n) => n.scope === 'city' && n.refId === c.id);
-    let html = UI.header({ back: true, eyebrow: c.nameJa, title: c.name, subtitle: stays.map((x) => U.fmtRange(x.start, x.end)).join(' · ') || 'Sin días asignados', actions: UI.iconBtn('edit', 'Editar ciudad', { act: 'editCity', id: c.id }) });
+    let html = UI.header({ back: true, title: c.name, subtitle: stays.map((x) => U.fmtRange(x.start, x.end)).join(' · ') || 'Sin días asignados', actions: UI.iconBtn('edit', 'Editar ciudad', { act: 'editCity', id: c.id }) });
+    // Ficha con el kanji en grande y el color de la ciudad, y una línea con lo guardado.
+    const ja = C.cityJa(c), dishes = Object.values(s.foods).filter((f) => f.where && (L.matchCity(f.where) || {}).id === c.id);
+    html += '<div class="card city-hero" style="--city:' + esc(c.color || '#C8102E') + '">' + (ja ? '<div class="city-hero__ja" lang="ja">' + esc(ja) + '</div>' : '') +
+      '<div class="city-hero__info"><strong>' + esc(c.name) + '</strong><small>' + esc(nights ? nights + (nights === 1 ? ' noche' : ' noches') + ' · ' + stays.map((x) => U.fmtRange(x.start, x.end)).join(' · ') : 'Sin días asignados') + '</small>' +
+      '<small>' + esc([hotels.length ? hotels.length + (hotels.length === 1 ? ' alojamiento' : ' alojamientos') : 'sin alojamiento', places.length + ' lugares', rests.length + ' restaurantes', dishes.length ? dishes.length + ' comidas típicas' : ''].filter(Boolean).join(' · ')) + '</small></div></div>';
     html += UI.card('<div class="stats">' + UI.stat('Noches', String(nights)) + UI.stat('Gastado', spent.text, '', true) + UI.stat('Presupuesto', c.budget ? U.money(c.budget, main) : '—') + '</div>' + (c.budget ? UI.progress(spent.total / c.budget, spent.total > c.budget ? 'accent' : 'info') : ''), { cls: 'stack' });
     html += '<div class="row row--wrap">' + (stays[0] ? UI.btn('Ver días', { icon: 'calendar', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'day/' + stays[0].dayIds[0] } }) : '') +
       UI.btn('Planificar día', { icon: 'sparkle', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'planner' + (stays[0] ? '?day=' + stays[0].dayIds[0] : '') } }) + '</div>';

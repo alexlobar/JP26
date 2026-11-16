@@ -84,13 +84,59 @@
       .sort((a, b) => a.date.localeCompare(b.date) || U.cmpTime(a.time, b.time));
     const g = {};
     list.forEach((r) => (g[r.date] = (g[r.date] || []).concat(r)));
-    return { html: UI.header({ back: true, title: 'Reservas', actions: UI.iconBtn('plus', 'Nueva reserva', { act: 'newReservation', type: st.type }) }) +
+    const head = UI.header({ back: true, title: 'Reservas', actions: UI.iconBtn('plus', 'Nueva reserva', { act: 'newReservation', type: st.type }) }) +
+      '<div class="seg" role="tablist">' + [['list', 'Lista'], ['timeline', 'Línea de tiempo']].map((o) => '<button type="button" role="tab" class="seg__item' + ((st.view || 'list') === o[0] ? ' is-on' : '') + '" aria-selected="' + ((st.view || 'list') === o[0]) + '" data-act="resView" data-value="' + o[0] + '">' + o[1] + '</button>').join('') + '</div>';
+    if (st.view === 'timeline') return { html: head + reservationsTimeline() };
+    return { html: head +
       JT.fchips('reservations', 'type', D.options(D.RESERVATION), 'Todas') +
       UI.btn(st.past ? 'Ocultar pasadas' : 'Mostrar pasadas', { size: 'sm', variant: 'ghost', data: { act: 'resPast' } }) +
       (list.length ? Object.keys(g).map((d) => UI.section(U.fmtDay(d), g[d].map(C.reservationCard).join(''))).join('')
         : UI.empty('🎫', 'Sin reservas', 'Guarda hoteles, trenes, restaurantes y entradas con su número de reserva.', UI.btn('Añadir reserva', { data: { act: 'newReservation', type: st.type } }))) };
   };
   A.resPast = () => { JT.uiState.reservations.past = !JT.uiState.reservations.past; JT.app.render(); };
+  A.resView = (el) => { JT.uiState.reservations.view = el.dataset.value; JT.app.render(); };
+
+  /* ── Reservas como línea de tiempo ──────────────────────────
+     Arriba, una franja con las noches del viaje y qué alojamiento cubre cada una (los huecos, en gris).
+     Debajo, día a día: entradas y salidas de alojamiento, vuelos y trenes, y reservas con hora. */
+  function reservationsTimeline() {
+    const s = S.get(), days = S.sortedDays(), n = S.now();
+    if (!days.length) return UI.empty('🗓️', 'Sin días de viaje', '');
+    const stays = Object.values(s.reservations).filter((r) => JT.data.isLodging(r.type)).sort((a, b) => a.date.localeCompare(b.date));
+    const nightOf = (date) => stays.find((r) => r.date <= date && date < (r.endDate || U.addDays(r.date, 1)));
+    // Franja de noches: tramos seguidos con el mismo alojamiento.
+    const nights = days.slice(0, -1), segs = [];
+    nights.forEach(function (d) {
+      const r = nightOf(d.date), last = segs[segs.length - 1];
+      if (last && last.r === r) last.n++; else segs.push({ r: r, n: 1 });
+    });
+    const shades = ['var(--t-violet)', 'var(--t-indigo)', 'var(--t-pink)', 'var(--t-blue)', 'var(--t-teal)'];
+    let k = 0;
+    const colorOf = new Map();
+    stays.forEach((r) => colorOf.set(r, shades[k++ % shades.length]));
+    const missing = nights.filter((d) => !nightOf(d.date)).length;
+    let html = UI.card('<div class="row row--between"><strong>Noches con alojamiento</strong><small class="' + (missing ? 'warn' : 'success') + '">' + (missing ? missing + (missing === 1 ? ' noche sin alojamiento' : ' noches sin alojamiento') : '✓ Todas cubiertas') + '</small></div>' +
+      '<div class="rstrip">' + segs.map((x) => '<span style="flex:' + x.n + ';background:' + (x.r ? colorOf.get(x.r) : 'var(--surface-2)') + '"' + (x.r ? '' : ' class="is-gap"') + ' title="' + esc(x.r ? x.r.name : 'Sin alojamiento') + '"></span>').join('') + '</div>' +
+      '<div class="rstrip__labels">' + segs.map((x) => '<span style="flex:' + x.n + '">' + esc(x.r ? (x.n / nights.length >= 0.12 ? x.r.name : '') : (x.n / nights.length >= 0.12 ? 'Sin alojamiento' : '')) + '</span>').join('') + '</div>', { cls: 'stack-sm' });
+    // Día a día.
+    const byDate = {};
+    const add = (date, item) => (byDate[date] = (byDate[date] || []).concat(item));
+    stays.forEach(function (r) {
+      add(r.date, { time: r.time || '', emoji: '🏨', title: 'Entrada · ' + r.name, sub: r.endDate ? Math.round((Date.parse(r.endDate) - Date.parse(r.date)) / 86400000) + ' noches · hasta ' + U.fmtShort(r.endDate) : '', to: 'reservation/' + r.id, tone: colorOf.get(r) });
+      if (r.endDate) add(r.endDate, { time: r.checkoutTime || '', emoji: '🧳', title: 'Salida · ' + r.name, sub: r.checkoutTime ? 'antes de las ' + r.checkoutTime : '', to: 'reservation/' + r.id, tone: colorOf.get(r) });
+    });
+    Object.values(s.transports).forEach((x) => add(x.date, { time: x.departTime || '', emoji: D.TRANSPORT[x.kind][1], title: x.origin + ' → ' + x.destination, sub: [D.TRANSPORT[x.kind][0], x.number, x.arriveTime ? 'llega ' + x.arriveTime : ''].filter(Boolean).join(' · '), to: 'transport', tone: 'var(--t-blue)' }));
+    Object.values(s.reservations).filter((r) => !JT.data.isLodging(r.type)).forEach((r) => add(r.date, { time: r.time || '', emoji: D.RESERVATION[r.type][1], title: r.name, sub: [D.RESERVATION[r.type][0], r.confirmationCode].filter(Boolean).join(' · '), to: 'reservation/' + r.id, tone: 'var(--t-red)' }));
+    const dates = Object.keys(byDate).sort();
+    if (!dates.length) return html + UI.empty('🎫', 'Nada todavía', 'Añade alojamientos, trayectos y reservas y aparecerán aquí en orden.');
+    html += '<div class="rtl">' + dates.map(function (date) {
+      const items = byDate[date].sort((a, b) => U.cmpTime(a.time, b.time));
+      const day = days.find((d) => d.date === date), city = day && day.cityId && s.cities[day.cityId];
+      return '<div class="rtl__day' + (date < n.date ? ' is-past' : date === n.date ? ' is-today' : '') + '"><div class="rtl__date"><b>' + esc(U.fmtShort(date)) + '</b>' + (day ? '<small>Día ' + S.dayNumber(day.id) + (city ? ' · ' + esc(city.name) : '') + '</small>' : '<small>fuera del viaje</small>') + '</div>' +
+        items.map((it) => '<button type="button" class="rtl__item" data-act="go" data-to="' + it.to + '" style="--c:' + it.tone + '"><span class="rtl__dot"></span><span class="rtl__time mono">' + esc(it.time || '··:··') + '</span><span class="grow"><span class="block">' + it.emoji + ' ' + esc(it.title) + '</span>' + (it.sub ? '<small class="muted">' + esc(it.sub) + '</small>' : '') + '</span></button>').join('') + '</div>';
+    }).join('') + '</div>';
+    return html;
+  }
 
   V.reservation = function (p) {
     const s = S.get(), r = s.reservations[p.id];
@@ -574,7 +620,9 @@
       .filter((p) => !nq || U.normalize(p.es + ' ' + p.romaji).indexOf(nq) > -1 || p.ja.indexOf(q) > -1);
     const g = {};
     list.forEach((p) => (g[p.category] = (g[p.category] || []).concat(p)));
+    const learned = all.filter((p) => p.learn === 'known').length;
     return { html: UI.header({ back: true, title: 'Frases', subtitle: 'Funciona sin conexión · toca una frase para verla en grande', actions: UI.iconBtn('plus', 'Nueva frase', { act: 'newPhrase' }) }) +
+      UI.banner('info', 'book', 'Aprender frases', 'Tarjetas para practicar (ideal para el avión) · sabes ' + learned + ' de ' + all.length, { data: { act: 'go', to: 'learn' } }) +
       JT.searchBox('phrases', 'Buscar en español o romaji…') + JT.fchips('phrases', 'cat', [{ value: 'fav', label: '♥ Favoritas' }].concat(cats.map((c) => ({ value: c, label: c }))), 'Todas') +
       // Cada categoría con su color (punto en el título y franja en cada frase) para encontrarlas antes.
       Object.keys(g).sort((a, b) => rank(a) - rank(b)).map((c) => '<section class="section phrases-cat tone-' + phraseTone(c) + '"><div class="section__hdr"><h2 class="section__title phrases-cat__title"><span class="dot" aria-hidden="true"></span>' + esc(c) + '</h2><small class="muted">' + g[c].length + '</small></div>' +
@@ -589,6 +637,55 @@
     'Templos y onsen': 'violet', 'Números y tiempo': 'teal', 'Carteles': 'slate', 'Mis frases': 'pink'
   };
   const phraseTone = (c) => PHRASE_TONE[c] || 'slate';
+  /* ══ APRENDER FRASES (tarjetas) ══════════════════════════════
+     Ves el español, tocas para ver el japonés (y escucharlo) y marcas
+     «La sé» o «Repasar». Se guarda en cada frase (p.learn), así que va
+     en la copia de seguridad. Primero salen las de repasar, luego las nuevas. */
+
+  function learnDeck(st) {
+    const all = Object.values(S.get().phrases).filter((p) => !st.cat || (st.cat === 'fav' ? p.favorite : p.category === st.cat));
+    const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; };
+    const review = shuffle(all.filter((p) => p.learn === 'review')), fresh = shuffle(all.filter((p) => !p.learn)), known = st.withKnown ? shuffle(all.filter((p) => p.learn === 'known')) : [];
+    return review.concat(fresh, known).map((p) => p.id).slice(0, 20); // rondas de 20
+  }
+
+  V.learn = function () {
+    const s = S.get(), st = JT.uiState.learn || (JT.uiState.learn = { cat: '', withKnown: false, deck: null, i: 0, show: false, ok: 0, again: 0 });
+    if (!st.deck) { st.deck = learnDeck(st); st.i = 0; st.show = false; st.ok = 0; st.again = 0; }
+    const all = Object.values(s.phrases), known = all.filter((p) => p.learn === 'known').length;
+    const ORDER = Array.from(new Set(D.PHRASES.map((p) => p[0])));
+    const cats = Array.from(new Set(all.map((p) => p.category))).sort((a, b) => (ORDER.indexOf(a) + 1 || 999) - (ORDER.indexOf(b) + 1 || 999));
+    let html = UI.header({ back: true, title: 'Aprender frases', subtitle: 'Sabes ' + known + ' de ' + all.length }) + UI.progress(all.length ? known / all.length : 0, 'success');
+    html += '<div class="chips chips--scroll">' + [{ v: '', l: 'Todas' }, { v: 'fav', l: '♥ Favoritas' }].concat(cats.map((c) => ({ v: c, l: c }))).map((o) =>
+      '<button type="button" class="chip chip--btn' + (st.cat === o.v ? ' is-on' : '') + '" aria-pressed="' + (st.cat === o.v) + '" data-act="learnCat" data-value="' + esc(o.v) + '"><span>' + esc(o.l) + '</span></button>').join('') + '</div>' +
+      '<label class="chip learn__opt"><input type="checkbox" data-change="learnKnown"' + (st.withKnown ? ' checked' : '') + '><span>Incluir las que ya sé</span></label>';
+    const p = s.phrases[st.deck[st.i]];
+    if (!p) {
+      return { html: html + UI.card('<div class="learn__done"><div class="learn__big">🎌</div><strong>' + (st.deck.length ? '¡Ronda terminada!' : 'No quedan frases aquí') + '</strong>' +
+        (st.deck.length ? '<p class="muted">' + st.ok + ' sabidas · ' + st.again + ' para repasar</p>' : '<p class="muted">Prueba con otra categoría o incluye las que ya sabes.</p>') + '</div>' +
+        UI.btn('Otra ronda', { icon: 'refresh', block: true, data: { act: 'learnRestart' } }), { cls: 'stack' }) };
+    }
+    html += '<div class="card learn tone-' + (PHRASE_TONE[p.category] || 'slate') + '"><div class="row row--between"><small class="muted">' + esc(p.category) + '</small><small class="muted mono">' + (st.i + 1) + ' / ' + st.deck.length + '</small></div>' +
+      '<button type="button" class="learn__face" data-act="learnFlip"><span class="learn__es">' + esc(p.es) + '</span>' +
+      (st.show ? '<span class="learn__ja" lang="ja">' + esc(p.ja) + '</span><span class="learn__romaji">' + esc(p.romaji) + '</span>' : '<span class="learn__hint">Piensa cómo se dice y toca para ver el japonés</span>') + '</button>' +
+      (st.show ? '<div class="row row--center">' + C.speakBtn(p.ja) + UI.iconBtn('expand', 'Pantalla completa', { act: 'showcase', ja: p.ja, sub: p.romaji, es: p.es }, { size: 20 }) + '</div>' +
+        '<div class="row">' + UI.btn('Repasar', { icon: 'refresh', variant: 'secondary', block: true, data: { act: 'learnMark', value: 'review' } }) + UI.btn('La sé', { icon: 'check', block: true, data: { act: 'learnMark', value: 'known' } }) + '</div>'
+        : UI.btn('Ver en japonés', { icon: 'eye', block: true, data: { act: 'learnFlip' } })) +
+      '<button type="button" class="learn__skip" data-act="learnSkip">Saltar</button></div>';
+    return { html: html };
+  };
+  A.learnFlip = () => { JT.uiState.learn.show = !JT.uiState.learn.show; JT.app.render(); };
+  A.learnSkip = () => { const st = JT.uiState.learn; st.i++; st.show = false; JT.app.render(); };
+  A.learnMark = function (el) {
+    const st = JT.uiState.learn, id = st.deck[st.i];
+    if (el.dataset.value === 'known') st.ok++; else st.again++;
+    st.i++; st.show = false;
+    S.update('phrases', id, { learn: el.dataset.value });
+  };
+  A.learnCat = (el) => { const st = JT.uiState.learn; st.cat = el.dataset.value; st.deck = null; JT.app.render(); };
+  A.learnRestart = () => { JT.uiState.learn.deck = null; JT.app.render(); };
+  JT.changes.learnKnown = (el) => { const st = JT.uiState.learn; st.withKnown = el.checked; st.deck = null; JT.app.render(); };
+
   A.bigPhrase = function (el) {
     const p = S.get().phrases[el.dataset.id];
     const voice = SV.canSpeak();
@@ -1011,7 +1108,7 @@
     switch (title) {
       case 'Viaje': return [t.name, U.fmtRange(t.startDate, t.endDate), t.mainCurrency, t.totalBudget ? 'presupuesto ' + U.money(t.totalBudget, t.mainCurrency) : ''].filter(Boolean).join(' · ');
       case 'Viajeros': return Object.values(s.travelers).sort((a, b) => a.createdAt - b.createdAt).map((x) => x.name + (x.isMe ? ' (yo)' : '')).join(', ') || 'Nadie todavía';
-      case 'Apariencia y unidades': return 'Tema ' + ({ system: 'del sistema', light: 'claro', dark: 'oscuro' }[st.theme] || st.theme) + ' · letra ' + ({ normal: 'normal', large: 'grande', xl: 'muy grande' }[st.textSize || 'normal']) + ' · ' + (st.units === 'mi' ? 'millas' : 'km');
+      case 'Apariencia y unidades': return 'Tema ' + ({ system: 'del sistema', light: 'claro', dark: 'oscuro' }[st.theme] || st.theme) + ' · letra ' + ({ normal: 'normal', large: 'grande', xl: 'muy grande' }[st.textSize || 'normal']) + (st.contrast === 'high' ? ' · alto contraste' : '') + ' · ' + (st.units === 'mi' ? 'millas' : 'km');
       case 'Modo viaje': {
         const lay = C.travelLayout ? C.travelLayout() : [];
         return ({ auto: 'Automático', on: 'Siempre', off: 'Nunca' }[st.travelMode] || '') + (lay.length ? ' · ' + lay.filter((b) => b.on).length + ' de ' + lay.length + ' bloques' : '') + (st.simulatedDate ? ' · simulando ' + st.simulatedDate : '');
@@ -1093,6 +1190,8 @@
     html += fold('Apariencia y unidades', UI.card(seg('setTheme', st.theme, [['system', 'Sistema'], ['light', 'Claro'], ['dark', 'Oscuro']]) +
       '<span class="field__label">Tamaño de letra</span>' + seg('setTextSize', st.textSize || 'normal', [['normal', 'Normal'], ['large', 'Grande'], ['xl', 'Muy grande']]) +
       '<small class="muted">Agranda toda la app (textos, botones e iconos) para leer mejor en la calle o enseñar la pantalla. Sólo en este dispositivo.</small>' +
+      '<span class="field__label">Contraste</span>' + seg('setContrast', st.contrast || 'normal', [['normal', 'Normal'], ['high', 'Alto (para la calle)']]) +
+      '<small class="muted">Textos más oscuros y gruesos y bordes más marcados, para leer al sol.</small>' +
       seg('setUnits', st.units, [['km', 'Kilómetros'], ['mi', 'Millas']]), { cls: 'stack' }));
 
     html += fold('Modo viaje', UI.card(seg('setTravel', st.travelMode, [['auto', 'Automático'], ['on', 'Siempre'], ['off', 'Nunca']]) +
@@ -1263,6 +1362,7 @@
   A.setYenRounding =(el) => S.setSettings({ yenRounding: el.dataset.value });
   A.setTheme = (el) => S.setSettings({ theme: el.dataset.value });
   A.setTextSize = (el) => S.setSettings({ textSize: el.dataset.value });
+  A.setContrast = (el) => S.setSettings({ contrast: el.dataset.value });
 
   /* Bloques del Modo viaje: mostrar/ocultar y ordenar (se guarda en settings.travelBlocks). */
   function saveTravelLayout(list) {

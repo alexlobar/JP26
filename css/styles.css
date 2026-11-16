@@ -415,6 +415,79 @@ body.has-showcase { overflow: hidden; }
 .phrases-cat__title { display: flex; align-items: center; gap: 8px; }
 .phrases-cat .dot { width: 10px; height: 10px; border-radius: 5px; background: var(--c); }
 .phrases-cat .phrase { border-left: 4px solid var(--c); }
+/* ── v1.12.0 ─────────────────────────────────────────────── */
+/* Nombre de ciudad en japonés (東京, 京都…) */
+.ja-name { font-weight: 600; color: var(--muted); letter-spacing: 1px; margin-left: 4px; font-size: .9em; }
+.section__title .ja-name { text-transform: none; }
+.strip__labels span { display: flex; flex-direction: column; line-height: 1.25; }
+.strip__labels i { font-style: normal; font-weight: 500; color: var(--faint); font-size: 10.5px; letter-spacing: 1px; }
+/* Doble reloj Japón / España */
+.clocks { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
+.clocks b { color: var(--text); font-size: 14px; margin-left: 3px; }
+.clocks small { margin-left: 3px; }
+/* Inicio teñido del color de la ciudad donde estás */
+.card--city { background: color-mix(in srgb, var(--city) 13%, var(--surface)); border-color: color-mix(in srgb, var(--city) 40%, var(--border)); box-shadow: none; }
+.card--city .eyebrow { color: color-mix(in srgb, var(--city) 75%, var(--text)); }
+.card--city .strip__past { background: color-mix(in srgb, var(--city) 13%, var(--surface)); }
+/* Ficha de ciudad con su kanji en grande */
+.city-hero { flex-direction: row; align-items: center; gap: 16px; background: color-mix(in srgb, var(--city) 14%, var(--surface)); border-color: color-mix(in srgb, var(--city) 40%, var(--border)); border-left: 6px solid var(--city); }
+.city-hero__ja { font-size: 54px; font-weight: 800; line-height: 1; color: color-mix(in srgb, var(--city) 80%, var(--text)); letter-spacing: 2px; flex: none; }
+.city-hero__info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.city-hero__info strong { font-size: 18px; }
+.city-hero__info small { color: var(--muted); }
+/* Reservas como línea de tiempo */
+.rstrip { display: flex; gap: 2px; height: 14px; border-radius: 7px; overflow: hidden; }
+.rstrip span { display: block; min-width: 3px; }
+.rstrip span.is-gap { background: repeating-linear-gradient(45deg, var(--surface-2), var(--surface-2) 4px, var(--warn-soft) 4px, var(--warn-soft) 8px) !important; }
+.rstrip__labels { display: flex; gap: 2px; font-size: 11px; font-weight: 600; color: var(--muted); }
+.rstrip__labels span { min-width: 3px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.rtl { display: flex; flex-direction: column; gap: 4px; position: relative; padding-left: 4px; }
+.rtl__day { display: flex; flex-direction: column; gap: 2px; padding-bottom: 8px; }
+.rtl__day.is-past { opacity: .55; }
+.rtl__date { display: flex; align-items: baseline; gap: 8px; padding: 6px 0 2px; }
+.rtl__date b { font-size: 14px; }
+.rtl__date small { color: var(--muted); }
+.rtl__day.is-today .rtl__date b { color: var(--accent); }
+.rtl__item { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0 8px 2px; border: 0; background: transparent; text-align: left; position: relative; border-left: 2px solid var(--border); margin-left: 6px; padding-left: 14px; }
+.rtl__dot { position: absolute; left: -7px; top: 13px; width: 12px; height: 12px; border-radius: 6px; background: var(--c); box-shadow: 0 0 0 3px var(--bg); }
+.rtl__time { width: 44px; flex: none; font-size: 13px; color: var(--muted); padding-top: 1px; }
+/* Sitios en cuadrícula */
+.search-row > .search { flex: 1; min-width: 0; }
+.layout-toggle { display: flex; background: var(--surface-2); border-radius: var(--r-md); padding: 2px; flex: none; }
+.layout-toggle .iconbtn { width: 38px; height: 38px; border-radius: var(--r-sm); color: var(--muted); }
+.layout-toggle .iconbtn.is-active { background: var(--surface); color: var(--text); box-shadow: 0 1px 4px rgba(0, 0, 0, .08); }
+.tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.tile { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 14px 12px 12px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); text-align: left; min-height: 128px; box-shadow: var(--shadow); }
+.tile__emoji { font-size: 34px; line-height: 1.1; }
+.tile__name { font-weight: 700; font-size: 14.5px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tile__sub { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.tile__badges { position: absolute; top: 8px; right: 10px; display: flex; gap: 4px; font-size: 14px; font-weight: 800; }
+.tile__fav { color: var(--accent); }
+.tile__done { color: var(--success); }
+.tile.is-done { background: var(--surface-2); box-shadow: none; }
+.tile.is-done .tile__name { color: var(--muted); }
+/* Aprender frases */
+.learn { border-top: 5px solid var(--c); gap: 12px; }
+.learn__face { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 18px 6px; border: 0; background: transparent; text-align: center; min-height: 170px; justify-content: center; }
+.learn__es { font-size: 22px; font-weight: 700; line-height: 1.3; }
+.learn__ja { font-size: 30px; font-weight: 800; line-height: 1.35; color: var(--c); }
+.learn__romaji { font-size: 16px; color: var(--accent); font-weight: 600; }
+.learn__hint { font-size: 13px; color: var(--faint); }
+.learn__skip { align-self: center; border: 0; background: transparent; color: var(--muted); font-size: 13px; text-decoration: underline; padding: 4px 8px; }
+.learn__opt { align-self: flex-start; }
+.learn__done { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; padding: 10px 0; }
+.learn__big { font-size: 44px; }
+body[data-view="learn"] .fab { display: none; }
+/* Para comunicarte: frases para tu próximo plan */
+.talk__plan { display: flex; flex-direction: column; padding-bottom: 6px; margin-bottom: 4px; border-bottom: 1px dashed var(--border); }
+/* Sin conexión: un punto discreto junto al título */
+.is-offline .hdr h1::after { content: "● sin conexión"; font-size: 11px; font-weight: 600; letter-spacing: 0; color: var(--faint); margin-left: 8px; vertical-align: middle; white-space: nowrap; }
+/* Alto contraste (Ajustes → Apariencia): para leer al sol */
+:root[data-contrast="high"] { --muted: #2E2E33; --faint: #4D4D52; --border: #A8A296; --surface-2: #E4DFD5; }
+:root[data-contrast="high"] body { font-weight: 500; }
+:root[data-contrast="high"] .card, :root[data-contrast="high"] .tile, :root[data-contrast="high"] .fold, :root[data-contrast="high"] .quick__btn { border-width: 2px; }
+:root[data-contrast="high"][data-theme="dark"] { --muted: #E2E2E6; --faint: #C4C4CA; --border: #5C5C64; }
+@media (prefers-color-scheme: dark) { :root[data-contrast="high"]:not([data-theme="light"]) { --muted: #E2E2E6; --faint: #C4C4CA; --border: #5C5C64; } }
 /* Elegir tipo con buscador */
 .tpick { display: flex; flex-direction: column; gap: 8px; }
 .tpick__search .input { height: 38px; font-size: 14px; }

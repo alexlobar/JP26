@@ -101,10 +101,12 @@
     const budget = s.trip.totalBudget;
     const dayList = t.day ? S.dayActivities(t.day.id) : [];
     // Cabecera compacta: cuenta atrás (o el día de hoy) en una línea, con «Probar el Modo viaje» al lado.
-    let html = UI.card('<div class="hero"><div class="grow"><div class="eyebrow">' + (t.phase === 'during' ? esc(U.fmtDay(n.date).toUpperCase()) : t.phase === 'before' ? 'CUENTA ATRÁS' : 'FIN') + '</div>' +
-      '<h2 class="title">' + esc(title) + '</h2><p class="muted small">' + esc(sub) + '</p></div>' +
+    // Durante el viaje, la tarjeta se tiñe del color de la ciudad donde estás (con su kanji al lado del nombre).
+    const tint = t.phase === 'during' && t.city ? cityTint(t.city) : '';
+    let html = '<div class="card stack-sm' + (tint ? ' card--city' : t.phase === 'during' ? ' card--accent' : '') + '"' + tint + '><div class="hero"><div class="grow"><div class="eyebrow">' + (t.phase === 'during' ? esc(U.fmtDay(n.date).toUpperCase()) : t.phase === 'before' ? 'CUENTA ATRÁS' : 'FIN') + '</div>' +
+      '<h2 class="title">' + esc(title) + (t.phase === 'during' && C.cityJa(t.city) ? ' <span class="ja-name" lang="ja">' + esc(C.cityJa(t.city)) + '</span>' : '') + '</h2><p class="muted small">' + esc(sub) + '</p></div>' +
       (t.phase === 'before' ? UI.btn('Probar Modo viaje', { icon: 'nav', size: 'sm', variant: 'ghost', data: { act: 'simulate' } }) : '') + '</div>' +
-      C.cityStrip(n.date), { tone: t.phase === 'during' ? 'accent' : '', cls: 'stack-sm' });
+      C.clocks(n) + C.cityStrip(n.date) + '</div>';
     // Antes de salir: repaso de lo importante (copia sin conexión, voz, hoteles, emergencia…).
     if (t.phase === 'before' && t.daysUntil <= 30) {
       const r = JT.ready ? JT.ready.syncSummary() : null;
@@ -143,6 +145,9 @@
   }
 
   /* ── Modo viaje: lo que necesitas en 5 segundos en la calle ── */
+
+  /** Atributo style con el color de la ciudad (para teñir una tarjeta con .card--city). */
+  const cityTint = (c) => (c && c.color ? ' style="--city:' + esc(c.color) + '"' : '');
 
   /** «Mañana en un vistazo»: ciudad, primer plan, trenes y vuelos, cambio de alojamiento y reservas con hora. */
   function tomorrowCard(date) {
@@ -207,7 +212,9 @@
     const blocks = {
       where: function () {
         const strip = C.cityStrip(n.date);
-        return strip && t.phase === 'during' ? UI.card('<small class="muted">Día ' + t.dayNumber + ' de ' + t.totalDays + (city ? ' · ' + esc(city.name) : '') + (t.nextCity ? ' · después: ' + esc(t.nextCity.name) : '') + '</small>' + strip, { cls: 'stack-sm' }) : '';
+        if (!strip || t.phase !== 'during') return '';
+        const tint = city ? cityTint(city) : '';
+        return '<div class="card stack-sm' + (tint ? ' card--city' : '') + '"' + tint + '><small class="muted">Día ' + t.dayNumber + ' de ' + t.totalDays + (city ? ' · ' + esc(city.name) + (C.cityJa(city) ? ' <span lang="ja">' + esc(C.cityJa(city)) + '</span>' : '') : '') + (t.nextCity ? ' · después: ' + esc(t.nextCity.name) : '') + '</small>' + C.clocks(n) + strip + '</div>';
       },
       now: function () {
         return (current ? nextUpCard(current, 'AHORA') : '') + (next ? nextUpCard(next, 'SIGUIENTE', here, current ? 'la actividad actual' : 'tu última parada') : '') +
@@ -222,7 +229,7 @@
       diary: () => (day && n.minutes >= 18 * 60 ? diaryCard(day) : ''),
       tomorrow: () => (n.minutes >= 18 * 60 ? tomorrowCard(U.addDays(n.date, 1)) : ''),
       converter: () => C.quickConverter(),
-      talk: () => talkCard(),
+      talk: () => talkCard((current || next) && (current || next).activity),
       hotel: function () {
         if (!hotel) return '';
         const hl = hotel.location || {}, hdir = hl.coords || hl.name || hl.address ? U.directionsUrl(hl) : null;
@@ -266,11 +273,33 @@
   };
 
   /** «Para comunicarte» en el Modo viaje: tus frases ♥ a un toque y, si tienes, tus alergias. */
-  function talkCard() {
-    const favs = Object.values(S.get().phrases).filter((p) => p.favorite).slice(0, 6);
+  /* Frases que suelen hacer falta según el tipo de plan (se buscan por su japonés entre tus frases). */
+  const PLAN_PHRASES = {
+    restaurant: ['二人です', 'メニューをお願いします', 'お会計をお願いします'],
+    cafe: ['これをください', '持ち帰りで', 'お会計をお願いします'],
+    transport: ['…に止まりますか？', '…行きは何番線ですか？', '次の駅はどこですか？'],
+    hotel: ['予約しています', '荷物を預かってもらえますか？', 'チェックアウトをお願いします'],
+    visit: ['大人二枚お願いします', '何時まで開いていますか？', '写真を撮ってもいいですか？'],
+    onsen: ['タトゥーがあっても入れますか？', '大人二枚お願いします', '何時まで開いていますか？'],
+    shopping: ['いくらですか？', 'カードで払えますか？', '免税できますか？'],
+    activity: ['大人二枚お願いします', '予約しています', '写真を撮ってもいいですか？'],
+    show: ['大人二枚お願いします', '予約しています', '写真を撮ってもいいですか？'],
+    nightlife: ['ビールをください', 'もう一つお願いします', 'お会計は別々にできますか？']
+  };
+
+  function talkRow(p) {
+    return '<div class="talk__row"><button type="button" class="talk__main" data-act="bigPhrase" data-id="' + p.id + '"><span class="talk__ja" lang="ja">' + esc(p.ja) + '</span><small class="muted">' + esc(p.es) + '</small></button>' + C.speakBtn(p.ja) + '</div>';
+  }
+
+  function talkCard(plan) {
+    const all = Object.values(S.get().phrases);
+    const favs = all.filter((p) => p.favorite).slice(0, 6);
     const allergy = C.hasAllergies && C.hasAllergies() ? UI.btn('Mis alergias', { icon: 'alert', size: 'sm', variant: 'secondary', data: { act: 'allergyCard' } }) : '';
-    const rows = favs.map((p) => '<div class="talk__row"><button type="button" class="talk__main" data-act="bigPhrase" data-id="' + p.id + '"><span class="talk__ja" lang="ja">' + esc(p.ja) + '</span><small class="muted">' + esc(p.es) + '</small></button>' + C.speakBtn(p.ja) + '</div>').join('');
-    return UI.section('Para comunicarte', UI.card((rows || '<p class="muted small">Marca con ♥ las frases que más uses y saldrán aquí, a un toque.</p>') +
+    const rows = favs.map(talkRow).join('');
+    // Para tu próximo plan: 3 frases útiles según su tipo (restaurante, tren, templo, onsen, compras…).
+    const want = plan && PLAN_PHRASES[plan.category], forPlan = want ? want.map((ja) => all.find((p) => p.ja === ja)).filter(Boolean) : [];
+    const planBlock = forPlan.length ? '<div class="talk__plan"><small class="eyebrow muted">PARA «' + esc(plan.title.toUpperCase()) + '»</small>' + forPlan.map(talkRow).join('') + '</div>' : '';
+    return UI.section('Para comunicarte', UI.card(planBlock + (rows || (planBlock ? '' : '<p class="muted small">Marca con ♥ las frases que más uses y saldrán aquí, a un toque.</p>')) +
       '<div class="row row--wrap">' + allergy + UI.btn(favs.length ? 'Todas las frases' : 'Elegir frases', { icon: 'chat', size: 'sm', variant: 'ghost', data: { act: 'go', to: 'phrases' } }) + '</div>', { cls: 'stack-sm talk' }));
   }
 
@@ -328,7 +357,7 @@
     S.cityStays().forEach(function (st) {
       const c = s.cities[st.cityId], ids = st.dayIds.filter((id) => !isPast(s.days[id]));
       if (!ids.length) return;
-      body += UI.section((c ? c.name : 'Ciudad') + ' · ' + U.fmtRange(st.start, st.end), ids.map((id) => card(s.days[id])).join(''), '<small class="faint">' + st.nights + (st.nights === 1 ? ' noche' : ' noches') + '</small>');
+      body += UI.section((c ? c.name + (C.cityJa(c) ? ' ' + C.cityJa(c) : '') : 'Ciudad') + ' · ' + U.fmtRange(st.start, st.end), ids.map((id) => card(s.days[id])).join(''), '<small class="faint">' + st.nights + (st.nights === 1 ? ' noche' : ' noches') + '</small>');
     });
     const loose = days.filter((d) => !d.cityId && !isPast(d));
     if (loose.length) body += UI.section('Días sin ciudad', loose.map(card).join(''), UI.btn('Asignar', { size: 'sm', variant: 'ghost', data: { act: 'go', to: 'cities' } }));

@@ -23,7 +23,7 @@ JT.app = (function () {
     [/^cities$/, 'cities', 'home'], [/^city\/([\w-]+)$/, 'city', 'home'], [/^reservations$/, 'reservations', 'home'], [/^reservation\/([\w-]+)$/, 'reservation', 'home'],
     [/^transport$/, 'transport', 'home'], [/^notes$/, 'notes', 'home'], [/^checklist$/, 'checklist', 'home'], [/^info$/, 'info', 'home'],
     [/^phrases$/, 'phrases', 'home'], [/^documents$/, 'documents', 'home'], [/^search$/, 'search', 'home'], [/^settings$/, 'settings', 'home'],
-    [/^ready$/, 'ready', 'home'], [/^diary$/, 'diary', 'home'], [/^gifts$/, 'gifts', 'home']
+    [/^ready$/, 'ready', 'home'], [/^diary$/, 'diary', 'home'], [/^gifts$/, 'gifts', 'home'], [/^learn$/, 'learn', 'home']
   ];
 
   let main, lastPath = null, pending = false;
@@ -94,7 +94,7 @@ JT.app = (function () {
   function refreshRates() { SV.refreshRatesIfStale().then((changed) => changed && scheduleRender()).catch(() => {}); }
 
   /* ── Toque de color en la cabecera: el mismo icono y color que su cuadro en «Tu viaje» ── */
-  const VIEW_ICON = { cities: 'city', city: 'city', reservations: 'ticket', reservation: 'ticket', transport: 'train', notes: 'note', checklist: 'checklist', documents: 'doc', info: 'info', phrases: 'chat', gifts: 'gift' };
+  const VIEW_ICON = { cities: 'city', city: 'city', reservations: 'ticket', reservation: 'ticket', transport: 'train', notes: 'note', checklist: 'checklist', documents: 'doc', info: 'info', phrases: 'chat', learn: 'chat', gifts: 'gift' };
   function toneHeader(view) {
     const icon = VIEW_ICON[view], h1 = icon && main.querySelector('.hdr h1');
     if (!h1) return;
@@ -128,6 +128,7 @@ JT.app = (function () {
     const t = S.get().settings.theme, size = S.get().settings.textSize;
     // Tamaño de letra: zoom de toda la app (ver styles.css, [data-text]).
     if (size === 'large' || size === 'xl') document.documentElement.setAttribute('data-text', size); else document.documentElement.removeAttribute('data-text');
+    if (S.get().settings.contrast === 'high') document.documentElement.setAttribute('data-contrast', 'high'); else document.documentElement.removeAttribute('data-contrast');
     if (t === 'system') document.documentElement.removeAttribute('data-theme');
     else document.documentElement.setAttribute('data-theme', t);
     const dark = t === 'dark' || (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -349,7 +350,11 @@ JT.app = (function () {
     S.subscribe(function () { applyTheme(); scheduleRender(); });
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
     window.addEventListener('hashchange', () => render());
-    window.addEventListener('online', function () { scheduleRender(); refreshRates(); });
+    // Punto «sin conexión» junto al título: lo que ves es lo guardado en el móvil.
+    const markOnline = () => document.body.classList.toggle('is-offline', navigator.onLine === false);
+    markOnline();
+    window.addEventListener('offline', markOnline);
+    window.addEventListener('online', function () { markOnline(); scheduleRender(); refreshRates(); });
     // Tipo de cambio al día: además de al abrir, al volver a la app (las PWA suelen reanudarse sin recargar)
     // y cada hora si se queda abierta. Sólo descarga si lo guardado tiene más de 6 h.
     document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') refreshRates(); });

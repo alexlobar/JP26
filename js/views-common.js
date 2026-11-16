@@ -113,6 +113,16 @@ JT.cards = (function () {
       '<button type="button" class="iconbtn fav' + (p.favorite ? ' is-on' : '') + '" aria-pressed="' + !!p.favorite + '" aria-label="Favorito" data-act="fav" data-col="places" data-id="' + p.id + '">' + U.icon('heart', 20) + '</button></div>';
   }
 
+  /** Vista en cuadrícula de Sitios: emoji grande, nombre y una línea; ♥ y ✓ en la esquina. */
+  function siteTile(x, isRest) {
+    const cat = isRest ? D.CUISINE[x.cuisine] : D.PLACE[x.category];
+    const done = isRest ? x.status === 'tried' : x.status === 'visited';
+    const sub = isRest ? [cat[0], x.priceLevel ? D.PRICE[x.priceLevel] : ''].filter(Boolean).join(' · ') : [cat[0], x.neighborhood].filter(Boolean).join(' · ');
+    return '<button type="button" class="tile' + (done ? ' is-done' : '') + '" data-act="go" data-to="' + (isRest ? 'restaurant/' : 'place/') + x.id + '">' +
+      '<span class="tile__emoji" aria-hidden="true">' + cat[1] + '</span><span class="tile__name">' + esc(x.name) + '</span><small class="tile__sub">' + esc(sub) + '</small>' +
+      '<span class="tile__badges">' + (x.favorite ? '<span class="tile__fav" aria-label="Favorito">♥</span>' : '') + (done ? '<span class="tile__done" aria-label="' + (isRest ? 'Probado' : 'Visitado') + '">✓</span>' : '') + '</span></button>';
+  }
+
   function restaurantCard(r, km) {
     const s = S.get(), c = D.CUISINE[r.cuisine], city = r.cityId && s.cities[r.cityId];
     return '<div class="item card card--tap" tabindex="0" data-act="go" data-to="restaurant/' + r.id + '">' +
@@ -398,6 +408,33 @@ JT.cards = (function () {
     return p === 0 && v > 0 ? '<1%' : p + '%';
   }
 
+  /** Doble reloj: la hora en Japón (la de la app, también al simular) y la de España, con «ayer» si allí aún es el día anterior. */
+  function clocks(n) {
+    if (!n || !n.time) return '';
+    const ts = U.localToTs(n.date, n.time, S.get().trip.timezoneOffsetMinutes || 540);
+    let es = '', esDate = '';
+    try {
+      es = new Date(ts).toLocaleTimeString('es-ES', { timeZone: 'Europe/Madrid', hour: '2-digit', minute: '2-digit', hour12: false });
+      esDate = new Date(ts).toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' });
+    } catch (e) { return ''; }
+    const when = esDate < n.date ? ' (ayer)' : esDate > n.date ? ' (mañana)' : '';
+    return '<div class="clocks" aria-label="' + esc('Hora en Japón ' + n.time + ', en España ' + es + when) + '"><span>Japón <b class="mono">' + esc(n.time) + '</b></span><span>España <b class="mono">' + esc(es) + '</b>' + (when ? '<small>' + esc(when) + '</small>' : '') + '</span></div>';
+  }
+
+  /* Nombre de la ciudad en japonés: el que pusiste en la ciudad o, si no, el de esta lista (ciudades habituales). */
+  const CITY_JA = {
+    tokyo: '東京', tokio: '東京', kyoto: '京都', kioto: '京都', osaka: '大阪', nara: '奈良', takayama: '高山', kanazawa: '金沢',
+    hiroshima: '広島', miyajima: '宮島', hakone: '箱根', nikko: '日光', kamakura: '鎌倉', yokohama: '横浜', kobe: '神戸',
+    nagoya: '名古屋', fukuoka: '福岡', sapporo: '札幌', uji: '宇治', himeji: '姫路', matsumoto: '松本', 'shirakawa-go': '白川郷',
+    shirakawago: '白川郷', okinawa: '沖縄', naha: '那覇', sendai: '仙台', nagano: '長野', kawaguchiko: '河口湖', fuji: '富士'
+  };
+  function cityJa(c) {
+    if (!c) return '';
+    if (c.nameJa) return c.nameJa;
+    const k = U.normalize(c.name).replace(/\s+/g, '');
+    return CITY_JA[k] || CITY_JA[k.replace(/-/g, '')] || '';
+  }
+
   /** Fechas de una ciudad en el viaje: «19 nov – 25 nov» (y otro tramo si vuelves: « · 14 dic – 16 dic»). */
   function cityRanges(cityId) {
     const out = [];
@@ -410,7 +447,7 @@ JT.cards = (function () {
 
   /** Lista agrupada por ciudad, en el orden en que las visitas (luego las que no están en el viaje y «Sin ciudad»).
       Cabecera con el color de la ciudad, sus fechas y cuántos hay; se queda fija arriba al bajar. */
-  function byCityGroups(items, render) {
+  function byCityGroups(items, render, wrapCls) {
     const s = S.get(), groups = {}, order = [];
     items.forEach((x) => { const k = x.cityId && s.cities[x.cityId] ? x.cityId : ''; (groups[k] = groups[k] || []).push(x); });
     S.sortedDays().forEach((d) => { if (d.cityId && groups[d.cityId] && order.indexOf(d.cityId) === -1) order.push(d.cityId); });
@@ -418,8 +455,8 @@ JT.cards = (function () {
     if (groups['']) order.push('');
     return '<div class="itin">' + order.map(function (k) {
       const c = s.cities[k], dates = c ? cityRanges(k) : '';
-      return '<section class="section"><div class="section__hdr citygrp"><h2 class="section__title"><span class="dot" style="background:' + esc(c ? c.color || 'var(--accent)' : 'var(--border)') + '"></span>' + esc(c ? c.name : 'Sin ciudad') + '</h2>' +
-        '<small class="muted">' + esc((dates ? dates + ' · ' : '') + groups[k].length) + '</small></div>' + groups[k].map(render).join('') + '</section>';
+      return '<section class="section"><div class="section__hdr citygrp"><h2 class="section__title"><span class="dot" style="background:' + esc(c ? c.color || 'var(--accent)' : 'var(--border)') + '"></span>' + esc(c ? c.name : 'Sin ciudad') + (cityJa(c) ? ' <span class="ja-name" lang="ja">' + esc(cityJa(c)) + '</span>' : '') + '</h2>' +
+        '<small class="muted">' + esc((dates ? dates + ' · ' : '') + groups[k].length) + '</small></div>' + (wrapCls ? '<div class="' + wrapCls + '">' : '') + groups[k].map(render).join('') + (wrapCls ? '</div>' : '') + '</section>';
     }).join('') + '</div>';
   }
 
@@ -439,7 +476,8 @@ JT.cards = (function () {
     return '<button type="button" class="strip" data-act="go" data-to="itinerary" aria-label="' + esc('Recorrido: ' + groups.map((g) => name(g) + ' ' + g.n + (g.n === 1 ? ' día' : ' días')).join(', ') + (idx > -1 ? '. Hoy es el día ' + (idx + 1) : '')) + '">' +
       '<span class="strip__bar"><span class="strip__segs">' + groups.map((g) => '<span style="flex:' + g.n + ';background:' + esc(s.cities[g.cityId] ? s.cities[g.cityId].color || 'var(--accent)' : 'var(--border)') + '"></span>').join('') + '</span>' +
         (idx > -1 ? '<span class="strip__past" style="width:' + (idx / total) * 100 + '%"></span><span class="strip__now" style="left:' + ((idx + 0.5) / total) * 100 + '%"></span>' : '') + '</span>' +
-      '<span class="strip__labels">' + groups.map((g) => '<span style="flex:' + g.n + '">' + esc(label(g)) + '</span>').join('') + '</span></button>';
+      // En los tramos largos, debajo del nombre, el kanji (東京, 京都…) para reconocerlo en carteles.
+      '<span class="strip__labels">' + groups.map((g) => '<span style="flex:' + g.n + '">' + esc(label(g)) + (g.n / total >= 0.14 && cityJa(s.cities[g.cityId]) ? '<i lang="ja">' + esc(cityJa(s.cities[g.cityId])) + '</i>' : '') + '</span>').join('') + '</span></button>';
   }
 
   /** Conversor rápido yen ⇄ moneda principal para el Modo viaje. Recuerda el importe y la dirección. */
@@ -548,5 +586,5 @@ JT.cards = (function () {
     });
   }
 
-  return { q, sampleBanner, offlineBanner, isNow, timelineItem, travelLeg, timeline, placeCard, restaurantCard, expenseRow, reservationCard, transportCard, noteCard, noteRef, quick, tripHub, speakBtn, showcase, typePicker, customTypeSheet, TONE, catColor, byCategory, catStack, pctText, cityStrip, quickConverter, cityRanges, byCityGroups, cityOptions, moneySum, parseCoords, coordsField, bindCoords };
+  return { q, sampleBanner, offlineBanner, isNow, timelineItem, travelLeg, timeline, placeCard, restaurantCard, expenseRow, reservationCard, transportCard, noteCard, noteRef, quick, tripHub, speakBtn, showcase, typePicker, customTypeSheet, TONE, catColor, byCategory, catStack, pctText, cityStrip, quickConverter, cityRanges, byCityGroups, cityJa, clocks, siteTile, cityOptions, moneySum, parseCoords, coordsField, bindCoords };
 })();
