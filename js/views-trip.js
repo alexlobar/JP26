@@ -40,7 +40,7 @@
 
   function checkoutAlerts(n) {
     const out = [], tomorrow = U.addDays(n.date, 1);
-    Object.values(S.get().reservations).filter((r) => r.type === 'hotel' && r.endDate).forEach(function (r) {
+    Object.values(S.get().reservations).filter((r) => JT.data.isLodging(r.type) && r.endDate).forEach(function (r) {
       const at = r.checkoutTime ? ' a las ' + r.checkoutTime : '';
       if (r.endDate === n.date && (!r.checkoutTime || n.minutes < U.toMin(r.checkoutTime)))
         out.push(UI.banner('warn', 'bed', 'Hoy dejas ' + r.name + (r.checkoutTime ? ' · salida antes de las ' + r.checkoutTime : ''), checkedText(r, 'Toca para repasar lo que no te puedes dejar.'), { data: { act: 'checkoutList', id: r.id } }));
@@ -62,7 +62,7 @@
     Object.values(s.transports).filter((x) => x.date === tomorrow && x.departTime).forEach((x) =>
       out.push(UI.banner('info', 'clock', 'Mañana: ' + D.TRANSPORT[x.kind][0] + ' a las ' + x.departTime, x.origin + ' → ' + x.destination, { data: { act: 'go', to: 'transport' } })));
     S.reservationsOn(n.date).forEach(function (r) {
-      if (!r.time || r.type === 'hotel' || r.date !== n.date) return;
+      if (!r.time || JT.data.isLodging(r.type) || r.date !== n.date) return;
       const diff = U.toMin(r.time) - n.minutes;
       if (diff > 0 && diff <= 180) out.push(UI.banner('accent', 'bell', 'En ' + diff + ' min: ' + r.name, r.confirmationCode ? 'Reserva ' + r.confirmationCode : '', { data: { act: 'go', to: 'reservation/' + r.id } }));
     });
@@ -112,6 +112,8 @@
     }
     html += alerts(t);
     if (t.phase === 'during' && t.day && n.minutes >= 18 * 60) html += diaryCard(t.day);
+    // Por la noche (y la víspera del viaje), lo de mañana en un vistazo.
+    if ((t.phase === 'during' && n.minutes >= 18 * 60) || (t.phase === 'before' && t.daysUntil === 1)) html += tomorrowCard(U.addDays(n.date, 1));
     if (t.phase === 'after' && S.sortedDays().some((d) => d.diary || d.mood)) html += UI.banner('info', 'book', 'Tu diario del viaje', 'Todos los días que escribiste, para releerlos o compartirlos.', { data: { act: 'go', to: 'diary' } });
     if (up[0]) html += nextUpCard(up[0], up[0].isToday ? 'SIGUIENTE' : 'PRÓXIMO PLAN');
     html += C.quick([
@@ -142,11 +144,37 @@
 
   /* ── Modo viaje: lo que necesitas en 5 segundos en la calle ── */
 
+  /** «Mañana en un vistazo»: ciudad, primer plan, trenes y vuelos, cambio de alojamiento y reservas con hora. */
+  function tomorrowCard(date) {
+    const s = S.get(), day = S.sortedDays().find((d) => d.date === date);
+    if (!day) return '';
+    const city = day.cityId && s.cities[day.cityId], prev = S.sortedDays().find((d) => d.date === U.addDays(date, -1));
+    const moving = city && prev && prev.cityId && prev.cityId !== day.cityId;
+    const list = S.dayActivities(day.id), first = list.find((a) => a.startTime && !a.transportId) || list.find((a) => !a.transportId);
+    const trips = Object.values(s.transports).filter((x) => x.date === date).sort((a, b) => U.cmpTime(a.departTime, b.departTime));
+    const out = Object.values(s.reservations).find((r) => JT.data.isLodging(r.type) && r.endDate === date);
+    const inn = Object.values(s.reservations).find((r) => JT.data.isLodging(r.type) && r.date === date);
+    const resv = Object.values(s.reservations).filter((r) => r.date === date && r.time && !JT.data.isLodging(r.type) && r.type !== 'flight' && r.type !== 'train').sort((a, b) => U.cmpTime(a.time, b.time));
+    const line = (emoji, text, strong) => '<div class="tmw__row"><span aria-hidden="true">' + emoji + '</span><span>' + (strong ? '<b class="mono">' + esc(strong) + '</b> ' : '') + esc(text) + '</span></div>';
+    const rows = [
+      out && out !== inn ? line('🧳', 'Dejas ' + out.name + (out.checkoutTime ? ' (salida antes de las ' + out.checkoutTime + ')' : '')) : '',
+      trips.map((x) => line(D.TRANSPORT[x.kind][1], x.origin + ' → ' + x.destination + (x.number ? ' · ' + x.number : ''), x.departTime)).join(''),
+      first ? line('📍', 'Primer plan: ' + first.title, first.startTime) : '',
+      resv.map((r) => line(D.RESERVATION[r.type][1], r.name, r.time)).join(''),
+      inn ? line('🏨', (inn.time ? 'Check-in desde las ' + inn.time + ' en ' : 'Duermes en ') + inn.name) : ''
+    ].join('');
+    return UI.card('<div class="row row--between"><span class="eyebrow">MAÑANA · DÍA ' + S.dayNumber(day.id) + (city ? ' · ' + esc(city.name.toUpperCase()) : '') + '</span>' + (moving ? UI.pill('Cambias de ciudad', 'warn') : '') + '</div>' +
+      (rows || '<p class="muted small">Día libre: nada planificado todavía.</p>') +
+      '<small class="faint">' + list.length + (list.length === 1 ? ' plan' : ' planes') + ' en total</small>' +
+      UI.btn('Ver el día de mañana', { icon: 'calendar', size: 'sm', variant: 'ghost', data: { act: 'go', to: 'day/' + day.id } }), { cls: 'stack-sm tmw' });
+  }
+  C.tomorrowCard = tomorrowCard;
+
   /* El Modo viaje está hecho de bloques que eliges y ordenas en Ajustes → Modo viaje.
      Los avisos (simulación, check-out) van siempre arriba. */
   const TRAVEL_BLOCKS = [
     ['where', 'Dónde estás (día y ciudades)'], ['now', 'Ahora y siguiente plan'], ['quick', 'Accesos rápidos'],
-    ['diary', 'Diario (por la noche)'], ['converter', 'Conversor ¥ ⇄ €'], ['talk', 'Para comunicarte (frases y alergias)'],
+    ['diary', 'Diario (por la noche)'], ['tomorrow', 'Mañana en un vistazo (por la noche)'], ['converter', 'Conversor ¥ ⇄ €'], ['talk', 'Para comunicarte (frases y alergias)'],
     ['hotel', 'Esta noche duermes en'], ['gifts', 'Regalos por comprar aquí'], ['money', 'Gasto de hoy'],
     ['reservations', 'Reservas de hoy'], ['later', 'Más tarde hoy'], ['notes', 'Notas de la ciudad'], ['hub', 'Tu viaje (apartados)']
   ];
@@ -156,7 +184,12 @@
     const cfg = S.get().settings.travelBlocks || {}, off = cfg.off || [];
     const known = TRAVEL_BLOCKS.map((b) => b[0]);
     const order = (cfg.order || []).filter((id) => known.indexOf(id) > -1);
-    known.forEach((id) => { if (order.indexOf(id) === -1) order.push(id); });
+    // Un bloque nuevo (de una versión posterior) se coloca detrás del que lo precede en el orden de serie.
+    known.forEach(function (id, k) {
+      if (order.indexOf(id) > -1) return;
+      const after = k > 0 ? order.indexOf(known[k - 1]) : -1;
+      order.splice(after + 1, 0, id);
+    });
     return order.map((id) => ({ id: id, label: TRAVEL_BLOCKS.find((b) => b[0] === id)[1], on: off.indexOf(id) === -1 }));
   }
   C.travelLayout = travelLayout;
@@ -187,6 +220,7 @@
         hotel ? ['car', 'Taxi al hotel', { act: 'taxi', id: hotel.id }] : ['ticket', 'Reservas', { act: 'go', to: 'reservations' }]
       ]),
       diary: () => (day && n.minutes >= 18 * 60 ? diaryCard(day) : ''),
+      tomorrow: () => (n.minutes >= 18 * 60 ? tomorrowCard(U.addDays(n.date, 1)) : ''),
       converter: () => C.quickConverter(),
       talk: () => talkCard(),
       hotel: function () {
@@ -265,7 +299,7 @@
     const hotel = S.hotelTonight(d.date);
     const shown = list.filter((a) => !a.transportId); // los trayectos ya salen arriba como etiqueta
     // Si ese día dejas un hotel distinto del de esa noche: etiqueta de check-out.
-    const leaving = Object.values(s.reservations).find((r) => r.type === 'hotel' && r.endDate === d.date && (!hotel || hotel.id !== r.id));
+    const leaving = Object.values(s.reservations).find((r) => JT.data.isLodging(r.type) && r.endDate === d.date && (!hotel || hotel.id !== r.id));
     const tags = (leaving ? '<span class="daycard__tag">🧳 Check-out' + (leaving.checkoutTime ? ' ' + leaving.checkoutTime : '') + '</span>' : '') + trips.map((x) => '<span class="daycard__tag">' + D.TRANSPORT[x.kind][1] + ' ' + esc(x.origin + ' → ' + x.destination) + (x.departTime ? ' · ' + x.departTime : '') + '</span>').join('') +
       // El día que llegas al hotel: «Check-in 15:00 · nombre»; los demás días, sólo dónde dormís.
       (hotel ? '<span class="daycard__tag">🏨 ' + (hotel.date === d.date ? 'Check-in' + (hotel.time ? ' ' + hotel.time : '') + ' · ' : '') + esc(hotel.name) + '</span>' : '');
@@ -511,7 +545,7 @@
       UI.field('Título', UI.input('title', a.title, { placeholder: 'p.ej. Fushimi Inari', autofocus: !ex && !def.title, required: true })) +
       UI.field('Día', '<select class="input" name="dayId">' + days.map((d, i) => '<option value="' + d.id + '"' + (d.id === dayId ? ' selected' : '') + '>Día ' + (i + 1) + ' · ' + esc(U.fmtDay(d.date)) + (d.cityId && s.cities[d.cityId] ? ' · ' + esc(s.cities[d.cityId].name) : '') + '</option>').join('') + '</select>') +
       '<div class="row row--top">' + UI.field('Inicio', UI.input('startTime', a.startTime || '', { type: 'time' }), { optional: true }) + UI.field('Fin', UI.input('endTime', a.endTime || '', { type: 'time' }), { optional: true }) + '</div>' +
-      UI.field('Categoría', UI.chips('category', D.options(D.ACTIVITY), a.category)) +
+      UI.field('Categoría', C.typePicker('category', D.ACTIVITY, a.category, 'activity')) +
       UI.field('Ubicación', '<select class="input" name="loc">' + locationOptions(selLoc, day && day.cityId) + '</select>', { optional: true }) +
       '<div class="stack free-loc"' + (selLoc === 'free' ? '' : ' hidden') + '>' + UI.field('Nombre del sitio', UI.input('locName', fl.name || '', { placeholder: 'p.ej. Estación de Kyoto' })) + UI.field('Dirección', UI.input('address', fl.address || ''), { optional: true }) + C.coordsField(fl.coords) + '</div>' +
       UI.details('Más detalles',
@@ -565,7 +599,7 @@
   };
 
   /* Nº de reserva escrito en la actividad: actualiza su reserva o crea una en Reservas, enlazada. */
-  const RES_TYPE = { hotel: 'hotel', restaurant: 'restaurant', cafe: 'restaurant', transport: 'train', activity: 'activity', visit: 'activity' };
+  const RES_TYPE = { hotel: 'hotel', restaurant: 'restaurant', cafe: 'restaurant', transport: 'train', activity: 'activity', visit: 'activity', onsen: 'activity', nature: 'tour', show: 'show' };
 
   function saveBookingCode(activityId, f) {
     const code = (f.bookingCode || '').trim().toUpperCase();
@@ -595,7 +629,7 @@
     if (st.start === undefined) st.start = '09:00';
     if (st.lunch === undefined) st.lunch = true;
     const day = s.days[st.dayId];
-    const hotel = day && S.reservationsOn(day.date).find((r) => r.type === 'hotel' && r.location && r.location.coords);
+    const hotel = day && S.reservationsOn(day.date).find((r) => JT.data.isLodging(r.type) && r.location && r.location.coords);
     if (!st.from) st.from = hotel ? 'hotel' : 'first';
     const inDay = new Set(day ? S.dayActivities(day.id).map((a) => a.placeId).filter(Boolean) : []);
     const cands = Object.values(s.places).filter((x) => st.allCities || !day || !day.cityId || x.cityId === day.cityId)
@@ -658,7 +692,7 @@
     const s = S.get(), st = JT.uiState.planner, day = s.days[st.dayId];
     if (!day) return;
     let start;
-    const hotel = S.reservationsOn(day.date).find((r) => r.type === 'hotel' && r.location && r.location.coords);
+    const hotel = S.reservationsOn(day.date).find((r) => JT.data.isLodging(r.type) && r.location && r.location.coords);
     if (st.from === 'hotel' && hotel) start = { name: hotel.name, coords: hotel.location.coords };
     const restaurants = Object.values(s.restaurants).filter((r) => r.coords && r.cuisine !== 'dessert').map((r) => ({
       id: r.id, name: r.name, coords: r.coords,

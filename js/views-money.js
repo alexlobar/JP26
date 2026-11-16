@@ -139,7 +139,7 @@
     const body = '<form id="fExp" class="stack" novalidate>' +
       '<label class="field"><span class="field__label">Importe</span><input class="input input--lg" name="amount" inputmode="decimal" placeholder="0" value="' + esc(e.amount ? String(e.amount).replace('.', ',') : '') + '"' + (ex || e.amount ? '' : ' autofocus') + ' autocomplete="off"><span class="field__hint" id="conv"></span></label>' +
       UI.chips('currency', D.CURRENCIES.map((c) => ({ value: c, label: c })), e.currency) +
-      UI.field('Categoría', UI.chips('category', D.options(D.EXPENSE), e.category)) +
+      UI.field('Categoría', C.typePicker('category', D.EXPENSE, e.category, 'expense')) +
       // Sólo para saber cómo se pagó: el total de gastos es uno solo, se pague como se pague.
       UI.field('Pagado con', UI.chips('paymentMethod', D.options(D.PAYMENT), e.paymentMethod, { allowNone: true, noneLabel: '—' }), { optional: true }) +
       UI.field('Descripción', UI.input('description', e.description || '', { placeholder: 'p.ej. Cena ramen' }), { optional: true }) +

@@ -115,7 +115,7 @@
     const body = '<form id="fPlace" class="stack" novalidate>' +
       UI.field('Nombre', UI.input('name', x.name, { placeholder: 'p.ej. Fushimi Inari Taisha', autofocus: !ex && !def.name })) +
       UI.field('Ciudad', UI.chips('cityId', C.cityOptions(), x.cityId, { allowNone: true, noneLabel: 'Sin ciudad' })) +
-      UI.field('Categoría', UI.chips('category', D.options(D.PLACE), x.category)) +
+      UI.field('Categoría', C.typePicker('category', D.PLACE, x.category, 'place')) +
       C.coordsField(x.coords) +
       UI.details('Más detalles',
         UI.field('Prioridad', UI.chips('priority', D.options(D.PRIORITY), x.priority)) +
@@ -285,7 +285,7 @@
     const r = ex || { name: def.name || '', cityId: def.cityId, cuisine: def.cuisine || 'ramen', status: 'want', coords: def.coords, url: def.url, address: def.address, hours: def.hours, priceLevel: def.priceLevel, notes: def.notes };
     const body = '<form id="fRest" class="stack" novalidate>' +
       UI.field('Nombre', UI.input('name', r.name, { placeholder: 'p.ej. Ichiran Shibuya', autofocus: !ex && !def.name })) +
-      UI.field('Tipo de comida', UI.chips('cuisine', D.options(D.CUISINE), r.cuisine)) +
+      UI.field('Tipo de comida', C.typePicker('cuisine', D.CUISINE, r.cuisine, 'cuisine')) +
       UI.field('Ciudad', UI.chips('cityId', C.cityOptions(), r.cityId, { allowNone: true, noneLabel: 'Sin ciudad' })) +
       '<div class="row row--top row--wrap">' + UI.field('Precio', UI.chips('priceLevel', [1, 2, 3, 4].map((n) => ({ value: n, label: D.PRICE[n] })), r.priceLevel, { allowNone: true, noneLabel: '—' })) +
       UI.field('Estado', UI.chips('status', [{ value: 'want', label: 'Quiero ir' }, { value: 'tried', label: 'Probado' }], r.status, { allowNone: true, noneLabel: '—' })) + '</div>' +
@@ -352,7 +352,7 @@
     const stays = S.cityStays().filter((x) => x.cityId === c.id), main = s.trip.mainCurrency;
     const nights = stays.reduce((a, x) => a + x.nights, 0);
     const spent = C.moneySum(Object.values(s.expenses).filter((e) => e.cityId === c.id));
-    const hotels = Object.values(s.reservations).filter((r) => r.type === 'hotel' && r.cityId === c.id);
+    const hotels = Object.values(s.reservations).filter((r) => JT.data.isLodging(r.type) && r.cityId === c.id);
     const places = Object.values(s.places).filter((x) => x.cityId === c.id), rests = Object.values(s.restaurants).filter((x) => x.cityId === c.id);
     const notes = Object.values(s.notes).filter((n) => n.scope === 'city' && n.refId === c.id);
     let html = UI.header({ back: true, eyebrow: c.nameJa, title: c.name, subtitle: stays.map((x) => U.fmtRange(x.start, x.end)).join(' · ') || 'Sin días asignados', actions: UI.iconBtn('edit', 'Editar ciudad', { act: 'editCity', id: c.id }) });

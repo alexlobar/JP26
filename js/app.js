@@ -69,6 +69,7 @@ JT.app = (function () {
       if (on) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
     });
     toneHeader(r.view);
+    updateFab();
     if (res.mount) res.mount(main);
     // Que el filtro elegido quede a la vista en las filas de chips desplazables.
     main.querySelectorAll('.chips--scroll .is-on').forEach(function (c) {
@@ -89,6 +90,8 @@ JT.app = (function () {
     }
     lastPath = h.full;
   }
+
+  function refreshRates() { SV.refreshRatesIfStale().then((changed) => changed && scheduleRender()).catch(() => {}); }
 
   /* ── Toque de color en la cabecera: el mismo icono y color que su cuadro en «Tu viaje» ── */
   const VIEW_ICON = { cities: 'city', city: 'city', reservations: 'ticket', reservation: 'ticket', transport: 'train', notes: 'note', checklist: 'checklist', documents: 'doc', info: 'info', phrases: 'chat', gifts: 'gift' };
@@ -237,7 +240,28 @@ JT.app = (function () {
 
   /* ── Botón (+) ────────────────────────────────────────────── */
 
+  /* El botón (+) según la pantalla: si la pantalla tiene su propio «Nuevo…» arriba (Frases, Regalos,
+     Reservas, Notas, Sitios…), el (+) hace eso mismo; en Gastos, un gasto; en un día, una actividad
+     de ese día. En Inicio y el resto, el menú con todo. */
+  function fabTarget() {
+    const v = document.body.dataset.view, own = main && main.querySelector('.hdr .iconbtn[data-act^="new"]');
+    if (own) return { label: own.getAttribute('aria-label'), run: () => own.click() };
+    if (v === 'expenses') return { label: 'Nuevo gasto', run: () => JT.forms.expense(null, {}) };
+    if (v === 'day') { const id = parseHash().path.split('/')[1]; return { label: 'Nueva actividad en este día', run: () => JT.forms.activity(null, { dayId: id }) }; }
+    if (v === 'itinerary') { const t = S.today(); return { label: 'Nueva actividad', run: () => JT.forms.activity(null, { dayId: t.phase === 'during' && t.day ? t.day.id : undefined }) }; }
+    return null;
+  }
+  function updateFab() {
+    const fab = document.querySelector('.fab');
+    if (!fab) return;
+    const t = fabTarget(), label = t ? t.label : 'Añadir: gasto, actividad, restaurante, lugar, nota, reserva o trayecto';
+    fab.setAttribute('aria-label', label);
+    fab.title = t ? t.label : 'Añadir';
+  }
+
   A.quickAdd = function () {
+    const ctx = fabTarget();
+    if (ctx) return ctx.run();
     const t = S.today();
     const dayId = t.phase === 'during' && t.day ? t.day.id : undefined;
     UI.menu('Añadir', [
@@ -325,7 +349,11 @@ JT.app = (function () {
     S.subscribe(function () { applyTheme(); scheduleRender(); });
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
     window.addEventListener('hashchange', () => render());
-    window.addEventListener('online', scheduleRender);
+    window.addEventListener('online', function () { scheduleRender(); refreshRates(); });
+    // Tipo de cambio al día: además de al abrir, al volver a la app (las PWA suelen reanudarse sin recargar)
+    // y cada hora si se queda abierta. Sólo descarga si lo guardado tiene más de 6 h.
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') refreshRates(); });
+    setInterval(refreshRates, 3600000);
     window.addEventListener('offline', scheduleRender);
     document.addEventListener('click', onClick, true);
     document.addEventListener('keydown', onKey);
@@ -347,7 +375,7 @@ JT.app = (function () {
     registerServiceWorker();
     // Pedir que el navegador no borre los datos; se repite en cada arranque mientras no lo conceda.
     persist();
-    SV.refreshRatesIfStale().then((changed) => changed && scheduleRender()).catch(() => {});
+    refreshRates();
     setInterval(tick, 30000);
     setTimeout(tick, 2000);
   }

@@ -33,6 +33,7 @@ JT.store = (function () {
     out.settings = Object.assign({}, D.DEFAULT_SETTINGS, data.settings || {});
     out.trip = Object.assign({ timezoneOffsetMinutes: 540, mainCurrency: 'JPY', emoji: '🇯🇵' }, data.trip || {});
     out.emergency = Object.assign({}, data.emergency || {}); // ficha de emergencia (sin cifrar: se ve sin PIN)
+    out.customTypes = Object.assign({}, data.customTypes || {}); // tus tipos propios de sitio, comida, gasto…
     fixPhrases(out.phrases); // antes de añadir las que falten, para no duplicar las corregidas
     addMissingPhrases(out.phrases);
     addMissingFoods(out.foods);
@@ -83,6 +84,7 @@ JT.store = (function () {
       try {
         state = normalize(JSON.parse(raw));
         syncAllLinks(); // reservas y trayectos guardados antes de la v1.0.5 entran también en el itinerario
+        applyCustomTypes();
         save();
         return;
       } catch (e) {
@@ -93,6 +95,7 @@ JT.store = (function () {
     }
     state = normalize(D.sampleTrip());
     syncAllLinks();
+    applyCustomTypes();
     save();
   }
 
@@ -107,7 +110,63 @@ JT.store = (function () {
   }
 
   function emit() { listeners.forEach(function (fn) { fn(state); }); }
-  function commit() { save(); emit(); }
+  function commit() { applyCustomTypes(); save(); emit(); }
+
+  /* ── Tus tipos propios (v1.11.0) ──────────────────────────────
+     Se guardan en state.customTypes y se añaden a los catálogos de data.js
+     (antes de «Otro»), así toda la app los muestra como uno más. */
+  const CUSTOM_KINDS = {
+    place: ['PLACE', 'places', 'category'], cuisine: ['CUISINE', 'restaurants', 'cuisine'], expense: ['EXPENSE', 'expenses', 'category'],
+    activity: ['ACTIVITY', 'activities', 'category'], reservation: ['RESERVATION', 'reservations', 'type']
+  };
+  const appliedCustom = {};
+  function applyCustomTypes() {
+    if (!state) return;
+    const ct = state.customTypes || {};
+    Object.keys(CUSTOM_KINDS).forEach(function (kind) {
+      const cat = D[CUSTOM_KINDS[kind][0]], mine = ct[kind] || {};
+      (appliedCustom[kind] || []).forEach((k) => { if (!mine[k]) delete cat[k]; });
+      const other = cat.other;
+      delete cat.other;
+      Object.keys(mine).forEach(function (k) {
+        cat[k] = [mine[k][0], mine[k][1] || '⭐'];
+        if (kind === 'place' && !D.VISIT_MIN[k]) D.VISIT_MIN[k] = 60;
+      });
+      if (other) cat.other = other; // «Otro» siempre al final
+      appliedCustom[kind] = Object.keys(mine);
+    });
+  }
+
+  function addCustomType(kind, label, emoji) {
+    if (!CUSTOM_KINDS[kind] || !label) return null;
+    const key = U.uid('c_');
+    const ct = Object.assign({}, state.customTypes);
+    ct[kind] = Object.assign({}, ct[kind], { [key]: [String(label).trim(), (emoji || '').trim() || '⭐'] });
+    state.customTypes = ct;
+    commit();
+    return key;
+  }
+  function updateCustomType(kind, key, label, emoji) {
+    const ct = Object.assign({}, state.customTypes);
+    if (!ct[kind] || !ct[kind][key]) return;
+    ct[kind] = Object.assign({}, ct[kind], { [key]: [String(label).trim() || ct[kind][key][0], (emoji || '').trim() || ct[kind][key][1]] });
+    state.customTypes = ct;
+    commit();
+  }
+  /** Lo que lo usaba pasa a «Otro» (no se pierde nada). */
+  function removeCustomType(kind, key) {
+    const k = CUSTOM_KINDS[kind], ct = Object.assign({}, state.customTypes);
+    if (!k || !ct[kind]) return;
+    Object.values(state[k[1]]).forEach((x) => { if (x[k[2]] === key) x[k[2]] = 'other'; });
+    ct[kind] = Object.assign({}, ct[kind]);
+    delete ct[kind][key];
+    state.customTypes = ct;
+    commit();
+  }
+  function customTypeUses(kind, key) {
+    const k = CUSTOM_KINDS[kind];
+    return k ? Object.values(state[k[1]]).filter((x) => x[k[2]] === key).length : 0;
+  }
   function subscribe(fn) { listeners.push(fn); return function () { listeners = listeners.filter((f) => f !== fn); }; }
   function get() { return state; }
 
@@ -296,7 +355,7 @@ JT.store = (function () {
   function linkSpec(col, x) {
     if (col === 'reservations') {
       return { date: x.date, startTime: x.time, category: RES_CATEGORY[x.type] || 'other',
-        title: x.type === 'hotel' ? 'Check-in · ' + x.name : x.name, location: x.location };
+        title: JT.data.isLodging(x.type) ? 'Check-in · ' + x.name : x.name, location: x.location };
     }
     const k = D.TRANSPORT[x.kind] || ['Trayecto'];
     const sameDay = !x.arriveDate || x.arriveDate === x.date;
@@ -428,6 +487,7 @@ JT.store = (function () {
       trip: { id: U.uid('t'), name: input.name, emoji: '🇯🇵', startDate: input.startDate, endDate: input.endDate, mainCurrency: input.mainCurrency, totalBudget: input.totalBudget, timezoneOffsetMinutes: 540 },
       settings: Object.assign({}, state.settings, { simulatedDate: '', simulatedTime: '' }),
       emergency: state.emergency, // la ficha de emergencia es tuya, no del viaje
+      customTypes: state.customTypes, // tus tipos propios también
       days: days,
       travelers: {}
     });
@@ -545,13 +605,13 @@ JT.store = (function () {
 
   function reservationsOn(date) {
     return Object.values(state.reservations)
-      .filter((r) => r.date === date || (r.type === 'hotel' && r.endDate && r.date <= date && date < r.endDate))
+      .filter((r) => r.date === date || (JT.data.isLodging(r.type) && r.endDate && r.date <= date && date < r.endDate))
       .sort((a, b) => U.cmpTime(a.time, b.time));
   }
 
   /** El hotel donde se duerme la noche de esa fecha (el día de salida ya no cuenta). */
   function hotelTonight(date) {
-    return reservationsOn(date).find((r) => r.type === 'hotel' && (r.endDate ? date < r.endDate : r.date === date));
+    return reservationsOn(date).find((r) => JT.data.isLodging(r.type) && (r.endDate ? date < r.endDate : r.date === date));
   }
 
   /** Las reservas de ese día que NO salen ya en su timeline (p. ej. el hotel las noches sin check-in). */
@@ -571,7 +631,7 @@ JT.store = (function () {
       if (!a.startTime || U.toMin(a.startTime) <= n.minutes) best = l.coords;
     }
     if (best) return best;
-    const h = reservationsOn(day.date).find((r) => r.type === 'hotel' && r.location && r.location.coords);
+    const h = reservationsOn(day.date).find((r) => JT.data.isLodging(r.type) && r.location && r.location.coords);
     return h ? h.location.coords : undefined;
   }
 
@@ -585,6 +645,7 @@ JT.store = (function () {
     load, get, subscribe, create, update, remove, setTrip, setSettings, setEmergency, setTripDates,
     addActivity, updateActivity, toggleDone, duplicateActivity, shiftActivity, sortDayByTime, addReservationFor, linkedDayLabel,
     replaceAll, loadSample, startEmptyTrip, removeSample, exportJson, parseImport,
+    addCustomType, updateCustomType, removeCustomType, customTypeUses, CUSTOM_KINDS,
     sortedDays, dayNumber, dayActivities, cityStays, resolveLocation, now, today, travelModeActive,
     upcoming, reservationsOn, reservationsOffTimeline, hotelTonight, inferArea, savedNear,
     isWritable: () => writable, lastError: () => lastError, clearError: () => { lastError = null; }

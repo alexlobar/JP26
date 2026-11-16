@@ -11,36 +11,46 @@ JT.data = (function () {
 
   /* ── Catálogos [valor]: [etiqueta, emoji] ─────────────────── */
 
+  /* v1.10.0: más tipos para elegir (apartamento, ryokan, onsen, castillo, jardín, ferry…). Las claves
+     antiguas no cambian, así que lo que ya tenías guardado sigue igual. */
   const ACTIVITY = {
-    transport: ['Transporte', '✈️'], hotel: ['Hotel', '🏨'], restaurant: ['Restaurante', '🍜'], visit: ['Visita', '🏯'],
-    shopping: ['Compras', '🛍️'], activity: ['Actividad', '🎟️'], cafe: ['Café', '☕'], other: ['Otro', '📝']
+    transport: ['Transporte', '✈️'], hotel: ['Alojamiento', '🏨'], restaurant: ['Restaurante', '🍜'], visit: ['Visita', '🏯'],
+    shopping: ['Compras', '🛍️'], activity: ['Actividad', '🎟️'], cafe: ['Café', '☕'], onsen: ['Onsen', '♨️'],
+    nature: ['Naturaleza', '🏞️'], show: ['Espectáculo', '🎭'], nightlife: ['Noche', '🍻'], rest: ['Descanso', '🛋️'], other: ['Otro', '📝']
   };
   const PLACE = {
-    temple: ['Templo', '🛕'], shrine: ['Santuario', '⛩️'], museum: ['Museo', '🏛️'], viewpoint: ['Mirador', '🌆'],
-    neighborhood: ['Barrio', '🏘️'], shop: ['Tienda', '🛍️'], market: ['Mercado', '🐟'], park: ['Parque', '🌳'],
-    experience: ['Experiencia', '🎎'], other: ['Otro', '📍']
+    temple: ['Templo', '🛕'], shrine: ['Santuario', '⛩️'], castle: ['Castillo', '🏯'], museum: ['Museo', '🏛️'], viewpoint: ['Mirador', '🌆'],
+    garden: ['Jardín', '🌸'], park: ['Parque', '🌳'], nature: ['Naturaleza / montaña', '⛰️'], onsen: ['Onsen', '♨️'],
+    neighborhood: ['Barrio', '🏘️'], street: ['Calle comercial', '🏮'], shop: ['Tienda', '🛍️'], market: ['Mercado', '🐟'],
+    themepark: ['Parque temático', '🎢'], aquarium: ['Acuario / zoo', '🐠'], experience: ['Experiencia', '🎎'], other: ['Otro', '📍']
   };
   /* Duración de visita por defecto (min) para el planificador. */
-  const VISIT_MIN = { temple: 60, shrine: 75, museum: 120, viewpoint: 60, neighborhood: 90, shop: 45, market: 60, park: 60, experience: 120, other: 60 };
+  const VISIT_MIN = { temple: 60, shrine: 75, castle: 90, museum: 120, viewpoint: 60, garden: 60, park: 60, nature: 150, onsen: 90, neighborhood: 90, street: 60, shop: 45, market: 60, themepark: 360, aquarium: 120, experience: 120, other: 60 };
   const CUISINE = {
     ramen: ['Ramen', '🍜'], sushi: ['Sushi', '🍣'], yakitori: ['Yakitori', '🍢'], izakaya: ['Izakaya', '🏮'], udon: ['Udon', '🍲'],
     soba: ['Soba', '🥢'], yakiniku: ['Yakiniku', '🥩'], tonkatsu: ['Tonkatsu', '🍖'], tempura: ['Tempura', '🍤'],
-    okonomiyaki: ['Okonomiyaki', '🥞'], curry: ['Curry', '🍛'], kaiseki: ['Kaiseki', '🍱'], cafe: ['Cafetería', '☕'],
-    dessert: ['Postres', '🍡'], other: ['Otro', '🍽️']
+    okonomiyaki: ['Okonomiyaki', '🥞'], curry: ['Curry', '🍛'], kaiseki: ['Kaiseki', '🍱'], sukiyaki: ['Sukiyaki / shabu-shabu', '🫕'],
+    unagi: ['Unagi (anguila)', '🐟'], donburi: ['Donburi', '🍚'], gyoza: ['Gyoza', '🥟'], street: ['Puestos callejeros', '🍡'],
+    konbini: ['Konbini', '🏪'], bakery: ['Panadería', '🥐'], cafe: ['Cafetería', '☕'], dessert: ['Postres', '🍨'], bar: ['Bar', '🍸'], other: ['Otro', '🍽️']
   };
   const PRICE = { 1: '¥', 2: '¥¥', 3: '¥¥¥', 4: '¥¥¥¥' };
   const EXPENSE = {
-    flights: ['Vuelos', '✈️'], hotel: ['Hotel', '🏨'], transport: ['Transporte', '🚆'], food: ['Comida', '🍜'],
-    shopping: ['Compras', '🛍️'], tickets: ['Entradas', '🎟️'], cafe: ['Café', '☕'], gifts: ['Regalos', '🎁'], other: ['Otros', '📱']
+    flights: ['Vuelos', '✈️'], hotel: ['Alojamiento', '🏨'], transport: ['Transporte', '🚆'], food: ['Comida', '🍜'],
+    shopping: ['Compras', '🛍️'], tickets: ['Entradas', '🎟️'], cafe: ['Café', '☕'], gifts: ['Regalos', '🎁'],
+    health: ['Farmacia / salud', '💊'], laundry: ['Lavandería', '🧺'], internet: ['Internet / SIM', '📶'], other: ['Otros', '📱']
   };
-  const PAYMENT = { cash: ['Efectivo', '💴'], card: ['Tarjeta', '💳'], ic: ['Suica/IC', '🚃'], other: ['Otro', '•'] };
+  const PAYMENT = { cash: ['Efectivo', '💴'], card: ['Tarjeta', '💳'], ic: ['Suica/IC', '🚃'], mobile: ['Móvil (Google/Apple Pay)', '📱'], other: ['Otro', '•'] };
   const RESERVATION = {
-    hotel: ['Hotel', '🏨'], restaurant: ['Restaurante', '🍜'], train: ['Tren', '🚄'], flight: ['Vuelo', '✈️'],
-    activity: ['Actividad', '🎟️'], other: ['Otro', '📌']
+    hotel: ['Hotel', '🏨'], apartment: ['Apartamento', '🏠'], ryokan: ['Ryokan', '♨️'], hostel: ['Hostal', '🛏️'],
+    restaurant: ['Restaurante', '🍜'], train: ['Tren', '🚄'], flight: ['Vuelo', '✈️'], bus: ['Autobús', '🚌'],
+    activity: ['Actividad', '🎟️'], tour: ['Excursión / tour', '🗺️'], show: ['Espectáculo', '🎭'], car: ['Alquiler de coche', '🚗'], other: ['Otro', '📌']
   };
+  /** Tipos de reserva que son un sitio donde dormir: cuentan como «hotel» (esta noche duermes en, check-out, taxista…). */
+  const LODGING = ['hotel', 'apartment', 'ryokan', 'hostel'];
+  const isLodging = (type) => LODGING.indexOf(type) > -1;
   const TRANSPORT = {
     flight: ['Vuelo', '✈️'], train: ['Tren', '🚆'], shinkansen: ['Shinkansen', '🚄'], metro: ['Metro', '🚇'],
-    bus: ['Autobús', '🚌'], taxi: ['Taxi', '🚕'], other: ['Otro', '🧭']
+    bus: ['Autobús', '🚌'], ferry: ['Ferry', '⛴️'], taxi: ['Taxi', '🚕'], car: ['Coche', '🚗'], bike: ['Bicicleta', '🚲'], other: ['Otro', '🧭']
   };
   const MODE = {
     walk: ['A pie', '🚶'], train: ['Tren', '🚆'], metro: ['Metro', '🚇'], shinkansen: ['Shinkansen', '🚄'],
@@ -578,7 +588,7 @@ JT.data = (function () {
   }
 
   return {
-    ACTIVITY, PLACE, VISIT_MIN, CUISINE, PRICE, EXPENSE, PAYMENT, RESERVATION, TRANSPORT, MODE, PRIORITY, NOTE_SCOPE,
+    ACTIVITY, PLACE, VISIT_MIN, CUISINE, PRICE, EXPENSE, PAYMENT, RESERVATION, LODGING, isLodging, TRANSPORT, MODE, PRIORITY, NOTE_SCOPE,
     CHECK_SECTION, DOC_KIND, CURRENCIES, DEFAULT_SETTINGS, PHRASES, PHRASE_FIXES, FOODS, ALLERGENS, EMERGENCY_NUMBERS, MOOD, emptyCollections, baseContent, sampleTrip, options
   };
 })();

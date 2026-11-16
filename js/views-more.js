@@ -47,7 +47,7 @@
   /* ── Del coste de una reserva o trayecto a Gastos, sin escribirlo dos veces ── */
 
   const COST_FIELD = { reservations: 'reservationId', transports: 'transportId' };
-  const RES_EXPENSE = { hotel: 'hotel', restaurant: 'food', train: 'transport', flight: 'flights', activity: 'tickets', other: 'other' };
+  const RES_EXPENSE = { hotel: 'hotel', apartment: 'hotel', ryokan: 'hotel', hostel: 'hotel', restaurant: 'food', train: 'transport', bus: 'transport', car: 'transport', flight: 'flights', activity: 'tickets', tour: 'tickets', show: 'tickets', other: 'other' };
 
   /** Gasto apuntado desde esa reserva/trayecto, si lo hay. */
   function costExpense(col, id) {
@@ -105,7 +105,8 @@
     html += '<div class="row row--wrap">' + (dir ? '<a class="btn btn--primary btn--sm" href="' + esc(dir) + '" target="_blank" rel="noopener">' + U.icon('nav', 16) + '<span>Cómo llegar</span></a>' : '') +
       (r.phone ? '<a class="btn btn--secondary btn--sm" href="tel:' + esc(r.phone.replace(/[^\d+]/g, '')) + '">' + U.icon('phone', 16) + '<span>Llamar</span></a>' : '') +
       (r.url ? UI.btn('Web', { icon: 'link', size: 'sm', variant: 'secondary', data: { act: 'openUrl', url: r.url } }) : '') +
-      (r.type === 'hotel' && r.endDate ? UI.btn('Antes de salir', { icon: 'checklist', size: 'sm', variant: 'secondary', data: { act: 'checkoutList', id: r.id } }) : '') +
+      (r.confirmationCode ? UI.btn('Enseñar código', { icon: 'expand', size: 'sm', variant: 'secondary', data: { act: 'showTicket', col: 'reservations', id: r.id } }) : '') +
+      (JT.data.isLodging(r.type) && r.endDate ? UI.btn('Antes de salir', { icon: 'checklist', size: 'sm', variant: 'secondary', data: { act: 'checkoutList', id: r.id } }) : '') +
       (loc.name || loc.address || r.addressJa ? UI.btn('Para el taxista', { icon: 'car', size: 'sm', variant: 'secondary', data: { act: 'taxi', id: r.id } }) : '') +
       UI.btn('Añadir a Google Calendar', { icon: 'calendar', size: 'sm', variant: 'secondary', data: { act: 'gcal', col: 'reservations', id: r.id } }) + '</div>';
     html += UI.card((loc.name || loc.address ? UI.listRow({ icon: 'pin', title: loc.name || loc.address, sub: loc.name ? loc.address : '' }) : '') + (r.phone ? UI.listRow({ icon: 'phone', title: r.phone }) : '') +
@@ -194,11 +195,11 @@
     const loc = r.location || {};
     return formSheet({
       id: 'fRes', title: ex ? 'Editar reserva' : 'Nueva reserva',
-      body: UI.field('Tipo', UI.chips('type', D.options(D.RESERVATION), r.type)) +
+      body: UI.field('Tipo', C.typePicker('type', D.RESERVATION, r.type, 'reservation')) +
         UI.field('Nombre', UI.input('name', r.name, { placeholder: 'p.ej. Cena en Gion', autofocus: !ex && !def.name })) +
         UI.field('Nº de reserva', UI.input('confirmationCode', r.confirmationCode || '', { placeholder: 'ABC123' }), { optional: true }) +
         '<div class="row row--top">' + UI.field('Fecha (entrada)', UI.input('date', r.date, { type: 'date' })) + UI.field('Hora', UI.input('time', r.time || '', { type: 'time' }), { optional: true }) + '</div>' +
-        '<div class="row row--top">' + UI.field('Salida (hoteles)', UI.input('endDate', r.endDate || '', { type: 'date' }), { optional: true }) +
+        '<div class="row row--top">' + UI.field('Salida (alojamiento)', UI.input('endDate', r.endDate || '', { type: 'date' }), { optional: true }) +
           UI.field('Check-out', UI.input('checkoutTime', r.checkoutTime || '', { type: 'time' }), { optional: true }) + '</div>' +
         itineraryToggle(r) +
         UI.field('Lugar', UI.input('locName', loc.name || ''), { optional: true }) + UI.field('Dirección', UI.input('address', loc.address || ''), { optional: true }) + C.coordsField(loc.coords) +
@@ -280,7 +281,7 @@
     const t = ex || { kind: 'shinkansen', date: s.trip.startDate, currency: 'JPY' };
     return formSheet({
       id: 'fTr', title: ex ? 'Editar trayecto' : 'Nuevo trayecto',
-      body: UI.chips('kind', D.options(D.TRANSPORT), t.kind) +
+      body: C.typePicker('kind', D.TRANSPORT, t.kind) +
         '<div class="row row--top">' + UI.field('Origen', UI.input('origin', t.origin || '', { placeholder: 'Tokyo', autofocus: !ex })) + UI.field('Destino final', UI.input('destination', t.destination || '', { placeholder: 'Kyoto' })) + '</div>' +
         '<div class="row row--top">' + UI.field('Fecha de salida', UI.input('date', t.date, { type: 'date' })) + UI.field('Fecha de llegada', UI.input('arriveDate', t.arriveDate || '', { type: 'date' }), { optional: true, hint: 'Sólo si llegas otro día.' }) + '</div>' +
         '<div class="row row--top">' + UI.field('Salida', UI.input('departTime', t.departTime || '', { type: 'time' }), { optional: true }) + UI.field('Llegada final', UI.input('arriveTime', t.arriveTime || '', { type: 'time' }), { optional: true }) + '</div>' +
@@ -910,7 +911,7 @@
     const filled = (e.allergies && e.allergies.length) || e.allergyOther || e.conditions || e.meds || e.blood || e.insurer || e.contactName;
     out.push({ id: 'sos', title: 'Ficha de emergencia', ok: !!filled, sub: filled ? (e.insurer ? 'Con seguro' : 'Sin seguro apuntado') + (e.contactName ? ' · con contacto' : ' · sin contacto') + '.' : 'Alergias, seguro y a quién avisar, en japonés.',
       action: UI.btn(filled ? 'Ver' : 'Rellenar', { size: 'sm', variant: 'secondary', data: { act: 'go', to: 'emergency' } }) });
-    const hotels = Object.values(s.reservations).filter((r) => r.type === 'hotel' && !r.isSample).sort((a, b) => a.date.localeCompare(b.date));
+    const hotels = Object.values(s.reservations).filter((r) => JT.data.isLodging(r.type) && !r.isSample).sort((a, b) => a.date.localeCompare(b.date));
     const noJa = hotels.filter((r) => !r.addressJa), noOut = hotels.filter((r) => r.endDate && !r.checkoutTime);
     out.push({ id: 'hotels', title: 'Hoteles para el taxista', ok: hotels.length > 0 && !noJa.length,
       sub: !hotels.length ? 'Aún no hay ningún hotel en Reservas.' : noJa.length ? 'Sin dirección en japonés: ' + noJa.map((r) => r.name).join(', ') + '.' : 'Los ' + hotels.length + ' tienen la dirección en japonés.',
@@ -1000,15 +1001,76 @@
     'Apariencia y unidades': ['eye', 'pink', 'Tema, tamaño de letra y distancias'],
     'Modo viaje': ['nav', 'red', 'Cuándo se activa y simular un día'],
     'Cambio de moneda': ['swap', 'green', 'Redondeo del yen y tipo del BCE'],
+    'Tus tipos': ['list', 'orange', 'Tus tipos propios de sitio, comida, gasto, actividad y reserva'],
     'Datos': ['download', 'amber', 'Copia de seguridad, importar y borrar'],
     'Esta instalación': ['info', 'slate', 'Versión, espacio y si está lista para el viaje']
   };
-  function fold(title, content) {
-    const m = FOLD[title] || ['settings', 'slate', ''], open = (JT.uiState.settingsOpen || {})[title];
-    return '<details class="fold" data-fold="' + esc(title) + '"' + (open ? ' open' : '') + '><summary class="fold__sum"><span class="fold__icon tone-' + m[1] + '">' + U.icon(m[0], 18) + '</span>' +
-      '<span class="grow"><strong class="block">' + esc(title) + '</strong><small class="muted">' + esc(title === 'Esta instalación' ? 'v' + U.VERSION + ' · ' + m[2] : m[2]) + '</small></span>' + U.icon('down', 18) + '</summary>' +
-      '<div class="fold__body">' + content + '</div></details>';
+  /** Resumen de lo elegido en cada apartado, para verlo sin abrirlo. */
+  function foldSummary(title) {
+    const s = S.get(), t = s.trip, st = s.settings, rates = SV.rates();
+    switch (title) {
+      case 'Viaje': return [t.name, U.fmtRange(t.startDate, t.endDate), t.mainCurrency, t.totalBudget ? 'presupuesto ' + U.money(t.totalBudget, t.mainCurrency) : ''].filter(Boolean).join(' · ');
+      case 'Viajeros': return Object.values(s.travelers).sort((a, b) => a.createdAt - b.createdAt).map((x) => x.name + (x.isMe ? ' (yo)' : '')).join(', ') || 'Nadie todavía';
+      case 'Apariencia y unidades': return 'Tema ' + ({ system: 'del sistema', light: 'claro', dark: 'oscuro' }[st.theme] || st.theme) + ' · letra ' + ({ normal: 'normal', large: 'grande', xl: 'muy grande' }[st.textSize || 'normal']) + ' · ' + (st.units === 'mi' ? 'millas' : 'km');
+      case 'Modo viaje': {
+        const lay = C.travelLayout ? C.travelLayout() : [];
+        return ({ auto: 'Automático', on: 'Siempre', off: 'Nunca' }[st.travelMode] || '') + (lay.length ? ' · ' + lay.filter((b) => b.on).length + ' de ' + lay.length + ' bloques' : '') + (st.simulatedDate ? ' · simulando ' + st.simulatedDate : '');
+      }
+      case 'Cambio de moneda': {
+        const yen = rates ? U.convert(1, t.mainCurrency === 'JPY' ? 'EUR' : t.mainCurrency, 'JPY', rates) : null;
+        return ({ up: 'Yen al alza', up1: 'Yen al alza +1', exact: 'Yen exacto' }[st.yenRounding || 'up']) + (yen ? ' · 1 ' + (t.mainCurrency === 'JPY' ? 'EUR' : t.mainCurrency) + ' = ' + U.money(yen, 'JPY') + (rates.date ? ' (BCE ' + U.fmtShort(rates.date) + ')' : '') : ' · sin tipo de cambio');
+      }
+      case 'Tus tipos': {
+        const ct = s.customTypes || {}, all = TYPE_KINDS.reduce((a, k) => a.concat(Object.values(ct[k[0]] || {})), []);
+        return all.length ? all.slice(0, 4).map((x) => x[1] + ' ' + x[0]).join(' · ') + (all.length > 4 ? ' y ' + (all.length - 4) + ' más' : '') : 'Ninguno todavía: créalos al elegir un tipo';
+      }
+      case 'Datos': { const last = SV.lastExport(); return last ? 'Última copia: ' + new Date(last).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }) : 'Aún no has hecho ninguna copia'; }
+      case 'Esta instalación': return 'v' + U.VERSION + ' · ' + U.fmtShort(U.BUILD_DATE);
+      default: return '';
+    }
   }
+
+  /* Los apartados se pintan al final (fold() los va guardando) para poder poner arriba los fijados. */
+  let foldBuf = [];
+  function fold(title, content) { foldBuf.push({ title: title, content: content }); return ''; }
+  function flushFolds() {
+    const pinned = S.get().settings.pinnedFolds || [], list = foldBuf;
+    foldBuf = [];
+    const rank = (f) => (pinned.indexOf(f.title) > -1 ? pinned.indexOf(f.title) : 100 + list.indexOf(f));
+    return list.slice().sort((a, b) => rank(a) - rank(b)).map(function (f) {
+      const m = FOLD[f.title] || ['settings', 'slate', ''], isPinned = pinned.indexOf(f.title) > -1;
+      const head = '<span class="fold__icon tone-' + m[1] + '">' + U.icon(m[0], 18) + '</span>' +
+        '<span class="grow"><strong class="block">' + esc(f.title) + '</strong><small class="muted fold__summary">' + esc(foldSummary(f.title) || m[2]) + '</small></span>' +
+        '<button type="button" class="iconbtn fold__pin' + (isPinned ? ' is-on' : '') + '" data-act="pinFold" data-title="' + esc(f.title) + '" aria-pressed="' + isPinned + '" aria-label="' + (isPinned ? 'Desfijar ' : 'Fijar arriba y abierto: ') + esc(f.title) + '" title="' + (isPinned ? 'Desfijar' : 'Fijar') + '">' + U.icon('tack', 18) + '</button>';
+      // Fijado: siempre abierto y arriba (no se pliega). Sin fijar: se abre y se cierra al tocarlo.
+      if (isPinned) return '<section class="fold is-pinned" data-fold="' + esc(f.title) + '"><div class="fold__sum">' + head + '</div><div class="fold__body">' + f.content + '</div></section>';
+      const open = (JT.uiState.settingsOpen || {})[f.title];
+      return '<details class="fold" data-fold="' + esc(f.title) + '"' + (open ? ' open' : '') + '><summary class="fold__sum">' + head + U.icon('down', 18) + '</summary><div class="fold__body">' + f.content + '</div></details>';
+    }).join('');
+  }
+
+  const TYPE_KINDS = [['place', 'Sitios'], ['cuisine', 'Comida'], ['expense', 'Gastos'], ['activity', 'Actividades'], ['reservation', 'Reservas']];
+  A.ctAdd = (el) => C.customTypeSheet(el.dataset.kind, { onDone: (key, label) => UI.toast('Tipo «' + label + '» creado') });
+  A.ctEdit = function (el) {
+    const t = ((S.get().customTypes || {})[el.dataset.kind] || {})[el.dataset.key];
+    if (t) C.customTypeSheet(el.dataset.kind, { key: el.dataset.key, label: t[0], emoji: t[1], onDone: () => UI.toast('Tipo guardado') });
+  };
+  A.ctDel = async function (el) {
+    const kind = el.dataset.kind, key = el.dataset.key, t = ((S.get().customTypes || {})[kind] || {})[key];
+    if (!t) return;
+    const uses = S.customTypeUses(kind, key);
+    if (await UI.confirm('¿Borrar el tipo «' + t[0] + '»?', uses ? (uses === 1 ? 'Lo usa 1 elemento, que pasará' : 'Lo usan ' + uses + ' elementos, que pasarán') + ' a «Otro». No se borra nada más.' : 'No lo usa nada.', { ok: 'Borrar tipo' })) {
+      S.removeCustomType(kind, key);
+      UI.toast('Tipo borrado');
+    }
+  };
+
+  A.pinFold = function (el) {
+    const title = el.dataset.title, pinned = (S.get().settings.pinnedFolds || []).slice(), i = pinned.indexOf(title);
+    if (i > -1) pinned.splice(i, 1); else pinned.push(title);
+    S.setSettings({ pinnedFolds: pinned });
+    UI.toast(i > -1 ? title + ': desfijado' : title + ': fijado arriba');
+  };
 
   V.settings = function () {
     const s = S.get(), t = s.trip, st = s.settings, rates = SV.rates();
@@ -1055,6 +1117,18 @@
       '<div class="row row--wrap">' + (SV.online() ? UI.btn('Actualizar tipo de cambio', { size: 'sm', variant: 'ghost', icon: 'refresh', data: { act: 'refreshRates' } }) : '') +
         (manualSet ? UI.btn('Quitar tipos manuales antiguos', { size: 'sm', variant: 'ghost', data: { act: 'clearManualRates' } }) : '') + '</div>', { cls: 'stack-sm' }));
 
+    // Tus tipos propios: se crean al elegir un tipo («Crear «…»») o aquí; al borrar uno, lo que lo usaba pasa a «Otro».
+    const ct = s.customTypes || {};
+    html += fold('Tus tipos', UI.card(TYPE_KINDS.map(function (k) {
+      const mine = ct[k[0]] || {};
+      return '<div class="ctypes"><div class="row row--between"><span class="field__label">' + k[1] + '</span>' + UI.btn('Añadir', { icon: 'plus', size: 'sm', variant: 'ghost', data: { act: 'ctAdd', kind: k[0] } }) + '</div>' +
+        (Object.keys(mine).length ? Object.keys(mine).map(function (key) {
+          const uses = S.customTypeUses(k[0], key);
+          return '<div class="ctype"><span class="ctype__emoji" aria-hidden="true">' + esc(mine[key][1]) + '</span><span class="grow"><span class="block">' + esc(mine[key][0]) + '</span><small class="muted">' + (uses ? uses + ' en uso' : 'Sin usar') + '</small></span>' +
+            UI.iconBtn('edit', 'Editar ' + mine[key][0], { act: 'ctEdit', kind: k[0], key: key }, { size: 18 }) + UI.iconBtn('trash', 'Borrar ' + mine[key][0], { act: 'ctDel', kind: k[0], key: key }, { size: 18 }) + '</div>';
+        }).join('') : '<small class="faint">Ninguno.</small>') + '</div>';
+    }).join('') + '<small class="muted">También puedes crearlos al elegir el tipo en cualquier formulario: busca y pulsa «Crear».</small>', { cls: 'stack' }));
+
     const lastExp = SV.lastExport();
     html += fold('Datos', UI.card(UI.btn('Exportar copia de seguridad', { icon: 'download', variant: 'secondary', block: true, data: { act: 'exportJson' } }) +
       '<small class="muted">' + (lastExp ? 'Última copia: ' + new Date(lastExp).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Todavía no has hecho ninguna copia.') + ' En el móvil se abre Compartir: elige Drive (se guarda como .txt). En el ordenador se descarga un .json. Importar acepta los dos.</small>' +
@@ -1070,10 +1144,11 @@
       '<div class="build"><span class="build__left"><span>Versión</span><small id="buildQuota"></small><small id="buildPersist" hidden></small></span><strong class="mono build__right" id="buildCache">—</strong></div>' +
       '<p class="small" id="buildHint" hidden></p>' +
       (S.isWritable() ? '' : '<p class="small warn">El navegador está BLOQUEANDO el almacenamiento: no se guardan cambios.</p>') +
-      '<small class="faint">Funciona sin conexión; restaurantes cercanos, búsqueda de coordenadas y tipos de cambio requieren Internet.</small>', { tone: 'muted', cls: 'stack-sm' }));
+      '<small class="faint">Funciona sin conexión; la búsqueda de coordenadas y actualizar el tipo de cambio requieren Internet.</small>', { tone: 'muted', cls: 'stack-sm' }));
 
+    html += '<p class="faint small center">Toca la chincheta de un apartado para fijarlo arriba y abierto; vuelve a tocarla para desfijarlo.</p>';
     return {
-      html: html,
+      html: html.replace('</header>', '</header>' + flushFolds()),
       mount: function (root) {
         root.querySelector('#fTrip').addEventListener('submit', function (ev) {
           ev.preventDefault();

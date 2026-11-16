@@ -218,14 +218,18 @@ JT.logic = (function () {
     [/ramen|ラーメン|らーめん|つけめん/i, 'ramen'], [/sushi|寿司|鮨/i, 'sushi'], [/yakitori|焼き?鳥/i, 'yakitori'], [/izakaya|居酒屋/i, 'izakaya'],
     [/udon|うどん/i, 'udon'], [/soba|そば|蕎麦/i, 'soba'], [/yakiniku|焼肉/i, 'yakiniku'], [/tonkatsu|とんかつ/i, 'tonkatsu'],
     [/tempura|天ぷら/i, 'tempura'], [/okonomiyaki|お好み焼/i, 'okonomiyaki'], [/curry|カレー/i, 'curry'], [/kaiseki|懐石|会席/i, 'kaiseki'],
+    [/sukiyaki|shabu|すき焼|しゃぶ/i, 'sukiyaki'], [/unagi|鰻|うなぎ/i, 'unagi'], [/donburi|丼/i, 'donburi'], [/gyoza|餃子/i, 'gyoza'],
+    [/bakery|panader[ií]a|パン屋|ベーカリー/i, 'bakery'], [/\bbar\b|cocktail|バー/i, 'bar'],
     [/caf[eé]|coffee|喫茶|カフェ/i, 'cafe'], [/dessert|postre|matcha|parfait|mochi|wagashi/i, 'dessert'], [/restaurant|restaurante|食堂|レストラン|tabelog\.com/i, 'other']
   ];
   const PLACE_WORDS = [
     [/taisha|jinja|jing[uū]|shrine|santuario|神社|神宮|大社/i, 'shrine'], [/-ji\b|dera\b|temple|templo|寺/i, 'temple'],
-    [/museum|museo|美術館|博物館/i, 'museum'], [/sky|tower|torre|mirador|observatory|展望/i, 'viewpoint'],
-    [/market|mercado|ichiba|市場/i, 'market'], [/park|parque|k[oō]en|gyoen|garden|jard[ií]n|公園|庭園/i, 'park'],
-    [/castle|castillo|城/i, 'museum'], [/shop|store|tienda|depato|mall/i, 'shop'],
-    [/onsen|experience|experiencia|teamlab|ceremony|ceremonia/i, 'experience'], [/crossing|dori|street|calle|yokocho|barrio|横丁/i, 'neighborhood']
+    [/castle|castillo|-jo\b|城/i, 'castle'], [/museum|museo|美術館|博物館/i, 'museum'], [/sky|tower|torre|mirador|observatory|展望/i, 'viewpoint'],
+    [/market|mercado|ichiba|市場/i, 'market'], [/onsen|温泉|sento|銭湯/i, 'onsen'], [/aquarium|acuario|zoo|水族館|動物園/i, 'aquarium'],
+    [/disney|universal|usj|theme park|parque tem[aá]tico/i, 'themepark'], [/garden|jard[ií]n|gyoen|庭園/i, 'garden'],
+    [/park|parque|k[oō]en|公園/i, 'park'], [/mount|monte|mt\.|yama\b|山|falls|cascada|gorge|lake|lago/i, 'nature'],
+    [/shopping street|shotengai|商店街|arcade/i, 'street'], [/shop|store|tienda|depato|mall/i, 'shop'],
+    [/experience|experiencia|teamlab|ceremony|ceremonia/i, 'experience'], [/crossing|dori|street|calle|yokocho|barrio|横丁/i, 'neighborhood']
   ];
 
   function decode(s) { try { return decodeURIComponent(s.replace(/\+/g, ' ')); } catch (e) { return s; } }
@@ -352,7 +356,7 @@ JT.logic = (function () {
     Object.values(s.reservations).forEach(function (r) {
       if (!r.time) return;
       const at = U.localToTs(r.date, r.time, off);
-      if (r.type === 'hotel') { out.push({ id: 'h' + r.id, at: U.localToTs(r.date, '09:00', off), title: 'Hoy: check-in en ' + r.name, body: 'A partir de las ' + r.time }); return; }
+      if (JT.data.isLodging(r.type)) { out.push({ id: 'h' + r.id, at: U.localToTs(r.date, '09:00', off), title: 'Hoy: check-in en ' + r.name, body: 'A partir de las ' + r.time }); return; }
       if (r.type === 'flight') out.push({ id: 'f' + r.id, at: at - 86400000, title: 'Recuerda hacer el check-in', body: r.name + ' sale mañana a las ' + r.time });
       out.push({ id: 'r' + r.id, at: at - lead * 60000, title: 'En ' + lead + ' minutos: ' + r.name, body: 'Reserva a las ' + r.time + (r.confirmationCode ? ' · ' + r.confirmationCode : '') });
     });
@@ -445,11 +449,11 @@ JT.logic = (function () {
     let title, time, dur = 60, endDate, place, tz = 'Asia/Tokyo';
     if (col === 'reservations') {
       title = D.RESERVATION[x.type][1] + ' ' + x.name;
-      time = x.type === 'hotel' ? undefined : x.time;
+      time = JT.data.isLodging(x.type) ? undefined : x.time;
       if (x.type === 'restaurant') dur = 90;
-      if (x.type === 'hotel') endDate = x.endDate;
+      if (JT.data.isLodging(x.type)) endDate = x.endDate;
       place = x.location && [x.location.name, x.location.address].filter(Boolean).join(', ');
-      if (x.type === 'hotel' && x.time) details.push('Check-in desde las ' + x.time);
+      if (JT.data.isLodging(x.type) && x.time) details.push('Check-in desde las ' + x.time);
       if (x.confirmationCode) details.push('Reserva: ' + x.confirmationCode);
       if (x.phone) details.push('Tel.: ' + x.phone);
       if (x.url) details.push(x.url);

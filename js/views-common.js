@@ -65,7 +65,7 @@ JT.cards = (function () {
     if (tr && TICKET_TONE[tr.kind]) {
       const k = D.TRANSPORT[tr.kind], plus = tr.arriveDate ? Math.round((Date.parse(tr.arriveDate) - Date.parse(tr.date)) / 86400000) : 0;
       return head + '<div class="tl__card card--tap ticket ticket--tl tone-' + TICKET_TONE[tr.kind] + '" tabindex="0" data-act="go" data-to="activity/' + a.id + '" data-hold="activityMenu" data-id="' + a.id + '">' +
-        '<div class="ticket__top"><span class="ticket__kind">' + k[1] + ' ' + esc((k[0] + (tr.number ? ' · ' + tr.number : '')).toUpperCase()) + '</span>' + (o.now ? UI.pill('Ahora', 'accent') : '') + '</div>' +
+        '<div class="ticket__top"><span class="ticket__kind">' + k[1] + ' ' + esc((k[0] + (tr.number ? ' · ' + tr.number : '')).toUpperCase()) + '</span>' + (o.now ? UI.pill('Ahora', 'accent') : '') + (tr.bookingCode || tr.seat ? ticketBtn('transports', tr.id) : '') + '</div>' +
         '<div class="ticket__route"><div class="ticket__end"><span class="ticket__time mono">' + esc(tr.departTime || '--:--') + '</span><span class="ticket__place">' + esc(tr.origin) + '</span></div>' +
           '<div class="ticket__line" aria-hidden="true"><span>' + k[1] + '</span>' + (tr.durationMinutes ? '<small>' + esc(U.fmtDur(tr.durationMinutes)) + '</small>' : '') + '</div>' +
           '<div class="ticket__end ticket__end--to"><span class="ticket__time mono">' + esc(tr.arriveTime || '--:--') + (plus > 0 ? '<sup>+' + plus + '</sup>' : '') + '</span><span class="ticket__place">' + esc(tr.destination) + '</span></div></div>' +
@@ -136,14 +136,31 @@ JT.cards = (function () {
 
   /* Billetes: vuelos y trenes con aspecto de billete (origen → destino en grande, hora, asiento y código),
      más fáciles de leer en la estación o el aeropuerto. Color de la franja: vuelo azul, tren verde azulado, bus ámbar. */
-  const TICKET_TONE = { flight: 'blue', shinkansen: 'teal', train: 'teal', bus: 'amber' };
+  const TICKET_TONE = { flight: 'blue', shinkansen: 'teal', train: 'teal', bus: 'amber', ferry: 'blue' };
+  /** Billete a pantalla completa: el código en grande y debajo el trayecto, la hora y el asiento (para el control o el revisor). */
+  function showTicket(col, id) {
+    const x = S.get()[col][id];
+    if (!x) return;
+    const isT = col === 'transports', k = isT ? D.TRANSPORT[x.kind] : D.RESERVATION[x.type];
+    const code = isT ? x.bookingCode : x.confirmationCode, seat = isT ? x.seat : '';
+    const lines = [
+      k[1] + ' ' + k[0] + (isT && x.number ? ' ' + x.number : ''),
+      isT ? x.origin + ' → ' + x.destination : x.name,
+      U.fmtDay(x.date) + ' · ' + (isT ? (x.departTime || '--:--') + ' → ' + (x.arriveTime || '--:--') : (x.time || '')),
+      seat ? 'Asiento ' + seat : ''
+    ].filter(Boolean).join('\n');
+    showcase({ ja: code || seat || '—', sub: lines, es: code ? 'Código de reserva' : 'Sin código: añádelo editando el billete', lang: 'none', noSpeak: true });
+  }
+  JT.actions.showTicket = (el) => showTicket(el.dataset.col, el.dataset.id);
+  const ticketBtn = (col, id) => '<button type="button" class="iconbtn ticket__show" data-act="showTicket" data-col="' + col + '" data-id="' + id + '" aria-label="Enseñar billete a pantalla completa" title="Enseñar billete">' + U.icon('expand', 18) + '</button>';
+
   const stubCell = (label, value, cls) => (value ? '<div><small>' + label + '</small><b class="' + (cls || '') + '">' + esc(value) + '</b></div>' : '');
 
   function reservationCard(r) {
     const t = D.RESERVATION[r.type];
-    if (r.type === 'flight' || r.type === 'train') {
-      return '<div class="card card--tap ticket tone-' + (r.type === 'flight' ? 'blue' : 'teal') + '" tabindex="0" data-act="go" data-to="reservation/' + r.id + '">' +
-        '<div class="ticket__top"><span class="ticket__kind">' + t[1] + ' ' + esc(t[0].toUpperCase()) + '</span><span class="ticket__date">' + esc(U.fmtDay(r.date)) + '</span></div>' +
+    if (r.type === 'flight' || r.type === 'train' || r.type === 'bus') {
+      return '<div class="card card--tap ticket tone-' + (r.type === 'flight' ? 'blue' : r.type === 'bus' ? 'amber' : 'teal') + '" tabindex="0" data-act="go" data-to="reservation/' + r.id + '">' +
+        '<div class="ticket__top"><span class="ticket__kind">' + t[1] + ' ' + esc(t[0].toUpperCase()) + '</span><span class="ticket__date">' + esc(U.fmtDay(r.date)) + '</span>' + (r.confirmationCode ? ticketBtn('reservations', r.id) : '') + '</div>' +
         '<strong class="ticket__name">' + esc(r.name) + '</strong>' +
         '<div class="ticket__stub">' + stubCell('HORA', r.time) + stubCell('CÓDIGO', r.confirmationCode, 'code') + (!r.time && !r.confirmationCode ? '<div><small>SIN CÓDIGO</small><b>—</b></div>' : '') + '</div></div>';
     }
@@ -165,7 +182,7 @@ JT.cards = (function () {
       (t.cost ? (JT.cards.costExpense && JT.cards.costExpense('transports', t.id) ? '<small class="success">✓ En Gastos</small>' : UI.btn('Apuntar en Gastos', { icon: 'wallet', size: 'sm', variant: 'ghost', data: { act: 'costToExpense', col: 'transports', id: t.id } })) : '') + '</div>';
     if (TICKET_TONE[t.kind]) {
       return '<div class="card card--tap ticket tone-' + TICKET_TONE[t.kind] + '" tabindex="0" data-act="editTransport" data-id="' + t.id + '">' +
-        '<div class="ticket__top"><span class="ticket__kind">' + k[1] + ' ' + esc((k[0] + (t.number ? ' · ' + t.number : '')).toUpperCase()) + '</span><span class="ticket__date">' + esc(U.fmtDay(t.date)) + '</span></div>' +
+        '<div class="ticket__top"><span class="ticket__kind">' + k[1] + ' ' + esc((k[0] + (t.number ? ' · ' + t.number : '')).toUpperCase()) + '</span><span class="ticket__date">' + esc(U.fmtDay(t.date)) + '</span>' + (t.bookingCode || t.seat ? ticketBtn('transports', t.id) : '') + '</div>' +
         '<div class="ticket__route"><div class="ticket__end"><span class="ticket__time mono">' + esc(t.departTime || '--:--') + '</span><span class="ticket__place">' + esc(t.origin) + '</span></div>' +
           '<div class="ticket__line" aria-hidden="true"><span>' + k[1] + '</span>' + (t.durationMinutes ? '<small>' + esc(U.fmtDur(t.durationMinutes)) + '</small>' : '') + '</div>' +
           '<div class="ticket__end ticket__end--to"><span class="ticket__time mono">' + esc(t.arriveTime || '--:--') + (plusDays > 0 ? '<sup>+' + plusDays + '</sup>' : '') + '</span><span class="ticket__place">' + esc(t.destination) + '</span></div></div>' +
@@ -223,10 +240,10 @@ JT.cards = (function () {
     ov.setAttribute('role', 'dialog');
     ov.setAttribute('aria-modal', 'true');
     ov.setAttribute('aria-label', o.es || 'Frase a pantalla completa');
-    ov.innerHTML = '<button type="button" class="showcase__text" data-close aria-label="Cerrar"><span class="showcase__ja" lang="ja">' + esc(o.ja) + '</span>' +
+    ov.innerHTML = '<button type="button" class="showcase__text" data-close aria-label="Cerrar"><span class="showcase__ja' + (o.lang === 'none' ? ' showcase__ja--code" translate="no"' : '" lang="ja"') + '>' + esc(o.ja) + '</span>' +
       (o.sub ? '<span class="showcase__sub">' + esc(o.sub) + '</span>' : '') + '</button>' +
       '<div class="showcase__bar"><span class="showcase__es">' + esc(o.es || '') + '</span>' +
-      (JT.services.canSpeak() ? '<button type="button" class="iconbtn" data-say aria-label="Escuchar">' + U.icon('speaker', 22) + '</button>' : '') +
+      (JT.services.canSpeak() && !o.noSpeak ? '<button type="button" class="iconbtn" data-say aria-label="Escuchar">' + U.icon('speaker', 22) + '</button>' : '') +
       '<button type="button" class="btn btn--secondary btn--sm" data-close>' + U.icon('x', 16) + '<span>Cerrar</span></button></div>';
     document.body.appendChild(ov);
     document.body.classList.add('has-showcase');
@@ -271,6 +288,81 @@ JT.cards = (function () {
   }
   JT.actions.showcase = (el) => showcase({ ja: el.dataset.ja, sub: el.dataset.sub, es: el.dataset.es });
 
+  /* ── Elegir tipo con buscador (y crear uno nuevo) ──────────────
+     Escribes «onsen» y se quedan sólo los que coinciden; Intro elige el primero.
+     Si no existe, «Crear «onsen»» lo añade a tus tipos propios y queda elegido. */
+  function typePicker(name, catalog, value, kind) {
+    return '<div class="tpick" data-kind="' + (kind || '') + '" data-name="' + name + '">' +
+      '<label class="search tpick__search"><span class="search__icon">' + U.icon('search', 16) + '</span><input class="input" type="search" placeholder="Buscar tipo…" data-input="tpickFilter" aria-label="Buscar tipo" autocomplete="off" enterkeyhint="done"></label>' +
+      UI.chips(name, D.options(catalog), value) +
+      '<small class="muted tpick__none" hidden>Ningún tipo coincide.</small>' +
+      (kind ? '<button type="button" class="btn btn--ghost btn--sm tpick__new" data-act="tpickCreate" data-kind="' + kind + '">' + U.icon('plus', 16) + '<span>Crear un tipo nuevo</span></button>' : '') + '</div>';
+  }
+
+  JT.changes = JT.changes || {};
+  JT.changes.tpickFilter = function (el) {
+    const box = el.closest('.tpick'), q = U.normalize(el.value.trim());
+    let shown = 0;
+    box.querySelectorAll('label.chip').forEach(function (chip) {
+      const match = !q || U.normalize(chip.textContent).indexOf(q) > -1;
+      chip.hidden = !match && !chip.querySelector('input').checked; // el elegido sigue a la vista
+      if (match) shown++;
+    });
+    box.querySelector('.tpick__none').hidden = shown > 0;
+    const nb = box.querySelector('.tpick__new span');
+    if (nb) nb.textContent = el.value.trim() ? 'Crear «' + el.value.trim() + '»' : 'Crear un tipo nuevo';
+  };
+  // Intro en el buscador elige el primer tipo visible (y no envía el formulario).
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key !== 'Enter' || !ev.target.matches || !ev.target.matches('[data-input="tpickFilter"]')) return;
+    ev.preventDefault();
+    const first = Array.from(ev.target.closest('.tpick').querySelectorAll('label.chip')).find((c) => !c.hidden);
+    if (first) { first.querySelector('input').checked = true; ev.target.value = ''; JT.changes.tpickFilter(ev.target); }
+  });
+
+  /** Hoja para crear o editar un tipo propio. onDone(key) al guardar. */
+  function customTypeSheet(kind, opts) {
+    opts = opts || {};
+    const KIND_LABEL = { place: 'sitio', cuisine: 'comida', expense: 'gasto', activity: 'actividad', reservation: 'reserva' };
+    const SUGGEST = ['⭐', '📍', '🏯', '🎌', '🎐', '🍶', '🍵', '🧋', '🛍️', '🎮', '📷', '🚶', '🧳', '💡', '🎨', '🧘'];
+    const close = UI.sheet({
+      title: opts.key ? 'Editar tipo de ' + KIND_LABEL[kind] : 'Nuevo tipo de ' + KIND_LABEL[kind],
+      body: '<form id="fType" class="stack" novalidate>' + UI.field('Nombre', UI.input('label', opts.label || '', { placeholder: 'p.ej. Karaoke', autofocus: true })) +
+        UI.field('Emoji', UI.input('emoji', opts.emoji || '⭐', { placeholder: '⭐' }), { hint: 'Escríbelo con el teclado del móvil o elige uno:' }) +
+        '<div class="chips">' + SUGGEST.map((e) => '<button type="button" class="chip chip--btn" data-emoji="' + e + '"><span>' + e + '</span></button>').join('') + '</div>' +
+        '<p class="error" hidden></p></form>',
+      footer: UI.btn(opts.key ? 'Guardar' : 'Crear tipo', { type: 'submit', form: 'fType', block: true }),
+      onMount: function (root) {
+        const form = root.querySelector('#fType');
+        root.querySelectorAll('[data-emoji]').forEach((b) => b.addEventListener('click', () => { form.emoji.value = b.dataset.emoji; }));
+        form.addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          const f = UI.formData(form), err = form.querySelector('.error');
+          if (!f.label) { err.textContent = 'Escribe un nombre'; err.hidden = false; return; }
+          let key = opts.key;
+          if (key) S.updateCustomType(kind, key, f.label, f.emoji); else key = S.addCustomType(kind, f.label, f.emoji);
+          close();
+          if (opts.onDone) opts.onDone(key, f.label, f.emoji || '⭐');
+        });
+      }
+    });
+  }
+
+  JT.actions.tpickCreate = function (el) {
+    const box = el.closest('.tpick'), kind = el.dataset.kind, input = box.querySelector('[data-input="tpickFilter"]');
+    customTypeSheet(kind, {
+      label: input.value.trim(),
+      onDone: function (key, label, emoji) {
+        // Añade el chip nuevo al formulario abierto y déjalo elegido.
+        const chips = box.querySelector('.chips');
+        chips.insertAdjacentHTML('beforeend', '<label class="chip"><input type="radio" name="' + box.dataset.name + '" value="' + esc(key) + '" checked><span>' + esc(emoji) + ' ' + esc(label) + '</span></label>');
+        input.value = '';
+        JT.changes.tpickFilter(input);
+        UI.toast('Tipo «' + label + '» creado');
+      }
+    });
+  };
+
   /** Botón 🔊 que lee un texto en japonés con la voz del móvil (vacío si el navegador no puede). */
   function speakBtn(text, label) {
     if (!JT.services.canSpeak() || !text) return '';
@@ -278,7 +370,7 @@ JT.cards = (function () {
   }
 
   /* Color de cada categoría de gasto (mismos tonos que los apartados). */
-  const CAT_TONE = { flights: 'blue', hotel: 'violet', transport: 'teal', food: 'orange', shopping: 'pink', tickets: 'red', cafe: 'amber', gifts: 'indigo', other: 'slate' };
+  const CAT_TONE = { flights: 'blue', hotel: 'violet', transport: 'teal', food: 'orange', shopping: 'pink', tickets: 'red', cafe: 'amber', gifts: 'indigo', health: 'red', laundry: 'teal', internet: 'blue', other: 'slate' };
   const catColor = (cat) => 'var(--t-' + (CAT_TONE[cat] || 'slate') + ')';
 
   /** Total por categoría en la moneda principal, de mayor a menor: [[cat, valor]]. */
@@ -456,5 +548,5 @@ JT.cards = (function () {
     });
   }
 
-  return { q, sampleBanner, offlineBanner, isNow, timelineItem, travelLeg, timeline, placeCard, restaurantCard, expenseRow, reservationCard, transportCard, noteCard, noteRef, quick, tripHub, speakBtn, showcase, TONE, catColor, byCategory, catStack, pctText, cityStrip, quickConverter, cityRanges, byCityGroups, cityOptions, moneySum, parseCoords, coordsField, bindCoords };
+  return { q, sampleBanner, offlineBanner, isNow, timelineItem, travelLeg, timeline, placeCard, restaurantCard, expenseRow, reservationCard, transportCard, noteCard, noteRef, quick, tripHub, speakBtn, showcase, typePicker, customTypeSheet, TONE, catColor, byCategory, catStack, pctText, cityStrip, quickConverter, cityRanges, byCityGroups, cityOptions, moneySum, parseCoords, coordsField, bindCoords };
 })();
