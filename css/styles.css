@@ -422,9 +422,15 @@ body.has-showcase { overflow: hidden; }
 .strip__labels span { display: flex; flex-direction: column; line-height: 1.25; }
 .strip__labels i { font-style: normal; font-weight: 500; color: var(--faint); font-size: 10.5px; letter-spacing: 1px; }
 /* Doble reloj Japón / España */
-.clocks { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
-.clocks b { color: var(--text); font-size: 14px; margin-left: 3px; }
-.clocks small { margin-left: 3px; }
+/* v1.13.0: dos recuadros grandes, fáciles de leer de un vistazo */
+.clocks { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
+.clock { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 10px 6px; border-radius: var(--r-md); background: var(--surface); border: 1px solid var(--border); }
+.clock small { font-size: 11px; font-weight: 800; letter-spacing: 1.2px; color: var(--muted); }
+.clock b { font-size: 32px; font-weight: 800; line-height: 1.05; letter-spacing: -.5px; color: var(--text); }
+.clock span { font-size: 12px; color: var(--muted); font-weight: 600; }
+.clock--jp b { color: var(--accent); }
+.clocks__diff { font-size: 11.5px; font-weight: 700; color: var(--faint); white-space: nowrap; }
+.card--city .clock { background: color-mix(in srgb, var(--surface) 75%, transparent); }
 /* Inicio teñido del color de la ciudad donde estás */
 .card--city { background: color-mix(in srgb, var(--city) 13%, var(--surface)); border-color: color-mix(in srgb, var(--city) 40%, var(--border)); box-shadow: none; }
 .card--city .eyebrow { color: color-mix(in srgb, var(--city) 75%, var(--text)); }
@@ -478,6 +484,14 @@ body.has-showcase { overflow: hidden; }
 .learn__done { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; padding: 10px 0; }
 .learn__big { font-size: 44px; }
 body[data-view="learn"] .fab { display: none; }
+/* Elegir frases (hoja) */
+.pick-cat { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; }
+.pick-cat .dot { display: inline-block; width: 8px; height: 8px; border-radius: 4px; background: var(--c); vertical-align: middle; }
+.pick-ph { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 4px; border: 0; border-bottom: 1px solid var(--border); background: transparent; text-align: left; }
+.pick-ph__heart { color: var(--faint); flex: none; display: flex; }
+.pick-ph.is-on .pick-ph__heart { color: var(--accent); }
+.pick-ph.is-on .pick-ph__heart svg { fill: currentColor; }
+.pick-ph.is-on { background: var(--accent-soft); border-radius: var(--r-sm); }
 /* Para comunicarte: frases para tu próximo plan */
 .talk__plan { display: flex; flex-direction: column; padding-bottom: 6px; margin-bottom: 4px; border-bottom: 1px dashed var(--border); }
 /* Sin conexión: un punto discreto junto al título */

@@ -621,7 +621,7 @@
     const g = {};
     list.forEach((p) => (g[p.category] = (g[p.category] || []).concat(p)));
     const learned = all.filter((p) => p.learn === 'known').length;
-    return { html: UI.header({ back: true, title: 'Frases', subtitle: 'Funciona sin conexión · toca una frase para verla en grande', actions: UI.iconBtn('plus', 'Nueva frase', { act: 'newPhrase' }) }) +
+    return { html: UI.header({ back: true, title: 'Frases', subtitle: 'Funciona sin conexión · toca una frase para verla en grande', actions: UI.iconBtn('heart', 'Elegir las frases del Modo viaje', { act: 'pickTalk' }) + UI.iconBtn('plus', 'Nueva frase', { act: 'newPhrase' }) }) +
       UI.banner('info', 'book', 'Aprender frases', 'Tarjetas para practicar (ideal para el avión) · sabes ' + learned + ' de ' + all.length, { data: { act: 'go', to: 'learn' } }) +
       JT.searchBox('phrases', 'Buscar en español o romaji…') + JT.fchips('phrases', 'cat', [{ value: 'fav', label: '♥ Favoritas' }].concat(cats.map((c) => ({ value: c, label: c }))), 'Todas') +
       // Cada categoría con su color (punto en el título y franja en cada frase) para encontrarlas antes.
@@ -633,10 +633,49 @@
   /* Color de cada categoría de frases (mismos tonos que el resto de la app). Las vecinas no repiten color. */
   const PHRASE_TONE = {
     'Básicas': 'slate', 'No hablo japonés': 'pink', 'Cortesía y disculpas': 'violet', 'Direcciones': 'teal', 'Restaurante': 'orange',
-    'Compras': 'green', 'Emergencias': 'red', 'Conversación': 'indigo', 'Transporte': 'blue', 'Hotel': 'amber',
+    'Compras': 'green', 'Konbini': 'blue', 'Pagar y comprobar': 'amber', 'Emergencias': 'red', 'Conversación': 'indigo', 'Transporte': 'blue', 'Hotel': 'amber',
     'Templos y onsen': 'violet', 'Números y tiempo': 'teal', 'Carteles': 'slate', 'Mis frases': 'pink'
   };
   const phraseTone = (c) => PHRASE_TONE[c] || 'slate';
+  /* ── Elegir qué frases salen en «Para comunicarte» (Modo viaje) ──
+     Son tus favoritas (♥). Esta hoja permite marcarlas y desmarcarlas rápido, con buscador. */
+  A.pickTalk = function () {
+    const all = Object.values(S.get().phrases);
+    const ORDER = Array.from(new Set(D.PHRASES.map((p) => p[0]))), rank = (c) => (ORDER.indexOf(c) > -1 ? ORDER.indexOf(c) : 999);
+    const cats = Array.from(new Set(all.map((p) => p.category))).sort((a, b) => rank(a) - rank(b));
+    const count = () => Object.values(S.get().phrases).filter((p) => p.favorite).length;
+    const label = (n) => n + (n === 1 ? ' elegida' : ' elegidas') + ' · en el Modo viaje salen las 8 primeras';
+    UI.sheet({
+      title: 'Elegir frases',
+      body: '<p class="muted small" data-count>' + label(count()) + '</p>' +
+        '<label class="search"><span class="search__icon">' + U.icon('search', 18) + '</span><input class="input" type="search" placeholder="Buscar (español, romaji o japonés)…" data-pick-search autocomplete="off"></label>' +
+        cats.map((c) => '<div class="pick-cat tone-' + phraseTone(c) + '" data-cat><small class="eyebrow muted"><span class="dot"></span> ' + esc(c) + '</small>' +
+          all.filter((p) => p.category === c).map((p) => '<button type="button" class="pick-ph' + (p.favorite ? ' is-on' : '') + '" data-pick="' + p.id + '" aria-pressed="' + !!p.favorite + '" data-q="' + esc(U.normalize(p.es + ' ' + p.romaji) + ' ' + p.ja) + '">' +
+            '<span class="pick-ph__heart">' + U.icon('heart', 18) + '</span><span class="grow"><span class="block" lang="ja">' + esc(p.ja) + '</span><small class="muted">' + esc(p.es) + '</small></span></button>').join('') + '</div>').join(''),
+      footer: UI.btn('Listo', { block: true, data: { ok: '1' } }),
+      onClose: () => JT.app.render(),
+      onMount: function (root, close) {
+        root.querySelector('[data-ok]').addEventListener('click', close);
+        root.querySelectorAll('[data-pick]').forEach((b) => b.addEventListener('click', function () {
+          const p = S.get().phrases[b.dataset.pick], on = !p.favorite;
+          S.update('phrases', p.id, { favorite: on });
+          b.classList.toggle('is-on', on);
+          b.setAttribute('aria-pressed', String(on));
+          root.querySelector('[data-count]').textContent = label(count());
+        }));
+        const q = root.querySelector('[data-pick-search]');
+        q.addEventListener('input', function () {
+          const v = U.normalize(q.value.trim());
+          root.querySelectorAll('[data-cat]').forEach(function (cat) {
+            let any = false;
+            cat.querySelectorAll('[data-pick]').forEach((b) => { const ok = !v || b.dataset.q.indexOf(v) > -1 || b.dataset.q.indexOf(q.value.trim()) > -1; b.hidden = !ok; if (ok) any = true; });
+            cat.hidden = !any;
+          });
+        });
+      }
+    });
+  };
+
   /* ══ APRENDER FRASES (tarjetas) ══════════════════════════════
      Ves el español, tocas para ver el japonés (y escucharlo) y marcas
      «La sé» o «Repasar». Se guarda en cada frase (p.learn), así que va

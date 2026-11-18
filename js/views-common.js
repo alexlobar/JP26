@@ -417,8 +417,22 @@ JT.cards = (function () {
       es = new Date(ts).toLocaleTimeString('es-ES', { timeZone: 'Europe/Madrid', hour: '2-digit', minute: '2-digit', hour12: false });
       esDate = new Date(ts).toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' });
     } catch (e) { return ''; }
-    const when = esDate < n.date ? ' (ayer)' : esDate > n.date ? ' (mañana)' : '';
-    return '<div class="clocks" aria-label="' + esc('Hora en Japón ' + n.time + ', en España ' + es + when) + '"><span>Japón <b class="mono">' + esc(n.time) + '</b></span><span>España <b class="mono">' + esc(es) + '</b>' + (when ? '<small>' + esc(when) + '</small>' : '') + '</span></div>';
+    const when = esDate < n.date ? 'ayer' : esDate > n.date ? 'mañana' : '';
+    // v1.13.0: dos recuadros grandes (antes era una línea pequeña), con el día debajo y la diferencia en medio.
+    const dayOf = (tz) => { try { return new Date(ts).toLocaleDateString('es-ES', { timeZone: tz, weekday: 'short', day: 'numeric', month: 'short' }).replace(/[.,]/g, ''); } catch (e) { return ''; } };
+    const diff = Math.round(((S.get().trip.timezoneOffsetMinutes || 540) - madridOffset(ts)) / 60);
+    return '<div class="clocks" role="group" aria-label="' + esc('Hora en Japón ' + n.time + '; en España ' + es + (when ? ', ' + when : '')) + '">' +
+      '<div class="clock clock--jp"><small>JAPÓN</small><b class="mono">' + esc(n.time) + '</b><span>' + esc(dayOf('Asia/Tokyo')) + '</span></div>' +
+      '<div class="clocks__diff" aria-hidden="true">' + (diff > 0 ? '+' : '') + diff + ' h</div>' +
+      '<div class="clock clock--es"><small>ESPAÑA</small><b class="mono">' + esc(es) + '</b><span>' + esc(when ? when + ' · ' + dayOf('Europe/Madrid') : dayOf('Europe/Madrid')) + '</span></div></div>';
+  }
+  /** Minutos de diferencia de Madrid con UTC en ese momento (60 en invierno, 120 en verano). */
+  function madridOffset(ts) {
+    try {
+      const p = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Madrid', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(new Date(ts));
+      const g = (t) => Number(p.find((x) => x.type === t).value);
+      return Math.round((Date.UTC(g('year'), g('month') - 1, g('day'), g('hour') % 24, g('minute')) - ts) / 60000);
+    } catch (e) { return 60; }
   }
 
   /* Nombre de la ciudad en japonés: el que pusiste en la ciudad o, si no, el de esta lista (ciudades habituales). */

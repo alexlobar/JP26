@@ -293,14 +293,14 @@
 
   function talkCard(plan) {
     const all = Object.values(S.get().phrases);
-    const favs = all.filter((p) => p.favorite).slice(0, 6);
+    const allFavs = all.filter((p) => p.favorite), favs = allFavs.slice(0, 8);
     const allergy = C.hasAllergies && C.hasAllergies() ? UI.btn('Mis alergias', { icon: 'alert', size: 'sm', variant: 'secondary', data: { act: 'allergyCard' } }) : '';
     const rows = favs.map(talkRow).join('');
     // Para tu próximo plan: 3 frases útiles según su tipo (restaurante, tren, templo, onsen, compras…).
     const want = plan && PLAN_PHRASES[plan.category], forPlan = want ? want.map((ja) => all.find((p) => p.ja === ja)).filter(Boolean) : [];
     const planBlock = forPlan.length ? '<div class="talk__plan"><small class="eyebrow muted">PARA «' + esc(plan.title.toUpperCase()) + '»</small>' + forPlan.map(talkRow).join('') + '</div>' : '';
-    return UI.section('Para comunicarte', UI.card(planBlock + (rows || (planBlock ? '' : '<p class="muted small">Marca con ♥ las frases que más uses y saldrán aquí, a un toque.</p>')) +
-      '<div class="row row--wrap">' + allergy + UI.btn(favs.length ? 'Todas las frases' : 'Elegir frases', { icon: 'chat', size: 'sm', variant: 'ghost', data: { act: 'go', to: 'phrases' } }) + '</div>', { cls: 'stack-sm talk' }));
+    return UI.section('Para comunicarte', UI.card(planBlock + (rows ? (planBlock ? '<small class="eyebrow muted">TUS FRASES</small>' : '') + rows + (allFavs.length > favs.length ? '<small class="faint">y ' + (allFavs.length - favs.length) + ' más en Frases → ♥ Favoritas</small>' : '') : '<p class="muted small">Elige las frases que quieres tener aquí a un toque.</p>') +
+      '<div class="row row--wrap">' + allergy + UI.btn('Elegir frases', { icon: 'heart', size: 'sm', variant: 'secondary', data: { act: 'pickTalk' } }) + UI.btn('Todas', { icon: 'chat', size: 'sm', variant: 'ghost', data: { act: 'go', to: 'phrases' } }) + '</div>', { cls: 'stack-sm talk' }));
   }
 
   A.travelMode = function (el) {
