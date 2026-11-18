@@ -23,7 +23,7 @@ JT.app = (function () {
     [/^cities$/, 'cities', 'home'], [/^city\/([\w-]+)$/, 'city', 'home'], [/^reservations$/, 'reservations', 'home'], [/^reservation\/([\w-]+)$/, 'reservation', 'home'],
     [/^transport$/, 'transport', 'home'], [/^notes$/, 'notes', 'home'], [/^checklist$/, 'checklist', 'home'], [/^info$/, 'info', 'home'],
     [/^phrases$/, 'phrases', 'home'], [/^documents$/, 'documents', 'home'], [/^search$/, 'search', 'home'], [/^settings$/, 'settings', 'home'],
-    [/^ready$/, 'ready', 'home'], [/^diary$/, 'diary', 'home'], [/^gifts$/, 'gifts', 'home'], [/^learn$/, 'learn', 'home']
+    [/^ready$/, 'ready', 'home'], [/^diary$/, 'diary', 'home'], [/^gifts$/, 'gifts', 'home'], [/^learn$/, 'learn', 'home'], [/^summary$/, 'summary', 'home']
   ];
 
   let main, lastPath = null, pending = false;
@@ -70,6 +70,15 @@ JT.app = (function () {
     });
     toneHeader(r.view);
     updateFab();
+    // Al pasar de un día a otro (botones o deslizando), entra con un pequeño desplazamiento lateral.
+    if (JT.uiState.daySlide) {
+      const cls = 'slide-in-' + JT.uiState.daySlide;
+      JT.uiState.daySlide = null;
+      main.classList.remove('slide-in-next', 'slide-in-prev');
+      void main.offsetWidth; // reinicia la animación
+      main.classList.add(cls);
+      setTimeout(() => main.classList.remove(cls), 300);
+    }
     if (res.mount) res.mount(main);
     // Que el filtro elegido quede a la vista en las filas de chips desplazables.
     main.querySelectorAll('.chips--scroll .is-on').forEach(function (c) {

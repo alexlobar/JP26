@@ -116,6 +116,7 @@
     if (t.phase === 'during' && t.day && n.minutes >= 18 * 60) html += diaryCard(t.day);
     // Por la noche (y la víspera del viaje), lo de mañana en un vistazo.
     if ((t.phase === 'during' && n.minutes >= 18 * 60) || (t.phase === 'before' && t.daysUntil === 1)) html += tomorrowCard(U.addDays(n.date, 1));
+    if (t.phase === 'after') html += UI.banner('accent', 'sparkle', 'Resumen del viaje', 'Días, ciudades, sitios, comidas probadas, gasto y tu mejor día, para compartir.', { data: { act: 'go', to: 'summary' } });
     if (t.phase === 'after' && S.sortedDays().some((d) => d.diary || d.mood)) html += UI.banner('info', 'book', 'Tu diario del viaje', 'Todos los días que escribiste, para releerlos o compartirlos.', { data: { act: 'go', to: 'diary' } });
     if (up[0]) html += nextUpCard(up[0], up[0].isToday ? 'SIGUIENTE' : 'PRÓXIMO PLAN');
     html += C.quick([
@@ -362,12 +363,45 @@
     const loose = days.filter((d) => !d.cityId && !isPast(d));
     if (loose.length) body += UI.section('Días sin ciudad', loose.map(card).join(''), UI.btn('Asignar', { size: 'sm', variant: 'ghost', data: { act: 'go', to: 'cities' } }));
     html += '<div class="itin">' + body + '</div>';
-    html += '<div class="row row--center">' + UI.btn('Ciudades', { icon: 'city', variant: 'secondary', data: { act: 'go', to: 'cities' } }) + UI.btn('Transporte', { icon: 'train', variant: 'secondary', data: { act: 'go', to: 'transport' } }) + '</div>';
+    html += '<div class="row row--center">' + UI.btn('Ciudades', { icon: 'city', variant: 'secondary', data: { act: 'go', to: 'cities' } }) + UI.btn('Transporte', { icon: 'train', variant: 'secondary', data: { act: 'go', to: 'transport' } }) + UI.btn('Resumen', { icon: 'sparkle', variant: 'secondary', data: { act: 'go', to: 'summary' } }) + '</div>';
     return { html: html };
   };
   A.goToday = (el) => { const c = document.getElementById('day-' + el.dataset.id); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
 
   /* ══ VISTA DEL DÍA ═══════════════════════════════════════════ */
+
+  /* ── Deslizar entre días ──────────────────────────────────────
+     En la vista de un día, deslizar el dedo a la izquierda va al día siguiente y a la derecha al anterior.
+     Se usa replace para que «atrás» vuelva al itinerario y no recorra todos los días vistos. */
+  function dayNeighbors(id) {
+    const days = S.sortedDays(), i = days.findIndex((d) => d.id === id);
+    return { prev: i > 0 ? days[i - 1] : null, next: i > -1 && i < days.length - 1 ? days[i + 1] : null };
+  }
+  function goDay(id, dir) {
+    JT.uiState.daySlide = dir; // animación de entrada (ver app.js → render y styles.css .slide-in-*)
+    location.replace('#/day/' + id);
+  }
+  A.dayGo = (el) => goDay(el.dataset.id, el.dataset.dir);
+
+  let swipeStart = null;
+  document.addEventListener('touchstart', function (ev) {
+    swipeStart = null;
+    if (document.body.dataset.view !== 'day' || ev.touches.length !== 1 || document.querySelector('.sheet-wrap, .showcase')) return;
+    // No interferir con cosas que ya se deslizan o se escriben.
+    if (ev.target.closest('.chips--scroll, .swipe, input, textarea, select')) return;
+    swipeStart = { x: ev.touches[0].clientX, y: ev.touches[0].clientY, t: Date.now() };
+  }, { passive: true });
+  document.addEventListener('touchend', function (ev) {
+    if (!swipeStart || document.body.dataset.view !== 'day') return;
+    const tch = ev.changedTouches[0], dx = tch.clientX - swipeStart.x, dy = tch.clientY - swipeStart.y, dt = Date.now() - swipeStart.t;
+    swipeStart = null;
+    // Gesto claramente horizontal, de al menos 70 px y rápido (menos de 0,6 s).
+    if (Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx) * 0.6 || dt > 600) return;
+    const id = (location.hash.match(/day\/([\w-]+)/) || [])[1], nb = id && dayNeighbors(id);
+    if (!nb) return;
+    if (dx < 0 && nb.next) goDay(nb.next.id, 'next');
+    else if (dx > 0 && nb.prev) goDay(nb.prev.id, 'prev');
+  }, { passive: true });
 
   V.day = function (p) {
     const s = S.get(), day = s.days[p.id];
@@ -381,6 +415,11 @@
 
     let html = UI.header({ back: true, eyebrow: 'DÍA ' + num + (city ? ' · ' + city.name.toUpperCase() : '') + (n.date === day.date ? ' · HOY' : ''), title: U.fmtLong(day.date), subtitle: day.title,
       actions: UI.iconBtn('share', 'Compartir día', { act: 'shareDay', id: day.id }) + UI.iconBtn('edit', 'Editar día', { act: 'editDay', id: day.id }) });
+    // Ir al día anterior / siguiente (también deslizando el dedo a izquierda o derecha).
+    const nb = dayNeighbors(day.id), sday = (d) => U.fmtDay(d.date).split(' ').slice(0, 2).join(' ');
+    html += '<div class="daynav">' + (nb.prev ? '<button type="button" class="daynav__btn" data-act="dayGo" data-id="' + nb.prev.id + '" data-dir="prev">' + U.icon('back', 16) + '<span>Día ' + S.dayNumber(nb.prev.id) + ' · ' + esc(sday(nb.prev)) + '</span></button>' : '<span></span>') +
+      '<small class="daynav__hint">desliza</small>' +
+      (nb.next ? '<button type="button" class="daynav__btn daynav__btn--next" data-act="dayGo" data-id="' + nb.next.id + '" data-dir="next"><span>Día ' + S.dayNumber(nb.next.id) + ' · ' + esc(sday(nb.next)) + '</span>' + U.icon('chevron', 16) + '</button>' : '<span></span>') + '</div>';
     html += UI.card('<div class="stats">' + UI.stat('Actividades', list.filter((a) => a.status === 'done').length + '/' + list.length) + UI.stat('Gastado', spent.text) + UI.stat('Estimado', est.total ? est.text : '—') + '</div>');
     html += '<div class="row row--wrap">' + UI.btn('Actividad', { icon: 'plus', size: 'sm', data: { act: 'newActivity', day: day.id } }) +
       UI.btn('Planificar', { icon: 'sparkle', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'planner?day=' + day.id } }) +
@@ -442,7 +481,7 @@
   V.diary = function () {
     const s = S.get(), days = S.sortedDays().filter((d) => d.diary || d.mood);
     const head = UI.header({ back: true, title: 'Diario del viaje', subtitle: days.length ? days.length + (days.length === 1 ? ' día escrito' : ' días escritos') : '',
-      actions: days.length ? UI.iconBtn('share', 'Compartir el diario', { act: 'shareDiary' }) : '' });
+      actions: UI.iconBtn('sparkle', 'Resumen del viaje', { act: 'go', to: 'summary' }) + (days.length ? UI.iconBtn('share', 'Compartir el diario', { act: 'shareDiary' }) : '') });
     if (!days.length) return { html: head + UI.empty('📔', 'Aún no has escrito nada', 'Cada noche, en Inicio, sale «¿Qué tal hoy?». También puedes escribir desde la vista de cada día.') };
     return { html: head + days.map(function (d) {
       const city = d.cityId && s.cities[d.cityId], mood = d.mood && D.MOOD[d.mood], st = dayStats(d);
@@ -451,6 +490,94 @@
         '<strong>' + esc(U.fmtLong(d.date)) + '</strong>' + (d.diary ? '<p class="pre">' + esc(d.diary) + '</p>' : '') +
         '<small class="faint">' + st.done + ' de ' + st.total + ' planes · ' + esc(st.spent.text) + '</small></div>';
     }).join('') };
+  };
+
+  /* ══ RESUMEN DEL VIAJE ═══════════════════════════════════════
+     Todo el viaje de un vistazo: días, ciudades, planes, sitios,
+     restaurantes y comidas probadas, gasto, frases aprendidas, regalos
+     y tu mejor día según el diario. Durante el viaje es «hasta hoy». */
+  const MOOD_RANK = { great: 5, good: 4, ok: 3, tired: 2, bad: 1 };
+
+  function tripStats() {
+    const s = S.get(), t = S.today(), days = S.sortedDays();
+    const upTo = t.phase === 'during' ? t.now.date : t.phase === 'after' ? (days[days.length - 1] || {}).date : null;
+    const lived = upTo ? days.filter((d) => d.date <= upTo) : [];
+    const livedIds = new Set(lived.map((d) => d.id));
+    const acts = Object.values(s.activities), done = acts.filter((a) => a.status === 'done' && (!upTo || livedIds.has(a.dayId)));
+    const places = Object.values(s.places), rests = Object.values(s.restaurants), foods = Object.values(s.foods), gifts = Object.values(s.gifts);
+    const inTrip = Object.values(s.expenses).filter((e) => e.date >= s.trip.startDate && e.date <= s.trip.endDate);
+    const all = C.moneySum(Object.values(s.expenses)), trip = C.moneySum(inTrip);
+    const byDay = {};
+    inTrip.forEach((e) => { const v = U.convert(e.amount, e.currency, s.trip.mainCurrency, SV.rates()); if (v !== null) byDay[e.date] = (byDay[e.date] || 0) + v; });
+    const topDay = Object.keys(byDay).sort((a, b) => byDay[b] - byDay[a])[0];
+    const daysWithSpend = Object.keys(byDay).length;
+    const diary = days.filter((d) => d.diary || d.mood);
+    const best = diary.filter((d) => d.mood).sort((a, b) => (MOOD_RANK[b.mood] || 0) - (MOOD_RANK[a.mood] || 0) || (b.diary || '').length - (a.diary || '').length)[0];
+    return {
+      s: s, t: t, days: days, lived: lived, acts: acts, done: done,
+      visited: places.filter((p) => p.status === 'visited'), places: places,
+      tried: rests.filter((r) => r.status === 'tried'), rests: rests,
+      foodsTried: foods.filter((f) => f.tried), foods: foods,
+      giftsBought: gifts.filter((g) => g.bought), gifts: gifts,
+      learned: Object.values(s.phrases).filter((p) => p.learn === 'known').length, phrases: Object.keys(s.phrases).length,
+      all: all, trip: trip, avg: daysWithSpend ? trip.total / daysWithSpend : 0, topDay: topDay, topDayValue: topDay ? byDay[topDay] : 0,
+      diary: diary, best: best, stays: S.cityStays()
+    };
+  }
+
+  V.summary = function () {
+    const x = tripStats(), s = x.s, t = x.t, main = s.trip.mainCurrency;
+    const status = t.phase === 'before' ? 'Aún no ha empezado: esto es lo que tienes planificado' : t.phase === 'during' ? 'Hasta hoy · día ' + t.dayNumber + ' de ' + t.totalDays : 'Viaje completo · ' + x.days.length + ' días';
+    let html = UI.header({ back: true, title: 'Resumen del viaje', subtitle: status, actions: UI.iconBtn('share', 'Compartir el resumen', { act: 'shareSummary' }) });
+    html += UI.card('<strong class="title">' + esc(s.trip.name) + '</strong><small class="muted">' + esc(U.fmtRange(s.trip.startDate, s.trip.endDate)) + '</small>' + C.cityStrip(t.phase === 'during' ? t.now.date : ''), { cls: 'stack-sm' });
+    const big = (emoji, value, label, sub) => '<div class="sum__tile"><span class="sum__emoji" aria-hidden="true">' + emoji + '</span><b>' + esc(value) + '</b><span>' + esc(label) + '</span>' + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</div>';
+    html += '<div class="sum__grid">' +
+      big('🗓️', t.phase === 'before' ? String(x.days.length) : x.lived.length + ' / ' + x.days.length, t.phase === 'before' ? 'días de viaje' : 'días vividos') +
+      big('🏙️', String(x.stays.length ? new Set(x.stays.map((st) => st.cityId)).size : 0), 'ciudades', x.stays.map((st) => C.cityJa(s.cities[st.cityId]) || (s.cities[st.cityId] || {}).name).filter((v, i, a) => v && a.indexOf(v) === i).join(' · ')) +
+      big('✅', x.done.length + ' / ' + x.acts.length, 'planes hechos') +
+      big('🛕', x.visited.length + ' / ' + x.places.length, 'sitios visitados') +
+      big('🍜', x.tried.length + ' / ' + x.rests.length, 'restaurantes probados') +
+      big('🍱', x.foodsTried.length + ' / ' + x.foods.length, 'comidas probadas') +
+      big('💴', x.trip.text, 'gastado en el viaje', x.avg ? 'media ' + U.money(x.avg, main) + ' / día' : '') +
+      big('🗣️', x.learned + ' / ' + x.phrases, 'frases aprendidas') +
+      big('🎁', x.giftsBought.length + ' / ' + x.gifts.length, 'regalos comprados') +
+      big('📔', String(x.diary.length), 'días con diario') + '</div>';
+    // Ciudades: noches y gasto de cada una.
+    if (x.stays.length) html += UI.section('Por ciudad', UI.card(x.stays.map(function (st) {
+      const c = s.cities[st.cityId] || {}, spent = C.moneySum(Object.values(s.expenses).filter((e) => e.cityId === st.cityId && e.date >= st.start && e.date <= st.end));
+      return '<div class="sum__city" style="--city:' + esc(c.color || 'var(--accent)') + '"><span class="sum__kanji" lang="ja">' + esc(C.cityJa(c) || '·') + '</span><span class="grow"><strong class="block">' + esc(c.name || 'Ciudad') + '</strong><small class="muted">' + esc(U.fmtRange(st.start, st.end) + ' · ' + st.nights + (st.nights === 1 ? ' noche' : ' noches')) + '</small></span><b class="mono">' + esc(spent.total ? spent.text : '—') + '</b></div>';
+    }).join(''), { cls: 'stack-sm' }));
+    // Gastos.
+    if (x.all.total) html += UI.section('Gastos', UI.card('<div class="stats">' + UI.stat('Total', x.all.text, '', true) + UI.stat('Día más caro', x.topDay ? U.money(x.topDayValue, main) : '—', x.topDay ? U.fmtDay(x.topDay) : '') + '</div>' + C.catStack(Object.values(s.expenses), 4), { cls: 'stack', data: { act: 'go', to: 'expenses' } }));
+    // Tu mejor día y el ánimo de cada día.
+    if (x.diary.length) {
+      const b = x.best;
+      html += UI.section('Tu mejor día', (b ? UI.card('<div class="row row--between"><span class="eyebrow">DÍA ' + S.dayNumber(b.id) + (b.cityId && s.cities[b.cityId] ? ' · ' + esc(s.cities[b.cityId].name.toUpperCase()) : '') + '</span><span class="diary__mood">' + D.MOOD[b.mood][1] + '</span></div><strong>' + esc(U.fmtLong(b.date)) + '</strong>' + (b.diary ? '<p class="pre clamp4">' + esc(b.diary) + '</p>' : ''), { cls: 'stack-sm', data: { act: 'go', to: 'diary' } }) : '') +
+        '<div class="sum__moods" aria-label="Cómo fue cada día">' + (t.phase === 'during' ? x.lived : x.days).map((d) => '<span title="' + esc('Día ' + S.dayNumber(d.id) + ' · ' + U.fmtShort(d.date)) + '">' + (d.mood ? D.MOOD[d.mood][1] : '·') + '</span>').join('') + '</div>');
+    }
+    // Comidas probadas y sitios favoritos.
+    if (x.foodsTried.length) html += UI.section('Comidas probadas', '<div class="sum__chips">' + x.foodsTried.map((f) => '<span class="chip chip--static">' + esc(f.emoji + ' ' + f.name) + '</span>').join('') + '</div>');
+    const favVisited = x.visited.filter((p) => p.favorite).concat(x.tried.filter((r) => r.favorite));
+    if (favVisited.length) html += UI.section('Tus favoritos', '<div class="sum__chips">' + favVisited.map((p) => '<span class="chip chip--static">♥ ' + esc(p.name) + '</span>').join('') + '</div>');
+    html += UI.btn('Compartir el resumen', { icon: 'share', block: true, variant: 'secondary', data: { act: 'shareSummary' } });
+    return { html: html };
+  };
+
+  A.shareSummary = async function () {
+    const x = tripStats(), s = x.s, t = x.t;
+    const lines = [
+      s.trip.name + ' (' + U.fmtRange(s.trip.startDate, s.trip.endDate) + ')' + (t.phase === 'during' ? ' — hasta el día ' + t.dayNumber : ''),
+      '',
+      '🗓️ ' + (t.phase === 'before' ? x.days.length + ' días de viaje' : x.lived.length + ' de ' + x.days.length + ' días'),
+      '🏙️ ' + x.stays.map((st) => (s.cities[st.cityId] || {}).name + ' (' + st.nights + (st.nights === 1 ? ' noche' : ' noches') + ')').join(' → '),
+      '✅ ' + x.done.length + ' planes hechos · 🛕 ' + x.visited.length + ' sitios visitados · 🍜 ' + x.tried.length + ' restaurantes',
+      '🍱 Comidas probadas: ' + (x.foodsTried.length ? x.foodsTried.map((f) => f.emoji + ' ' + f.name).join(', ') : 'ninguna todavía'),
+      '💴 Gastado: ' + x.all.text + (x.avg ? ' (media ' + U.money(x.avg, s.trip.mainCurrency) + ' al día)' : ''),
+      '🗣️ ' + x.learned + ' frases aprendidas · 🎁 ' + x.giftsBought.length + ' regalos comprados',
+      x.best ? '⭐ Mejor día: ' + U.fmtLong(x.best.date) + ' ' + D.MOOD[x.best.mood][1] + (x.best.diary ? ' — ' + x.best.diary.split('\n')[0] : '') : ''
+    ].filter((l, i) => l || i === 1);
+    const r = await SV.share(lines.join('\n'), 'Resumen del viaje');
+    if (r === 'copied') UI.toast('Copiado');
   };
 
   A.shareDiary = async function () {
