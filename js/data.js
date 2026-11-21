@@ -335,13 +335,13 @@ JT.data = (function () {
   function emptyCollections() {
     return {
       travelers: {}, cities: {}, days: {}, activities: {}, places: {}, restaurants: {}, expenses: {}, notes: {},
-      reservations: {}, transports: {}, checklists: {}, checklistItems: {}, infoArticles: {}, phrases: {}, docs: {}, gifts: {}, foods: {}
+      reservations: {}, transports: {}, checklists: {}, checklistItems: {}, infoArticles: {}, phrases: {}, docs: {}, gifts: {}, foods: {}, suicaMoves: {}
     };
   }
 
   const DEFAULT_SETTINGS = {
-    theme: 'system', textSize: 'normal', units: 'km', notificationsEnabled: false, notifyLeadMinutes: 30, travelMode: 'auto',
-    placesProvider: 'auto', manualRates: {}, yenRounding: 'up', simulatedDate: '', simulatedTime: ''
+    theme: 'system', textSize: 'normal', units: 'km', notificationsEnabled: false, notifyLeadMinutes: 30, travelMode: 'auto', homeViews: 'both',
+    placesProvider: 'auto', manualRates: {}, yenRounding: 'down1', simulatedDate: '', simulatedTime: ''
   };
 
   /** Frases, información útil y checklists: no son "de ejemplo" y sobreviven al borrarlo. */

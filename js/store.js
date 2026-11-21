@@ -31,6 +31,8 @@ JT.store = (function () {
     const out = Object.assign(D.emptyCollections(), data);
     COLLECTIONS.forEach(function (c) { if (!out[c] || typeof out[c] !== 'object') out[c] = {}; });
     out.settings = Object.assign({}, D.DEFAULT_SETTINGS, data.settings || {});
+    // v1.15.0: el yen ya no se redondea al alza, sino a la baja −1 o −2.
+    if (['down1', 'down2', 'exact'].indexOf(out.settings.yenRounding) === -1) out.settings.yenRounding = 'down1';
     out.trip = Object.assign({ timezoneOffsetMinutes: 540, mainCurrency: 'JPY', emoji: '🇯🇵' }, data.trip || {});
     out.emergency = Object.assign({}, data.emergency || {}); // ficha de emergencia (sin cifrar: se ve sin PIN)
     out.customTypes = Object.assign({}, data.customTypes || {}); // tus tipos propios de sitio, comida, gasto…

@@ -581,7 +581,7 @@
     const s = S.get(), list = Object.values(s.infoArticles).sort((a, b) => a.order - b.order), rates = SV.rates();
     const jpyEur = U.convert(1, 'JPY', 'EUR', rates);
     const conv = UI.card('<small class="eyebrow muted">💱 CONVERSOR JPY → EUR</small>' + (jpyEur
-      ? '<input class="input" inputmode="decimal" value="1000" data-input="convJpy" data-rate="' + jpyEur + '" aria-label="Yenes"><h2 class="title" id="convOut">' + U.money(1000, 'JPY') + ' ≈ ' + U.money(1000 * jpyEur, 'EUR') + '</h2><small class="faint">' + (rates.source === 'manual' ? 'Tipo manual' : 'BCE' + (rates.date ? ' · ' + rates.date : '') + (rates.rounding ? ' · yen redondeado al alza' : '')) + '</small>'
+      ? '<input class="input" inputmode="decimal" value="1000" data-input="convJpy" data-rate="' + jpyEur + '" aria-label="Yenes"><h2 class="title" id="convOut">' + U.money(1000, 'JPY') + ' ≈ ' + U.money(1000 * jpyEur, 'EUR') + '</h2><small class="faint">' + (rates.source === 'manual' ? 'Tipo manual' : 'BCE' + (rates.date ? ' · ' + rates.date : '') + (rates.rounding ? ' · yen a la baja ' + (rates.rounding === 'down2' ? '−2' : '−1') : '')) + '</small>'
       : '<p class="muted">Sin tipo de cambio: conéctate una vez para descargarlo (se guarda para usarlo sin conexión).</p>'), { tone: 'muted', cls: 'stack-sm' });
     return { html: UI.header({ back: true, title: 'Información útil', actions: UI.iconBtn('plus', 'Nueva ficha', { act: 'newInfo' }) }) +
       UI.banner('neutral', 'info', 'Orientativo, no oficial', 'Verifica normativa y datos vigentes en fuentes oficiales (JNTO, embajada, aerolínea). Puedes editar cada ficha.') + conv +
@@ -1150,11 +1150,12 @@
       case 'Apariencia y unidades': return 'Tema ' + ({ system: 'del sistema', light: 'claro', dark: 'oscuro' }[st.theme] || st.theme) + ' · letra ' + ({ normal: 'normal', large: 'grande', xl: 'muy grande' }[st.textSize || 'normal']) + (st.contrast === 'high' ? ' · alto contraste' : '') + ' · ' + (st.units === 'mi' ? 'millas' : 'km');
       case 'Modo viaje': {
         const lay = C.travelLayout ? C.travelLayout() : [];
-        return ({ auto: 'Automático', on: 'Siempre', off: 'Nunca' }[st.travelMode] || '') + (lay.length ? ' · ' + lay.filter((b) => b.on).length + ' de ' + lay.length + ' bloques' : '') + (st.simulatedDate ? ' · simulando ' + st.simulatedDate : '');
+        const hv = st.homeViews || 'both';
+        return (hv === 'overview' ? 'Inicio: sólo Resumen' : hv === 'travel' ? 'Inicio: sólo Modo viaje' : 'Inicio: los dos · ' + ({ auto: 'automático', on: 'abre en Modo viaje', off: 'abre en Resumen' }[st.travelMode] || '')) + (lay.length ? ' · ' + lay.filter((b) => b.on).length + ' de ' + lay.length + ' bloques' : '') + (st.simulatedDate ? ' · simulando ' + st.simulatedDate : '');
       }
       case 'Cambio de moneda': {
         const yen = rates ? U.convert(1, t.mainCurrency === 'JPY' ? 'EUR' : t.mainCurrency, 'JPY', rates) : null;
-        return ({ up: 'Yen al alza', up1: 'Yen al alza +1', exact: 'Yen exacto' }[st.yenRounding || 'up']) + (yen ? ' · 1 ' + (t.mainCurrency === 'JPY' ? 'EUR' : t.mainCurrency) + ' = ' + U.money(yen, 'JPY') + (rates.date ? ' (BCE ' + U.fmtShort(rates.date) + ')' : '') : ' · sin tipo de cambio');
+        return ({ down1: 'Yen a la baja −1', down2: 'Yen a la baja −2', exact: 'Yen exacto' }[st.yenRounding] || 'Yen a la baja −1') + (yen ? ' · 1 ' + (t.mainCurrency === 'JPY' ? 'EUR' : t.mainCurrency) + ' = ' + U.money(yen, 'JPY') + (rates.date ? ' (BCE ' + U.fmtShort(rates.date) + ')' : '') : ' · sin tipo de cambio');
       }
       case 'Tus tipos': {
         const ct = s.customTypes || {}, all = TYPE_KINDS.reduce((a, k) => a.concat(Object.values(ct[k[0]] || {})), []);
@@ -1233,8 +1234,12 @@
       '<small class="muted">Textos más oscuros y gruesos y bordes más marcados, para leer al sol.</small>' +
       seg('setUnits', st.units, [['km', 'Kilómetros'], ['mi', 'Millas']]), { cls: 'stack' }));
 
-    html += fold('Modo viaje', UI.card(seg('setTravel', st.travelMode, [['auto', 'Automático'], ['on', 'Siempre'], ['off', 'Nunca']]) +
-      '<small class="muted">Automático: Inicio cambia al Modo viaje durante las fechas del viaje.</small>' +
+    const hv = st.homeViews || 'both';
+    html += fold('Modo viaje', UI.card('<span class="field__label">En Inicio</span>' +
+      seg('setHomeViews', hv, [['both', 'Los dos'], ['overview', 'Sólo Resumen'], ['travel', 'Sólo Modo viaje']]) +
+      '<small class="muted">' + (hv === 'both' ? 'Inicio tiene el selector «Resumen | Modo viaje» arriba.' : hv === 'overview' ? 'Inicio muestra siempre el Resumen, sin selector.' : 'Inicio muestra siempre el Modo viaje, sin selector.') + '</small>' +
+      (hv === 'both' ? '<span class="field__label">Cuál sale al abrir</span>' + seg('setTravel', st.travelMode, [['auto', 'Automático'], ['on', 'Modo viaje'], ['off', 'Resumen']]) +
+        '<small class="muted">Automático: Modo viaje durante las fechas del viaje y Resumen antes y después.</small>' : '') +
       '<form id="fSim" class="stack"><span class="field__label">Simular fecha y hora (para probar)</span><div class="row row--top">' + UI.field('Fecha', UI.input('simulatedDate', st.simulatedDate || '', { type: 'date' })) + UI.field('Hora', UI.input('simulatedTime', st.simulatedTime || '', { type: 'time' }), { optional: true }) + '</div>' +
       '<div class="row row--wrap">' + UI.btn('Aplicar', { type: 'submit', size: 'sm', variant: 'secondary' }) + UI.btn('Simular un día con plan a las 11:45', { size: 'sm', variant: 'secondary', data: { act: 'simulate' } }) + (st.simulatedDate ? UI.btn('Usar fecha real', { size: 'sm', variant: 'danger', data: { act: 'clearSim' } }) : '') + '</div></form>' +
       (st.simulatedDate ? UI.banner('warn', 'clock', 'Simulando ' + st.simulatedDate + (st.simulatedTime ? ' ' + st.simulatedTime : ''), 'Afecta a «hoy», al Modo viaje y a «abierto ahora».') : '') +
@@ -1249,7 +1254,8 @@
     // Sólo lo que se usa: el redondeo del yen. Recordatorios y APIs se quitaron en la v1.6.0 (no se usaban).
     const manualSet = Object.keys(st.manualRates || {}).length > 0;
     html += fold('Cambio de moneda', UI.card('<span class="field__label">Redondeo del yen</span>' +
-      UI.filterChips([{ value: 'up', label: 'Al alza' }, { value: 'up1', label: 'Al alza +1 ¥' }, { value: 'exact', label: 'Exacto' }], st.yenRounding, 'setYenRounding', { scroll: false }) +
+      UI.filterChips([{ value: 'down1', label: 'A la baja −1 ¥' }, { value: 'down2', label: 'A la baja −2 ¥' }, { value: 'exact', label: 'Exacto' }], st.yenRounding, 'setYenRounding', { scroll: false }) +
+      '<small class="muted">Así cuentas menos yenes por euro, como al pagar con tarjeta o cambiar dinero: lo que gastas en yenes se ve un poco más caro en euros, más cerca de lo que te cobran.</small>' +
       '<small class="muted">' + esc(yenRoundingExample(rates, t.mainCurrency)) + '</small>' +
       '<small class="faint">Tipo de referencia del BCE' + (rates && rates.date ? ' del ' + esc(rates.date) : '') + '. Se guarda para usarlo sin conexión.</small>' +
       '<div class="row row--wrap">' + (SV.online() ? UI.btn('Actualizar tipo de cambio', { size: 'sm', variant: 'ghost', icon: 'refresh', data: { act: 'refreshRates' } }) : '') +
@@ -1380,7 +1386,7 @@
   function yenRoundingExample(rates, main) {
     const other = main === 'JPY' ? 'EUR' : main;
     const ex = rates && rates.exact ? U.convert(1, other, 'JPY', { base: rates.base, perUnit: rates.exact }) : null;
-    if (!ex) return 'Ejemplo: si el BCE da 1 EUR = 177,32 ¥, «Al alza» usa 178 ¥ y «+1» usa 179 ¥.';
+    if (!ex) return 'Ejemplo: si el BCE da 1 EUR = 177,32 ¥, «−1» usa 176 ¥ y «−2» usa 175 ¥.';
     const used = U.convert(1, other, 'JPY', rates);
     return 'Hoy: 1 ' + other + ' = ' + ex.toFixed(2).replace('.', ',') + ' ¥ en el BCE → la app usa ' + U.money(used, 'JPY').replace('¥', '') + ' ¥.';
   }
@@ -1422,6 +1428,7 @@
   A.tbReset = () => { S.setSettings({ travelBlocks: undefined }); UI.toast('Modo viaje como al principio'); };
   A.setUnits = (el) => S.setSettings({ units: el.dataset.value });
   A.setTravel = (el) => S.setSettings({ travelMode: el.dataset.value });
+  A.setHomeViews = (el) => S.setSettings({ homeViews: el.dataset.value });
   A.clearSim = () => S.setSettings({ simulatedDate: '', simulatedTime: '' });
   A.setLead = (el) => S.setSettings({ notifyLeadMinutes: Number(el.dataset.value) });
   A.clearManualRates = () => { S.setSettings({ manualRates: {} }); UI.toast('Se usa el tipo del BCE'); };

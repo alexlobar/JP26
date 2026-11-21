@@ -71,12 +71,12 @@ JT.services = (function () {
   }
 
   /**
-   * Redondea al alza los yenes que vale cada moneda: 1 EUR = 177,32 ¥ → 178 ¥ ('up') o 179 ¥ ('up1').
-   * Sólo se aplica al tipo del BCE; los tipos manuales se usan tal cual.
+   * Redondea a la baja los yenes que vale cada moneda y resta 1 o 2 (lo que suele dar la tarjeta o la casa de cambio):
+   * 1 EUR = 177,32 ¥ → 176 ¥ ('down1') o 175 ¥ ('down2'). Sólo se aplica al tipo del BCE; los manuales se usan tal cual.
    */
   function roundYen(perUnit, base, mode) {
-    if (mode === 'exact') return perUnit;
-    const up = (yen) => Math.ceil(yen - 1e-9) + (mode === 'up1' ? 1 : 0);
+    if (mode !== 'down1' && mode !== 'down2') return perUnit;
+    const up = (yen) => Math.max(1, Math.floor(yen + 1e-9) - (mode === 'down2' ? 2 : 1));
     const out = Object.assign({}, perUnit);
     if (base === 'JPY') Object.keys(out).forEach((c) => { out[c] = up(out[c]); });
     else if (out.JPY) out.JPY = 1 / up(1 / out.JPY);
@@ -85,7 +85,7 @@ JT.services = (function () {
 
   /** Tabla efectiva (API/caché redondeada + manuales) o null. `exact` guarda la del BCE sin redondear. */
   function rates() {
-    const s = S.get(), base = s.trip.mainCurrency, mode = s.settings.yenRounding || 'up';
+    const s = S.get(), base = s.trip.mainCurrency, mode = s.settings.yenRounding || 'down1';
     const api = cachedRates(base);
     const manual = {};
     Object.keys(s.settings.manualRates || {}).forEach((c) => { const v = s.settings.manualRates[c]; if (c !== base && v > 0) manual[c] = v; });

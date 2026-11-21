@@ -17,6 +17,7 @@
       actions: UI.iconBtn('share', 'Compartir resumen', { act: 'shareExpenses' }) + UI.iconBtn('download', 'Exportar CSV', { act: 'exportCsv' }) }) + C.sampleBanner();
     html += '<div class="seg" role="tablist">' + [['summary', 'Resumen'], ['list', 'Lista (' + list.length + ')'], ['split', 'Reparto']].map((t) =>
       '<button type="button" role="tab" class="seg__item' + (st.tab === t[0] ? ' is-on' : '') + '" aria-selected="' + (st.tab === t[0]) + '" data-act="expTab" data-value="' + t[0] + '">' + t[1] + '</button>').join('') + '</div>';
+    if (st.tab === 'summary' || !list.length) html += suicaCard();
     if (!list.length) html += UI.empty('💴', 'Sin gastos', 'Pulsa + para registrar uno en 3 toques.', UI.btn('Añadir gasto', { data: { act: 'newExpense' } }));
     else if (st.tab === 'list') html += expenseList(list);
     else if (st.tab === 'split') html += split(list);
@@ -46,7 +47,7 @@
     const line = rates ? foreign.map((c) => rateText(c, main, rates)).join(' · ') : foreign.join(', ') + ': sin tipo';
     const msg = rates
       ? (rates.source === 'manual' ? 'Tipo manual' : 'BCE vía Frankfurter' + (rates.date ? ', ' + rates.date : '')) + (rates.source === 'mixed' ? ' + manual' : '') +
-        (rates.rounding ? ' · yen redondeado al alza' + (rates.rounding === 'up1' ? ' +1' : '') : '') + (SV.online() ? '' : ' · sin conexión (último guardado)')
+        (rates.rounding ? ' · yen a la baja ' + (rates.rounding === 'down2' ? '−2' : '−1') : '') + (SV.online() ? '' : ' · sin conexión (último guardado)')
       : 'Conéctate una vez para obtener el tipo de cambio (se guarda para usarlo sin conexión).';
     return UI.banner(rates ? 'neutral' : 'warn', 'swap', line, msg, { action: SV.online() ? UI.btn('Actualizar', { size: 'sm', variant: 'ghost', data: { act: 'refreshRates' } }) : '' });
   }
@@ -141,7 +142,7 @@
       UI.chips('currency', D.CURRENCIES.map((c) => ({ value: c, label: c })), e.currency) +
       UI.field('Categoría', C.typePicker('category', D.EXPENSE, e.category, 'expense')) +
       // Sólo para saber cómo se pagó: el total de gastos es uno solo, se pague como se pague.
-      UI.field('Pagado con', UI.chips('paymentMethod', D.options(D.PAYMENT), e.paymentMethod, { allowNone: true, noneLabel: '—' }), { optional: true }) +
+      UI.field('Pagado con', UI.chips('paymentMethod', D.options(D.PAYMENT), e.paymentMethod, { allowNone: true, noneLabel: '—' }), { optional: true, hint: ' ', hintId: 'suicaHint' }) +
       UI.field('Descripción', UI.input('description', e.description || '', { placeholder: 'p.ej. Cena ramen' }), { optional: true }) +
       UI.details('Más detalles',
         UI.field('Fecha', UI.input('date', e.date, { type: 'date' })) +
@@ -155,9 +156,15 @@
       title: ex ? 'Editar gasto' : 'Nuevo gasto', body: body,
       footer: '<div class="row">' + (ex ? UI.btn('Eliminar', { variant: 'danger', icon: 'trash', data: { del: '1' } }) : '') + UI.btn('Guardar', { type: 'submit', form: 'fExp', block: true }) + '</div>',
       onMount: function (root) {
-        const form = root.querySelector('#fExp'), conv = form.querySelector('#conv');
+        const form = root.querySelector('#fExp'), conv = form.querySelector('#conv'), sHint = form.querySelector('#suicaHint');
+        // Pagado con Suica: cuánto te quedará en la tarjeta (sin contar este gasto si ya estaba pagado con ella).
+        const suicaBase = suicaInfo().balance + (ex && ex.paymentMethod === 'ic' ? toJpy(ex) || 0 : 0);
         const updateConv = function () {
           const f = UI.formData(form), v = U.parseAmount(f.amount);
+          if (sHint) {
+            const jpy = v ? toJpy({ amount: v, currency: f.currency }) : 0;
+            sHint.textContent = f.paymentMethod === 'ic' ? 'Saldo ' + suicaInfo().name + ' después: ' + U.money(suicaBase - (jpy || 0), 'JPY') : '';
+          }
           if (!v || f.currency === main) { conv.textContent = ''; return; }
           const c = U.convert(v, f.currency, main, SV.rates());
           conv.textContent = c !== null ? '≈ ' + U.money(c, main) : 'Sin tipo de cambio ' + f.currency + '→' + main + ': se sumará cuando lo haya';
@@ -182,6 +189,171 @@
         });
       }
     });
+  };
+
+  /* ── Saldo de la Suica (Welcome Suica o cualquier tarjeta IC) ──
+     saldo = recargas + ajustes − gastos «Pagado con: Suica/IC».
+     Las recargas no son gasto (sólo mueven dinero a la tarjeta): el gasto es lo que pagas con ella. */
+  const RECHARGE_RE = /recarga|carga suica|チャージ|charge/i;
+  function toJpy(e) { return e.currency === 'JPY' ? Number(e.amount) || 0 : U.convert(e.amount, e.currency, 'JPY', SV.rates()); }
+  function suicaInfo() {
+    const s = S.get();
+    const moves = Object.values(s.suicaMoves || {});
+    const spent = Object.values(s.expenses).filter((e) => e.paymentMethod === 'ic');
+    let topups = 0, adjust = 0, used = 0, unconv = 0;
+    moves.forEach((m) => { if (m.kind === 'adjust') adjust += Number(m.amount) || 0; else topups += Number(m.amount) || 0; });
+    spent.forEach((e) => { const v = toJpy(e); if (v === null) unconv++; else used += v; });
+    const name = s.settings.suicaName || 'Welcome Suica';
+    // Recargas apuntadas como gasto (de antes de existir el saldo): se pueden pasar a recargas para no contarlas dos veces.
+    const asExpense = Object.values(s.expenses).filter((e) => e.paymentMethod !== 'ic' && RECHARGE_RE.test(e.description || ''));
+    return { name: name, balance: Math.round(topups + adjust - used), topups: topups, used: used, unconv: unconv, moves: moves, spent: spent, asExpense: asExpense,
+      active: moves.length > 0 || spent.length > 0, welcome: /welcome/i.test(name) };
+  }
+  C.suicaInfo = suicaInfo;
+
+  /** Tarjeta del saldo (Gastos y Modo viaje). Tocar abre el detalle. */
+  function suicaCard() {
+    const x = suicaInfo(), t = S.today();
+    if (!x.active) return UI.banner('neutral', 'wallet', '¿Pagas con Suica?', 'Apunta lo que le cargas y marca «Pagado con: Suica/IC» en tus gastos: verás el saldo que te queda.', { data: { act: 'suica' } });
+    const low = x.balance < 1000, neg = x.balance < 0;
+    const daysLeft = t.phase === 'during' ? t.totalDays - t.dayNumber : null;
+    return '<div class="card card--tap stack-sm suica" data-act="suica" tabindex="0" aria-label="Saldo de la ' + esc(x.name) + '">' +
+      '<div class="row"><span class="quick__icon tone-green">' + U.icon('wallet', 20) + '</span><div class="grow"><small class="eyebrow muted">SALDO ' + esc(x.name.toUpperCase()) + '</small>' +
+      '<strong class="suica__bal mono block' + (neg ? ' accent' : low ? ' warn' : '') + '">' + U.money(x.balance, 'JPY') + '</strong></div>' +
+      (neg ? UI.pill('Revisa', 'accent') : low ? UI.pill('Saldo bajo', 'warn') : '') + '</div>' +
+      '<small class="muted">Cargado ' + U.money(x.topups, 'JPY') + ' · pagado con ella ' + U.money(x.used, 'JPY') + (x.unconv ? ' · ' + x.unconv + ' sin convertir' : '') + '</small>' +
+      (neg ? '<small class="accent">Has apuntado más pagos que cargas: añade la recarga que falta o ajusta al saldo real.</small>' : '') +
+      (x.welcome && daysLeft !== null && daysLeft <= 2 && x.balance > 0 ? '<small class="warn">Te vas ' + (daysLeft === 0 ? 'hoy' : daysLeft === 1 ? 'mañana' : 'en 2 días') + ': el saldo de la Welcome Suica no se devuelve. Gástalo en konbinis o máquinas.</small>' : '') +
+      '<div class="row row--wrap">' + UI.btn('Recargar', { icon: 'plus', size: 'sm', variant: 'secondary', data: { act: 'suicaTopup' } }) +
+      UI.btn('Ajustar al saldo real', { icon: 'refresh', size: 'sm', variant: 'ghost', data: { act: 'suicaAdjust' } }) + '</div></div>';
+  }
+  C.suicaCard = suicaCard;
+
+  A.suica = function () {
+    const x = suicaInfo();
+    const rows = x.moves.map((m) => ({ date: m.date, ts: m.createdAt || 0, html: '<button type="button" class="suica__row" data-suica-move="' + m.id + '"><span class="mono faint">' + U.fmtShort(m.date) + '</span><span class="grow">' + esc(m.note || (m.kind === 'adjust' ? 'Ajuste al saldo real' : 'Recarga')) + '</span><strong class="mono ' + ((Number(m.amount) || 0) >= 0 ? 'success' : 'accent') + '">' + ((Number(m.amount) || 0) >= 0 ? '+' : '−') + U.money(Math.abs(m.amount), 'JPY') + '</strong></button>' }))
+      .concat(x.spent.map(function (e) {
+        const v = toJpy(e), c = D.EXPENSE[e.category];
+        return { date: e.date, ts: e.createdAt || 0, html: '<button type="button" class="suica__row" data-suica-exp="' + e.id + '"><span class="mono faint">' + U.fmtShort(e.date) + '</span><span class="grow">' + (c ? c[1] + ' ' : '') + esc(e.description || (c ? c[0] : 'Gasto')) + '</span><strong class="mono">' + (v === null ? U.money(e.amount, e.currency) : '−' + U.money(v, 'JPY')) + '</strong></button>' };
+      }))
+      .sort((a, b) => b.date.localeCompare(a.date) || b.ts - a.ts);
+    const body = '<div class="stack">' +
+      '<div class="center"><small class="eyebrow muted">SALDO</small><div class="suica__bal suica__bal--xl mono' + (x.balance < 0 ? ' accent' : '') + '">' + U.money(x.balance, 'JPY') + '</div></div>' +
+      '<div class="row row--wrap">' + UI.btn(x.moves.length ? 'Recargar' : 'Saldo inicial', { icon: 'plus', size: 'sm', data: { 'suica-go': 'topup' } }) + UI.btn('Ajustar al saldo real', { icon: 'refresh', size: 'sm', variant: 'secondary', data: { 'suica-go': 'adjust' } }) + '</div>' +
+      (x.asExpense.length ? UI.banner('warn', 'swap', x.asExpense.length === 1 ? 'Tienes 1 recarga apuntada como gasto' : 'Tienes ' + x.asExpense.length + ' recargas apuntadas como gasto',
+        'Pásalas a recargas: así suben el saldo y no cuentan dos veces (la recarga y lo que pagas con ella).', { action: UI.btn('Pasar', { size: 'sm', variant: 'secondary', data: { 'suica-go': 'convert' } }) }) : '') +
+      (rows.length ? '<div class="suica__list">' + rows.map((r) => r.html).join('') + '</div>' : '<p class="muted small">Aún no hay movimientos. Empieza por el saldo inicial: lo que cargaste al comprarla.</p>') +
+      '<form id="fSuicaName" class="row"><input class="input" name="name" value="' + esc(x.name) + '" aria-label="Nombre de la tarjeta">' + UI.btn('Renombrar', { type: 'submit', size: 'sm', variant: 'ghost' }) + '</form>' +
+      '<small class="faint">Para que un gasto baje el saldo, marca «Pagado con: Suica/IC». Los trayectos en tren no hace falta apuntarlos uno a uno: cuando veas el saldo en el torno, en una máquina o en el tique de la konbini, usa «Ajustar al saldo real».</small></div>';
+    const close = UI.sheet({
+      title: x.name, body: body,
+      onMount: function (root) {
+        root.addEventListener('click', function (ev) {
+          const go = ev.target.closest('[data-suica-go]'), mv = ev.target.closest('[data-suica-move]'), ex = ev.target.closest('[data-suica-exp]');
+          if (go) { close(); if (go.dataset.suicaGo === 'topup') F.suicaMove(); else if (go.dataset.suicaGo === 'adjust') A.suicaAdjust(); else A.suicaConvert(); }
+          else if (mv) { close(); F.suicaMove(mv.dataset.suicaMove); }
+          else if (ex) { close(); F.expense(ex.dataset.suicaExp); }
+        });
+        root.querySelector('#fSuicaName').addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          const v = UI.formData(ev.target).name;
+          if (v) { S.setSettings({ suicaName: v }); UI.toast('Tarjeta renombrada'); close(); }
+        });
+      }
+    });
+  };
+
+  /** Recarga (o saldo inicial) nueva o editada. */
+  F.suicaMove = function (id) {
+    const s = S.get(), m = id ? s.suicaMoves[id] : null, t = S.today(), first = !Object.keys(s.suicaMoves || {}).length;
+    const isAdj = m && m.kind === 'adjust';
+    const body = '<form id="fSuica" class="stack" novalidate>' +
+      '<label class="field"><span class="field__label">' + (isAdj ? 'Ajuste (¥, en negativo si bajó)' : 'Importe cargado (¥)') + '</span><input class="input input--lg" name="amount" inputmode="' + (isAdj ? 'text' : 'numeric') + '" placeholder="0" value="' + esc(m ? String(m.amount) : '') + '"' + (m ? '' : ' autofocus') + ' autocomplete="off"></label>' +
+      (m ? '' : '<div class="chips">' + [1000, 2000, 3000, 5000].map((v) => '<button type="button" class="chip chip--btn" data-amount="' + v + '"><span>' + U.money(v, 'JPY') + '</span></button>').join('') + '</div>') +
+      UI.field('Fecha', UI.input('date', m ? m.date : t.now.date, { type: 'date' })) +
+      UI.field('Nota', UI.input('note', m ? m.note || '' : first ? 'Saldo inicial' : '', { placeholder: 'p.ej. Máquina de la estación' }), { optional: true }) +
+      (isAdj ? '' : '<small class="faint">La recarga no cuenta como gasto: cuenta lo que pagas con la tarjeta.</small>') +
+      '<p class="error" hidden></p></form>';
+    const close = UI.sheet({
+      title: m ? (isAdj ? 'Editar ajuste' : 'Editar recarga') : first ? 'Saldo inicial' : 'Recargar',
+      body: body,
+      footer: '<div class="row">' + (m ? UI.btn('Eliminar', { variant: 'danger', icon: 'trash', data: { del: '1' } }) : '') + UI.btn('Guardar', { type: 'submit', form: 'fSuica', block: true }) + '</div>',
+      onMount: function (root) {
+        const form = root.querySelector('#fSuica');
+        root.querySelectorAll('[data-amount]').forEach((b) => b.addEventListener('click', () => { form.amount.value = b.dataset.amount; }));
+        const del = root.querySelector('[data-del]');
+        if (del) del.addEventListener('click', async () => { if (await UI.confirm(isAdj ? '¿Eliminar ajuste?' : '¿Eliminar recarga?', U.money(m.amount, 'JPY'))) { S.remove('suicaMoves', m.id); close(); } });
+        form.addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          const f = UI.formData(form), err = form.querySelector('.error');
+          const raw = String(f.amount || '').replace(/[−–]/g, '-'), neg = /^\s*-/.test(raw), v = U.parseAmount(raw.replace('-', ''));
+          const amount = v ? Math.round(v) * (isAdj && neg ? -1 : 1) : 0;
+          const problem = !amount ? 'Introduce un importe' : !U.isISODate(f.date) ? 'Fecha no válida' : '';
+          if (problem) { err.textContent = problem; err.hidden = false; return; }
+          const data = { kind: isAdj ? 'adjust' : 'topup', amount: amount, date: f.date, note: f.note || undefined };
+          if (m) S.update('suicaMoves', m.id, data); else S.create('suicaMoves', data);
+          close();
+          UI.toast((isAdj ? 'Ajuste' : 'Recarga de ' + U.money(amount, 'JPY')) + ' guardada · saldo ' + U.money(suicaInfo().balance, 'JPY'));
+        });
+      }
+    });
+  };
+
+  A.suicaTopup = () => F.suicaMove();
+
+  /** Pones el saldo que ves en el torno o la máquina; la diferencia se apunta como trayectos (gasto) o como ajuste. */
+  A.suicaAdjust = function () {
+    const x = suicaInfo(), t = S.today();
+    const body = '<form id="fSuicaAdj" class="stack" novalidate>' +
+      '<p class="muted small">Según la app te quedan <strong class="mono">' + U.money(x.balance, 'JPY') + '</strong>.</p>' +
+      '<label class="field"><span class="field__label">Saldo real (¥)</span><input class="input input--lg" name="real" inputmode="numeric" placeholder="0" autofocus autocomplete="off">' +
+      '<span class="field__hint">Lo ves al pasar por el torno, en las máquinas de billetes o en el tique de la konbini.</span></label>' +
+      '<p class="small" id="adjDiff"></p>' +
+      '<label class="row small" id="adjAsExp" hidden><input type="checkbox" name="asExpense" checked> <span>Apuntar la diferencia como gasto de transporte («Trayectos con Suica»)</span></label>' +
+      '<p class="error" hidden></p></form>';
+    const close = UI.sheet({
+      title: 'Ajustar al saldo real', body: body,
+      footer: UI.btn('Guardar', { type: 'submit', form: 'fSuicaAdj', block: true }),
+      onMount: function (root) {
+        const form = root.querySelector('#fSuicaAdj'), out = root.querySelector('#adjDiff'), chk = root.querySelector('#adjAsExp');
+        const diffOf = () => { const raw = form.real.value.trim(); if (raw === '') return null; const v = U.parseAmount(raw); return v === null ? null : Math.round(v) - x.balance; };
+        form.addEventListener('input', function () {
+          const d = diffOf();
+          out.textContent = d === null ? '' : d === 0 ? 'Cuadra: no hay que ajustar nada.' : d < 0 ? 'Has gastado ' + U.money(-d, 'JPY') + ' más de lo apuntado (p.ej. trenes y metro).' : 'Tienes ' + U.money(d, 'JPY') + ' más de lo apuntado (¿una recarga sin apuntar?).';
+          chk.hidden = !(d < 0);
+        });
+        form.addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          const d = diffOf(), err = form.querySelector('.error');
+          if (d === null) { err.textContent = 'Introduce el saldo que ves en la tarjeta'; err.hidden = false; return; }
+          if (d === 0) { close(); UI.toast('Cuadra: saldo ' + U.money(x.balance, 'JPY')); return; }
+          if (d < 0 && form.asExpense.checked) {
+            const s = S.get(), me = Object.values(s.travelers).find((p) => p.isMe) || Object.values(s.travelers)[0];
+            S.create('expenses', { amount: -d, currency: 'JPY', category: 'transport', paymentMethod: 'ic', description: 'Trayectos con Suica', date: t.now.date,
+              cityId: t.phase === 'during' && t.city ? t.city.id : undefined, paidById: me && me.id, splitWithIds: me ? [me.id] : [] });
+          } else S.create('suicaMoves', { kind: 'adjust', amount: d, date: t.now.date, note: 'Ajuste al saldo real' });
+          close();
+          UI.toast('Saldo ajustado: ' + U.money(suicaInfo().balance, 'JPY'));
+        });
+      }
+    });
+  };
+
+  /** Recargas apuntadas como gasto → recargas (dejan de contar como gasto y suben el saldo). */
+  A.suicaConvert = async function () {
+    const list = suicaInfo().asExpense;
+    if (!list.length) return;
+    const msg = list.map((e) => U.fmtShort(e.date) + ' · ' + (e.description || '') + ' · ' + U.money(e.amount, e.currency)).join('\n');
+    if (!(await UI.confirm('¿Pasar a recargas de la Suica?', msg + '\n\nDejarán de contar como gasto y sumarán al saldo.', { ok: 'Pasar', danger: false }))) return;
+    let n = 0;
+    list.forEach(function (e) {
+      const v = toJpy(e);
+      if (v === null) return;
+      S.create('suicaMoves', { kind: 'topup', amount: Math.round(v), date: e.date, note: e.description || 'Recarga' });
+      S.remove('expenses', e.id);
+      n++;
+    });
+    UI.toast(n + (n === 1 ? ' recarga pasada' : ' recargas pasadas') + ' · saldo ' + U.money(suicaInfo().balance, 'JPY'));
   };
 
   A.newExpense = (el) => F.expense(null, { date: el.dataset.date, cityId: el.dataset.city, placeName: el.dataset.place, activityId: el.dataset.activity });

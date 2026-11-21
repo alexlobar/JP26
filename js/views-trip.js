@@ -80,12 +80,15 @@
   }
 
   V.home = function () {
-    const s = S.get(), t = S.today(), n = t.now, travel = S.travelModeActive();
+    const s = S.get(), t = S.today(), n = t.now;
+    // Ajustes → Modo viaje → «En Inicio»: los dos (con el selector) o sólo uno de ellos.
+    const views = s.settings.homeViews || 'both';
+    const travel = views === 'travel' ? true : views === 'overview' ? false : S.travelModeActive();
     const head = UI.header({
       large: true, title: (s.trip.name + ' ' + (s.trip.emoji || '')).trim(), subtitle: U.fmtRange(s.trip.startDate, s.trip.endDate),
       actions: UI.iconBtn('sos', 'Emergencia', { act: 'go', to: 'emergency' }) + UI.iconBtn('search', 'Buscar', { act: 'go', to: 'search' }) + UI.iconBtn('settings', 'Ajustes', { act: 'go', to: 'settings' })
     });
-    const seg = '<div class="seg" role="tablist">' +
+    const seg = views !== 'both' ? '' : '<div class="seg" role="tablist">' +
       '<button type="button" role="tab" class="seg__item' + (!travel ? ' is-on' : '') + '" aria-selected="' + !travel + '" data-act="travelMode" data-value="off">Resumen</button>' +
       '<button type="button" role="tab" class="seg__item' + (travel ? ' is-on' : '') + '" aria-selected="' + travel + '" data-act="travelMode" data-value="on">🧭 Modo viaje</button></div>';
     const install = JT.uiState.installPrompt ? UI.banner('info', 'download', 'Instala Japón Travel', 'Tenla como app en el móvil, también sin conexión.', { action: UI.btn('Instalar', { size: 'sm', data: { act: 'installApp' } }) }) : '';
@@ -181,7 +184,7 @@
   const TRAVEL_BLOCKS = [
     ['where', 'Dónde estás (día y ciudades)'], ['now', 'Ahora y siguiente plan'], ['quick', 'Accesos rápidos'],
     ['diary', 'Diario (por la noche)'], ['tomorrow', 'Mañana en un vistazo (por la noche)'], ['converter', 'Conversor ¥ ⇄ €'], ['talk', 'Para comunicarte (frases y alergias)'],
-    ['hotel', 'Esta noche duermes en'], ['gifts', 'Regalos por comprar aquí'], ['money', 'Gasto de hoy'],
+    ['hotel', 'Esta noche duermes en'], ['gifts', 'Regalos por comprar aquí'], ['money', 'Gasto de hoy'], ['suica', 'Saldo de la Suica'],
     ['reservations', 'Reservas de hoy'], ['later', 'Más tarde hoy'], ['notes', 'Notas de la ciudad'], ['hub', 'Tu viaje (apartados)']
   ];
 
@@ -247,6 +250,7 @@
         const spentToday = C.moneySum(Object.values(s.expenses).filter((e) => e.date === n.date)), spentAll = C.moneySum(Object.values(s.expenses)), budget = s.trip.totalBudget;
         return UI.card('<div class="stats">' + UI.stat('Hoy', spentToday.text, '', true) + UI.stat('Total viaje', spentAll.text, budget ? 'de ' + U.money(budget, spentAll.main) : '') + '</div>' + (budget ? UI.progress(spentAll.total / budget, spentAll.total > budget ? 'accent' : 'info') : ''), { cls: 'stack' });
       },
+      suica: () => (C.suicaInfo && C.suicaInfo().active ? C.suicaCard() : ''),
       reservations: function () {
         const resv = day ? S.reservationsOffTimeline(day).filter((r) => !hotel || r.id !== hotel.id) : []; // el hotel de esta noche ya tiene su tarjeta
         return resv.length ? UI.section('Reservas de hoy', resv.map(C.reservationCard).join(''), UI.btn('Todas', { size: 'sm', variant: 'ghost', data: { act: 'go', to: 'reservations' } })) : '';
@@ -363,7 +367,7 @@
     const loose = days.filter((d) => !d.cityId && !isPast(d));
     if (loose.length) body += UI.section('Días sin ciudad', loose.map(card).join(''), UI.btn('Asignar', { size: 'sm', variant: 'ghost', data: { act: 'go', to: 'cities' } }));
     html += '<div class="itin">' + body + '</div>';
-    html += '<div class="row row--center">' + UI.btn('Ciudades', { icon: 'city', variant: 'secondary', data: { act: 'go', to: 'cities' } }) + UI.btn('Transporte', { icon: 'train', variant: 'secondary', data: { act: 'go', to: 'transport' } }) + UI.btn('Resumen', { icon: 'sparkle', variant: 'secondary', data: { act: 'go', to: 'summary' } }) + '</div>';
+    html += '<div class="row row--center row--wrap">' + UI.btn('Ciudades', { icon: 'city', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'cities' } }) + UI.btn('Transporte', { icon: 'train', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'transport' } }) + UI.btn('Resumen', { icon: 'sparkle', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'summary' } }) + '</div>';
     return { html: html };
   };
   A.goToday = (el) => { const c = document.getElementById('day-' + el.dataset.id); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
