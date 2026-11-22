@@ -50,8 +50,87 @@
     return out.join('');
   }
 
+  /* ── Taquillas (coin lockers): dónde dejaste la maleta, número, cómo se abre y hasta cuándo ──
+     Salen arriba en Inicio y en el Modo viaje hasta que pulsas «Ya la vacié» (entonces se borran, código incluido). */
+  const OPENS = { code: ['Código', '🔢'], suica: ['Suica', '🚃'], key: ['Llave', '🔑'], ticket: ['Tique', '🎫'] };
+  function lockerLeft(l, n) {
+    if (!l.untilTime && !l.untilDate) return null;
+    return U.diffDays(n.date, l.untilDate || n.date) * 1440 + (l.untilTime ? U.toMin(l.untilTime) : 1440) - n.minutes;
+  }
+  function lockerCards(n, addBtn) {
+    const list = Object.values(S.get().lockers || {}).sort((a, b) => a.createdAt - b.createdAt);
+    if (!list.length) return addBtn ? '<p class="locker-add">' + UI.btn('Apuntar una taquilla', { icon: 'lock', size: 'sm', variant: 'ghost', data: { act: 'newLocker' } }) + '</p>' : '';
+    return list.map(function (l) {
+      const left = lockerLeft(l, n), late = left !== null && left < 0, soon = left !== null && left >= 0 && left <= 120;
+      const op = OPENS[l.opens] || OPENS.code;
+      const when = left === null ? '' : late ? 'Se pasó la hora' + (l.untilTime ? ' (' + l.untilTime + ')' : '') + ': puede que te cobren otro día'
+        : 'Recoger antes de ' + (l.untilTime ? 'las ' + l.untilTime : 'medianoche') + (l.untilDate && l.untilDate !== n.date ? ' del ' + U.fmtShort(l.untilDate) : '') + ' · quedan ' + U.fmtDur(left);
+      return '<div class="card cl locker tone-indigo stack-sm' + (late ? ' is-late' : '') + '"><div class="cl__head"><span class="cl__emoji" aria-hidden="true">🔐</span><span class="grow"><small class="eyebrow muted block">TAQUILLA' + (l.number ? ' Nº ' + esc(l.number) : '') + '</small>' +
+        '<strong class="cl__title">' + esc(l.place || 'Taquilla') + '</strong>' + (when ? '<small class="' + (late ? 'accent' : soon ? 'warn' : 'muted') + '">' + esc(when) + '</small>' : '') + '</span></div>' +
+        (l.opens === 'code' && l.code ? '<button type="button" class="locker__code mono" data-act="lockerCode" data-id="' + l.id + '" aria-label="Ver el código en grande">' + esc(l.code) + '</button>'
+          : '<small class="muted">Se abre con: ' + op[1] + ' ' + op[0] + (l.code ? ' · ' + esc(l.code) : '') + '</small>') +
+        (l.note ? '<small class="muted">' + esc(l.note) + '</small>' : '') +
+        '<div class="row row--wrap">' + UI.btn('Ya la vacié', { icon: 'check', size: 'sm', data: { act: 'lockerDone', id: l.id } }) + UI.btn('Editar', { icon: 'edit', size: 'sm', variant: 'ghost', data: { act: 'editLocker', id: l.id } }) + '</div></div>';
+    }).join('');
+  }
+  C.lockerCards = lockerCards;
+
+  F.locker = function (id) {
+    const l = id ? S.get().lockers[id] : null, n = S.now();
+    const body = '<form id="fLocker" class="stack" novalidate>' +
+      UI.field('Dónde', UI.input('place', l ? l.place || '' : '', { placeholder: 'p.ej. Estación de Kanazawa, salida este', autofocus: !l })) +
+      '<div class="row row--top">' + UI.field('Nº de taquilla', UI.input('number', l ? l.number || '' : '', { placeholder: '123' }), { optional: true }) +
+        UI.field('Recoger antes de', UI.input('untilTime', l ? l.untilTime || '' : '', { type: 'time' }), { optional: true }) + '</div>' +
+      UI.field('Día', UI.input('untilDate', l ? l.untilDate || n.date : n.date, { type: 'date' })) +
+      UI.field('Se abre con', UI.chips('opens', Object.keys(OPENS).map((k) => ({ value: k, label: OPENS[k][1] + ' ' + OPENS[k][0] })), l ? l.opens : 'code')) +
+      UI.field('Código o número del tique', UI.input('code', l ? l.code || '' : '', { inputmode: 'text', placeholder: 'p.ej. 4821' }), { optional: true, hint: 'Sólo se guarda en este móvil y se borra al pulsar «Ya la vacié».' }) +
+      (l ? '' : '<div class="row row--top">' + UI.field('Coste (¥)', UI.input('cost', '', { inputmode: 'numeric', placeholder: '700' }), { optional: true, hint: 'Se apunta como gasto (con Suica o en efectivo, según cómo se abra).' }) + '</div>') +
+      UI.field('Nota', UI.input('note', l ? l.note || '' : '', { placeholder: 'p.ej. Maleta grande, fila de abajo' }), { optional: true }) +
+      '<p class="error" hidden></p></form>';
+    const close = UI.sheet({
+      title: l ? 'Editar taquilla' : 'Apuntar una taquilla', body: body,
+      footer: '<div class="row">' + (l ? UI.btn('Eliminar', { variant: 'danger', icon: 'trash', data: { del: '1' } }) : '') + UI.btn('Guardar', { type: 'submit', form: 'fLocker', block: true }) + '</div>',
+      onMount: function (root) {
+        const form = root.querySelector('#fLocker');
+        const del = root.querySelector('[data-del]');
+        if (del) del.addEventListener('click', async () => { if (await UI.confirm('¿Eliminar la taquilla?', l.place || '')) { S.remove('lockers', l.id); close(); } });
+        form.addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          const f = UI.formData(form), err = form.querySelector('.error');
+          if (!f.place && !f.number) { err.textContent = 'Apunta al menos dónde está o su número'; err.hidden = false; return; }
+          const data = { place: f.place || undefined, number: f.number || undefined, untilTime: f.untilTime || undefined, untilDate: f.untilDate || undefined, opens: f.opens || 'code', code: f.code || undefined, note: f.note || undefined };
+          if (l) S.update('lockers', l.id, data);
+          else {
+            S.create('lockers', data);
+            const cost = U.parseAmount(f.cost);
+            if (cost) {
+              const s = S.get(), t = S.today(), me = Object.values(s.travelers).find((p) => p.isMe) || Object.values(s.travelers)[0];
+              S.create('expenses', { amount: cost, currency: 'JPY', category: 'other', paymentMethod: data.opens === 'suica' ? 'ic' : 'cash', description: 'Taquilla' + (data.place ? ' · ' + data.place : ''),
+                date: t.now.date, cityId: t.phase === 'during' && t.city ? t.city.id : undefined, paidById: me && me.id, splitWithIds: me ? [me.id] : [] });
+            }
+          }
+          close();
+          UI.toast(l ? 'Taquilla guardada' : 'Taquilla apuntada: te saldrá arriba hasta que la vacíes');
+        });
+      }
+    });
+  };
+  A.newLocker = () => F.locker();
+  A.editLocker = (el) => F.locker(el.dataset.id);
+  A.lockerDone = function (el) {
+    const l = S.get().lockers[el.dataset.id];
+    if (!l) return;
+    const copy = Object.assign({}, l);
+    S.remove('lockers', l.id);
+    UI.toast('Taquilla vaciada', { label: 'Deshacer', run: () => S.create('lockers', copy) });
+  };
+  A.lockerCode = function (el) {
+    const l = S.get().lockers[el.dataset.id];
+    if (l && l.code) C.showcase({ ja: l.code, sub: [l.place, l.number ? 'Nº ' + l.number : ''].filter(Boolean).join(' · '), es: 'Código de la taquilla', lang: 'none', noSpeak: true }, { fullscreen: true });
+  };
+
   function alerts(t) {
-    const s = S.get(), out = [checkoutAlerts(t.now)], n = t.now;
+    const s = S.get(), out = [checkoutAlerts(t.now), lockerCards(t.now, false)], n = t.now;
     // A menos de 30 días ya lo cuenta «¿Listo para el viaje?», que incluye la checklist.
     if (t.phase === 'before' && t.daysUntil > 30) {
       const lists = Object.values(s.checklists).filter((c) => c.section === 'before').map((c) => c.id);
@@ -182,9 +261,9 @@
   /* El Modo viaje está hecho de bloques que eliges y ordenas en Ajustes → Modo viaje.
      Los avisos (simulación, check-out) van siempre arriba. */
   const TRAVEL_BLOCKS = [
-    ['where', 'Dónde estás (día y ciudades)'], ['now', 'Ahora y siguiente plan'], ['quick', 'Accesos rápidos'],
-    ['diary', 'Diario (por la noche)'], ['tomorrow', 'Mañana en un vistazo (por la noche)'], ['converter', 'Conversor ¥ ⇄ €'], ['talk', 'Para comunicarte (frases y alergias)'],
-    ['hotel', 'Esta noche duermes en'], ['gifts', 'Regalos por comprar aquí'], ['money', 'Gasto de hoy'], ['suica', 'Saldo de la Suica'],
+    ['where', 'Dónde estás (día y ciudades)'], ['now', 'Ahora y siguiente plan'], ['lockers', 'Taquillas (dónde dejaste la maleta)'], ['quick', 'Accesos rápidos'],
+    ['diary', 'Diario (por la noche)'], ['tomorrow', 'Mañana en un vistazo (por la noche)'], ['move', 'Cambio de ciudad (checklist, 2 días antes)'], ['converter', 'Conversor ¥ ⇄ €'], ['talk', 'Para comunicarte (frases y alergias)'],
+    ['hotel', 'Esta noche duermes en'], ['gifts', 'Regalos por comprar aquí'], ['money', 'Gastos (hoy, total, categorías y últimos)'], ['suica', 'Cartera (Suica y efectivo)'],
     ['reservations', 'Reservas de hoy'], ['later', 'Más tarde hoy'], ['notes', 'Notas de la ciudad'], ['hub', 'Tu viaje (apartados)']
   ];
 
@@ -202,6 +281,61 @@
     return order.map((id) => ({ id: id, label: TRAVEL_BLOCKS.find((b) => b[0] === id)[1], on: off.indexOf(id) === -1 }));
   }
   C.travelLayout = travelLayout;
+
+  /** Los 3 últimos gastos de hoy (tocar uno lo abre para corregirlo). */
+  function lastToday(all, date) {
+    const list = all.filter((e) => e.date === date).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    if (!list.length) return '';
+    return '<div class="mini-exps"><small class="eyebrow muted">ÚLTIMOS DE HOY</small>' + list.slice(0, 3).map(function (e) {
+      const c = D.EXPENSE[e.category] || ['Gasto', '•'], pay = e.paymentMethod && D.PAYMENT[e.paymentMethod];
+      return '<button type="button" class="mini-exp" data-act="editExpense" data-id="' + e.id + '"><span class="mini-exp__emoji" style="--cc:' + C.catColor(e.category) + '" aria-hidden="true">' + c[1] + '</span>' +
+        '<span class="grow"><span class="block mini-exp__t">' + esc(e.description || c[0]) + '</span><small class="muted">' + esc([c[0], pay ? pay[1] + ' ' + pay[0] : ''].filter(Boolean).join(' · ')) + '</small></span>' +
+        '<strong class="mono">' + U.money(e.amount, e.currency) + '</strong></button>';
+    }).join('') + (list.length > 3 ? '<small class="faint">y ' + (list.length - 3) + ' más hoy</small>' : '') + '</div>';
+  }
+
+  /* ── Cambios de ciudad (Tokio → Kanazawa → Takayama…) ──
+     La checklist «Cada cambio de ciudad» se desmarca entera sola: cuando ya has llegado a una ciudad
+     y pasa ese día, queda lista para el siguiente cambio. */
+  function cityMoves() {
+    const s = S.get(), out = [];
+    let prev = null;
+    S.sortedDays().filter((d) => d.cityId && s.cities[d.cityId]).forEach(function (d) {
+      if (prev && d.cityId !== prev.cityId) out.push({ date: d.date, from: s.cities[prev.cityId], to: s.cities[d.cityId] });
+      prev = d;
+    });
+    return out;
+  }
+  /** El cambio que toca preparar (el de hoy o el siguiente): { move, index, total, days }. */
+  function nextMove(date) {
+    const all = cityMoves(), i = all.findIndex((m) => m.date >= date);
+    return i < 0 ? { move: null, index: all.length, total: all.length } : { move: all[i], index: i, total: all.length, days: U.diffDays(date, all[i].date) };
+  }
+  const moveWhen = (d) => (d === 0 ? 'hoy' : d === 1 ? 'mañana' : 'en ' + d + ' días');
+  function syncMoveLists() {
+    const s = S.get(), nm = nextMove(S.today().now.date), key = nm.move ? nm.move.date : 'end';
+    Object.values(s.checklists).filter((l) => l.section === 'move' && l.resetKey !== key).forEach(function (l) {
+      if (l.resetKey) Object.values(s.checklistItems).forEach(function (i) { if (i.checklistId === l.id && i.done) { i.done = false; i.updatedAt = Date.now(); } });
+      S.update('checklists', l.id, { resetKey: key });
+    });
+  }
+  C.cityMoves = cityMoves; C.nextMove = nextMove; C.moveWhen = moveWhen; C.syncMoveLists = syncMoveLists;
+
+  /** Modo viaje: 2 días antes de cada cambio, la checklist con lo pendiente para marcar ahí mismo. */
+  function moveCard(date) {
+    const s = S.get(), nm = nextMove(date);
+    if (!nm.move || nm.days > 2) return '';
+    syncMoveLists();
+    const lists = Object.values(s.checklists).filter((l) => l.section === 'move');
+    if (!lists.length) return '';
+    const items = Object.values(s.checklistItems).filter((i) => lists.some((l) => l.id === i.checklistId)).sort((a, b) => a.order - b.order);
+    const done = items.filter((i) => i.done).length, pend = items.filter((i) => !i.done);
+    return '<div class="card cl tone-teal movec stack-sm"><div class="cl__head"><span class="cl__emoji" aria-hidden="true">🚄</span><span class="grow"><small class="eyebrow muted">CAMBIO ' + (nm.index + 1) + ' DE ' + nm.total + ' · LLEGAS ' + esc(moveWhen(nm.days).toUpperCase()) + '</small>' +
+      '<strong class="block">' + esc(nm.move.from.name) + ' → ' + esc(nm.move.to.name) + '</strong><span class="cl__bar"><span style="width:' + (items.length ? (done / items.length) * 100 : 0) + '%"></span></span></span><span class="cl__count mono">' + done + '/' + items.length + '</span></div>' +
+      (pend.length ? '<div class="cl__items">' + pend.slice(0, 4).map((i) => '<div class="check cl__item"><button type="button" class="check__main" role="checkbox" aria-checked="false" data-act="toggleItem" data-id="' + i.id + '"><span class="check__box"></span><span>' + esc(i.text) + '</span></button></div>').join('') + '</div>' +
+        (pend.length > 4 ? '<small class="faint">y ' + (pend.length - 4) + ' más</small>' : '') : '<p class="success small"><strong>¡Todo listo para el cambio! 🎉</strong></p>') +
+      '<div class="row row--end row--wrap">' + UI.btn('Apuntar taquilla', { size: 'sm', variant: 'ghost', icon: 'lock', data: { act: 'newLocker' } }) + UI.btn('Ver la checklist', { size: 'sm', variant: 'ghost', icon: 'checklist', data: { act: 'go', to: 'checklist' } }) + '</div></div>';
+  }
 
   function travelMode(t) {
     const s = S.get(), n = t.now, day = t.day, city = t.city;
@@ -224,12 +358,18 @@
         return (current ? nextUpCard(current, 'AHORA') : '') + (next ? nextUpCard(next, 'SIGUIENTE', here, current ? 'la actividad actual' : 'tu última parada') : '') +
           (!current && !next ? UI.empty('🍵', 'Nada más por hoy', 'Disfruta. Puedes escribir el diario o planificar mañana.') : '');
       },
-      quick: () => C.quick([
-        ['wallet', 'Gasto', { act: 'newExpense' }],
-        ['calendar', 'Día de hoy', day ? { act: 'go', to: 'day/' + day.id } : { act: 'go', to: 'itinerary' }],
-        ['chat', 'Frases', { act: 'go', to: 'phrases' }],
-        hotel ? ['car', 'Taxi al hotel', { act: 'taxi', id: hotel.id }] : ['ticket', 'Reservas', { act: 'go', to: 'reservations' }]
-      ]),
+      quick: function () {
+        // Con la Suica en marcha, un quinto acceso: gasto ya marcado «Pagado con: Suica».
+        const ic = C.walletInfo && C.walletInfo('ic').active;
+        return C.quick([
+          ['wallet', 'Gasto', { act: 'newExpense' }]].concat(ic ? [['card', 'Gasto Suica', { act: 'newExpense', pay: 'ic' }]] : []).concat([
+          ['calendar', ic ? 'Hoy' : 'Día de hoy', day ? { act: 'go', to: 'day/' + day.id } : { act: 'go', to: 'itinerary' }],
+          ['chat', 'Frases', { act: 'go', to: 'phrases' }],
+          hotel ? ['car', ic ? 'Taxi' : 'Taxi al hotel', { act: 'taxi', id: hotel.id }] : ['ticket', 'Reservas', { act: 'go', to: 'reservations' }]
+        ]), ic ? '5' : '');
+      },
+      move: () => moveCard(n.date),
+      lockers: () => lockerCards(n, true),
       diary: () => (day && n.minutes >= 18 * 60 ? diaryCard(day) : ''),
       tomorrow: () => (n.minutes >= 18 * 60 ? tomorrowCard(U.addDays(n.date, 1)) : ''),
       converter: () => C.quickConverter(),
@@ -247,10 +387,17 @@
         return gifts.length ? UI.banner('accent', 'gift', 'En ' + city.name + ': ' + gifts.length + (gifts.length === 1 ? ' regalo por comprar' : ' regalos por comprar'), gifts.map((g) => g.idea).join(' · '), { data: { act: 'go', to: 'gifts' } }) : '';
       },
       money: function () {
-        const spentToday = C.moneySum(Object.values(s.expenses).filter((e) => e.date === n.date)), spentAll = C.moneySum(Object.values(s.expenses)), budget = s.trip.totalBudget;
-        return UI.card('<div class="stats">' + UI.stat('Hoy', spentToday.text, '', true) + UI.stat('Total viaje', spentAll.text, budget ? 'de ' + U.money(budget, spentAll.main) : '') + '</div>' + (budget ? UI.progress(spentAll.total / budget, spentAll.total > budget ? 'accent' : 'info') : ''), { cls: 'stack' });
+        // Igual que «Gastos» del Resumen (total, restante, barra de categorías) más lo de hoy.
+        const all = Object.values(s.expenses), spentToday = C.moneySum(all.filter((e) => e.date === n.date)), spentAll = C.moneySum(all), budget = s.trip.totalBudget;
+        return UI.section('Gastos', UI.card('<div class="stats">' + UI.stat('Hoy', spentToday.text, '', true) + UI.stat('Total viaje', spentAll.text, budget ? 'de ' + U.money(budget, spentAll.main) : '') + '</div>' +
+          (budget ? UI.progress(spentAll.total / budget, spentAll.total > budget ? 'accent' : 'info') + '<small class="muted">' + (spentAll.total > budget ? 'Te has pasado ' + U.money(spentAll.total - budget, spentAll.main) : 'Quedan ' + U.money(budget - spentAll.total, spentAll.main) + ' · ' + Math.round((spentAll.total / budget) * 100) + '% gastado') + '</small>' : '') +
+          C.catStack(all, 3) + (spentAll.extra ? '<small class="faint">+ ' + esc(spentAll.extra) + ' sin convertir</small>' : '') + (C.quickExpenseRow ? C.quickExpenseRow() : '') + lastToday(all, n.date), { cls: 'stack', data: { act: 'go', to: 'expenses' } }),
+          UI.btn('Detalle', { size: 'sm', variant: 'ghost', data: { act: 'go', to: 'expenses' } }));
       },
-      suica: () => (C.suicaInfo && C.suicaInfo().active ? C.suicaCard() : ''),
+      suica: function () {
+        if (!C.walletInfo) return '';
+        return C.walletInfo('ic').active || C.walletInfo('cash').active ? C.walletCard() : '';
+      },
       reservations: function () {
         const resv = day ? S.reservationsOffTimeline(day).filter((r) => !hotel || r.id !== hotel.id) : []; // el hotel de esta noche ya tiene su tarjeta
         return resv.length ? UI.section('Reservas de hoy', resv.map(C.reservationCard).join(''), UI.btn('Todas', { size: 'sm', variant: 'ghost', data: { act: 'go', to: 'reservations' } })) : '';
@@ -266,10 +413,26 @@
       },
       hub: () => C.tripHub()
     };
-    travelLayout().forEach((b) => { if (b.on) html += blocks[b.id](); });
+    // Los bloques con título se pliegan tocándolo (se recuerda en settings.travelFolded).
+    const folded = s.settings.travelFolded || [];
+    travelLayout().forEach(function (b) { if (!b.on) return; const h = blocks[b.id](); if (h) html += foldable(b.id, h, folded.indexOf(b.id) > -1); });
     html += '<p class="center">' + UI.btn('Personalizar el Modo viaje', { icon: 'settings', size: 'sm', variant: 'ghost', data: { act: 'customizeTravel' } }) + '</p>';
     return html;
   }
+
+  /** Un bloque con título (UI.section) se puede plegar tocando el título: queda sólo la cabecera. */
+  function foldable(id, h, isFolded) {
+    if (h.indexOf('<section class="section">') !== 0 || h.indexOf('<h2 class="section__title">') < 0) return h;
+    return h.replace('<section class="section">', '<section class="section tb' + (isFolded ? ' is-folded' : '') + '" data-tb="' + id + '">')
+      .replace(/<h2 class="section__title">([\s\S]*?)<\/h2>/, function (all, title) {
+        return '<h2 class="section__title"><button type="button" class="tb__toggle" data-act="tbFold" data-id="' + id + '" aria-expanded="' + !isFolded + '">' + title + U.icon('down', 14) + '</button></h2>';
+      });
+  }
+  A.tbFold = function (el) {
+    const list = (S.get().settings.travelFolded || []).slice(), i = list.indexOf(el.dataset.id);
+    if (i > -1) list.splice(i, 1); else list.push(el.dataset.id);
+    S.setSettings({ travelFolded: list });
+  };
 
   A.customizeTravel = function () {
     (JT.uiState.settingsOpen = JT.uiState.settingsOpen || {})['Modo viaje'] = true;

@@ -230,7 +230,7 @@ JT.cards = (function () {
      para reconocerlo de un vistazo sin leer. Los tonos están en styles.css (.tone-*). */
   const TONE = {
     city: 'violet', ticket: 'red', train: 'blue', note: 'amber', checklist: 'green', doc: 'slate', info: 'teal', chat: 'pink',
-    calendar: 'indigo', wallet: 'green', food: 'orange', bed: 'violet', gift: 'indigo', car: 'violet'
+    calendar: 'indigo', wallet: 'green', food: 'orange', bed: 'violet', gift: 'indigo', car: 'violet', card: 'green', cash: 'amber'
   };
   function quick(items, variant) {
     return '<div class="quick' + (variant ? ' quick--' + variant : '') + '">' + items.map((it) => '<button type="button" class="quick__btn tone-' + (TONE[it[0]] || 'red') + '"' + UI.dataAttrs(it[2]) + '><span class="quick__icon">' + U.icon(it[0], 22) + '</span><small>' + esc(it[1]) + '</small>' +
@@ -397,9 +397,10 @@ JT.cards = (function () {
     const pct = (v) => pctText(v, total);
     const shown = legend ? cats.slice(0, legend) : [];
     return '<div class="catstack" role="img" aria-label="' + esc('Reparto por categoría: ' + cats.map((x) => D.EXPENSE[x[0]][0] + ' ' + pct(x[1])).join(', ')) + '">' +
-      cats.map((x) => '<span style="width:' + (x[1] / total) * 100 + '%;background:' + catColor(x[0]) + '"></span>').join('') + '</div>' +
-      (shown.length ? '<div class="catlegend">' + shown.map((x) => '<span><i style="background:' + catColor(x[0]) + '"></i>' + esc(D.EXPENSE[x[0]][0]) + ' <b>' + pct(x[1]) + '</b></span>').join('') +
-        (shown.length < cats.length ? '<span class="faint">+' + (cats.length - shown.length) + ' más</span>' : '') + '</div>' : '');
+      // Cada color se puede tocar: abre Gastos → Lista con esa categoría.
+      cats.map((x) => '<span data-act="expFilter" data-k="category" data-v="' + esc(x[0]) + '" title="' + esc(D.EXPENSE[x[0]][0] + ' ' + pct(x[1])) + '" style="width:' + (x[1] / total) * 100 + '%;background:' + catColor(x[0]) + '"></span>').join('') + '</div>' +
+      (shown.length ? '<div class="catlegend">' + shown.map((x) => '<button type="button" class="catlegend__item" data-act="expFilter" data-k="category" data-v="' + esc(x[0]) + '"><i style="background:' + catColor(x[0]) + '"></i>' + esc(D.EXPENSE[x[0]][0]) + ' <b>' + pct(x[1]) + '</b></button>').join('') +
+        (shown.length < cats.length ? '<button type="button" class="catlegend__item faint" data-act="expSummary">+' + (cats.length - shown.length) + ' más</button>' : '') + '</div>' : '');
   }
 
   /** «48%», o «<1%» si es muy poco pero no cero. */
@@ -491,7 +492,24 @@ JT.cards = (function () {
       '<span class="strip__bar"><span class="strip__segs">' + groups.map((g) => '<span style="flex:' + g.n + ';background:' + esc(s.cities[g.cityId] ? s.cities[g.cityId].color || 'var(--accent)' : 'var(--border)') + '"></span>').join('') + '</span>' +
         (idx > -1 ? '<span class="strip__past" style="width:' + (idx / total) * 100 + '%"></span><span class="strip__now" style="left:' + ((idx + 0.5) / total) * 100 + '%"></span>' : '') + '</span>' +
       // En los tramos largos, debajo del nombre, el kanji (東京, 京都…) para reconocerlo en carteles.
-      '<span class="strip__labels">' + groups.map((g) => '<span style="flex:' + g.n + '">' + esc(label(g)) + (g.n / total >= 0.14 && cityJa(s.cities[g.cityId]) ? '<i lang="ja">' + esc(cityJa(s.cities[g.cityId])) + '</i>' : '') + '</span>').join('') + '</span></button>';
+      '<span class="strip__labels">' + groups.map((g) => '<span style="flex:' + g.n + '">' + esc(label(g)) + (g.n / total >= 0.14 && cityJa(s.cities[g.cityId]) ? '<i lang="ja">' + esc(cityJa(s.cities[g.cityId])) + '</i>' : '') + '</span>').join('') + '</span>' +
+      stripLeft(groups, days, idx, today, name) + '</button>';
+  }
+
+  /** Debajo de la franja: cuántos días te quedan en la ciudad en la que estás y adónde vas después. */
+  function stripLeft(groups, days, idx, today, name) {
+    if (idx < 0) {
+      if (!days.length || today > days[days.length - 1].date) return '';
+      const g = groups[0];
+      return '<span class="strip__left"><b>' + esc(name(g)) + '</b> · ' + g.n + (g.n === 1 ? ' día' : ' días') + (groups[1] ? ' · después ' + esc(name(groups[1])) : '') + '</span>';
+    }
+    let start = 0, k = 0;
+    for (; k < groups.length; k++) { if (idx < start + groups[k].n) break; start += groups[k].n; }
+    const g = groups[k], next = groups[k + 1], lastIdx = start + g.n - 1, left = lastIdx - idx;
+    const where = g.cityId ? esc(name(g)) : 'Días libres';
+    const txt = left === 0 ? (next ? 'último día · mañana <b>' + esc(name(next)) + '</b>' : 'último día del viaje')
+      : (left === 1 ? '1 día más' : left + ' días más') + ' (hasta el ' + esc(U.fmtShort(days[lastIdx].date)) + ')' + (next ? ' · después <b>' + esc(name(next)) + '</b>' : '');
+    return '<span class="strip__left' + (left === 0 ? ' is-last' : '') + '">📍 <b>' + where + '</b>: ' + txt + '</span>';
   }
 
   /** Conversor rápido yen ⇄ moneda principal para el Modo viaje. Recuerda el importe y la dirección. */
@@ -600,5 +618,66 @@ JT.cards = (function () {
     });
   }
 
-  return { q, sampleBanner, offlineBanner, isNow, timelineItem, travelLeg, timeline, placeCard, restaurantCard, expenseRow, reservationCard, transportCard, noteCard, noteRef, quick, tripHub, speakBtn, showcase, typePicker, customTypeSheet, TONE, catColor, byCategory, catStack, pctText, cityStrip, quickConverter, cityRanges, byCityGroups, cityJa, clocks, siteTile, cityOptions, moneySum, parseCoords, coordsField, bindCoords };
+  /* ── Euros en pequeño junto a cada importe en yenes (o dólares) ──
+     Se hace al pintar cada pantalla y cada hoja: busca «¥1.234» / «$12.50» en el texto y añade «≈ 6,93 €»
+     con el tipo de cambio de la app (BCE con tu redondeo). No toca lo que ya habla de euros
+     (textos con €, EUR, = o ≈) ni lo marcado con data-noeur. */
+  const AMT_RE = /(¥\d[\d.]*|\$\d[\d,]*(?:\.\d+)?)/g;
+  function eurOf(v, cur) {
+    if (cur === 'EUR' || !v || isNaN(v)) return ''; // ¥0 no necesita traducción
+    const e = U.convert(Math.abs(v), cur, 'EUR', JT.services.rates());
+    return e === null || e === undefined ? '' : '≈ ' + U.money(e, 'EUR');
+  }
+  /* Tocar un importe alterna en toda la app: yenes en grande y euros en pequeño, o al revés (settings.moneyView).
+     En los formularios siempre manda el yen, que es lo que escribes. */
+  JT.actions.moneyToggle = function () {
+    const eur = S.get().settings.moneyView !== 'eur';
+    S.setSettings({ moneyView: eur ? 'eur' : 'jpy' });
+    UI.toast(eur ? 'Importes en euros (el yen, en pequeño)' : 'Importes en yenes (el euro, en pequeño)');
+  };
+  // Tocar un importe que no esté dentro de un botón o una tarjeta que ya haga algo (ésos abren lo suyo).
+  document.addEventListener('click', function (ev) {
+    const a = ev.target.closest && ev.target.closest('.amt, .eur');
+    if (!a || !a.parentElement || a.parentElement.closest('[data-act], button, a, label, input, form, .swipe')) return;
+    JT.actions.moneyToggle();
+  });
+  function addEur(root) {
+    if (!root || !JT.services.rates()) return;
+    const eurBig = S.get().settings.moneyView === 'eur';
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: function (n) {
+      const t = n.nodeValue;
+      if (!t || (t.indexOf('¥') < 0 && t.indexOf('$') < 0) || /EUR|€|≈|=/.test(t)) return NodeFilter.FILTER_REJECT;
+      const p = n.parentElement;
+      return !p || p.closest('.amt, .eur, [data-noeur], script, style, textarea, option, title') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+    } });
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach(function (n) {
+      const t = n.nodeValue, frag = document.createDocumentFragment();
+      let last = 0, m, any = false;
+      AMT_RE.lastIndex = 0;
+      while ((m = AMT_RE.exec(t))) {
+        const s = m[1], cur = s[0] === '¥' ? 'JPY' : 'USD';
+        const v = cur === 'JPY' ? Number(s.slice(1).replace(/\./g, '')) : Number(s.slice(1).replace(/,/g, ''));
+        const e = eurOf(v, cur);
+        if (!e) continue;
+        any = true;
+        frag.appendChild(document.createTextNode(t.slice(last, m.index)));
+        const a = document.createElement('span'); a.className = 'amt'; a.textContent = s;
+        const sm = document.createElement('small'); sm.className = 'eur'; sm.textContent = e;
+        if (eurBig && !n.parentElement.closest('form')) {
+          a.textContent = e.replace('≈ ', ''); a.classList.add('amt--eur');
+          const pre = t.slice(0, m.index), sign = /[-−]$/.test(pre) ? pre.slice(-1) : '';
+          sm.textContent = sign + s; sm.classList.add('eur--yen');
+        }
+        frag.appendChild(a); frag.appendChild(sm);
+        last = m.index + s.length;
+      }
+      if (!any) return;
+      frag.appendChild(document.createTextNode(t.slice(last)));
+      n.parentNode.replaceChild(frag, n);
+    });
+  }
+
+  return { q, sampleBanner, offlineBanner, isNow, timelineItem, travelLeg, timeline, placeCard, restaurantCard, expenseRow, reservationCard, transportCard, noteCard, noteRef, quick, tripHub, speakBtn, showcase, typePicker, customTypeSheet, TONE, catColor, byCategory, catStack, pctText, cityStrip, quickConverter, cityRanges, byCityGroups, cityJa, clocks, siteTile, cityOptions, moneySum, parseCoords, coordsField, bindCoords, eurOf, addEur };
 })();

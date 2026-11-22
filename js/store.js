@@ -39,6 +39,7 @@ JT.store = (function () {
     fixPhrases(out.phrases); // antes de añadir las que falten, para no duplicar las corregidas
     addMissingPhrases(out.phrases);
     addMissingFoods(out.foods);
+    addMoveChecklist(out);
     out.schema = SCHEMA;
     return out;
   }
@@ -49,6 +50,19 @@ JT.store = (function () {
       Object.values(phrases).forEach(function (p) {
         if (!p.isCustom && p.ja === f[0]) { p.ja = f[2]; p.romaji = f[3]; p.es = f[1]; }
       });
+    });
+  }
+
+  /** v1.17.0: la checklist «Cambio de ciudad» llega una vez a los viajes ya guardados (si la borras, no vuelve). */
+  function addMoveChecklist(out) {
+    if (out.settings.moveListSeeded) return;
+    out.settings.moveListSeeded = true;
+    if (Object.values(out.checklists).some((l) => l.section === 'move')) return;
+    const ts = Date.now(), id = U.uid('cl'), m = D.MOVE_CHECKLIST;
+    out.checklists[id] = { id: id, title: m[0], section: m[1], order: Object.keys(out.checklists).length, createdAt: ts, updatedAt: ts };
+    m[2].forEach(function (text, j) {
+      const iid = U.uid('ci');
+      out.checklistItems[iid] = { id: iid, checklistId: id, text: text, done: false, order: j, createdAt: ts, updatedAt: ts };
     });
   }
 

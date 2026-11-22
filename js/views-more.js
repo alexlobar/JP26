@@ -445,21 +445,56 @@
 
   /* ══ CHECKLIST ═══════════════════════════════════════════════ */
 
+  /* Checklist más visible: cabecera con el % en grande, filtro «Pendientes», títulos grandes con su emoji,
+     cada lista con su color, barra de progreso y casillas grandes; lo hecho baja al final y las listas completas se pliegan.
+     «Cada cambio de ciudad» se desmarca sola tras cada llegada y lleva la cuenta de los cambios. */
+  const CL_TONE = { before: 'blue', luggage: 'violet', move: 'teal', during: 'green', custom: 'amber' };
+  const CL_ORDER = ['before', 'luggage', 'move', 'during', 'custom'];
+  const CL_EMOJIS = ['✅', '🧳', '🎒', '🚄', '✈️', '🏨', '♨️', '🛍️', '🎁', '💊', '📸', '🍜', '👘', '⛩️', '🗻', '💴', '📄', '🧴', '👟', '🌸', '🎌', '🍣', '🏯', '🧥'];
   V.checklist = function () {
+    if (C.syncMoveLists) C.syncMoveLists();
     const s = S.get(), items = Object.values(s.checklistItems), done = items.filter((i) => i.done).length;
-    let html = UI.header({ back: true, title: 'Checklist', subtitle: done + '/' + items.length + ' completado', actions: UI.iconBtn('plus', 'Nueva lista', { act: 'newChecklist' }) }) + UI.progress(items.length ? done / items.length : 0, 'success');
-    ['before', 'luggage', 'during', 'custom'].forEach(function (sec) {
-      const lists = Object.values(s.checklists).filter((c) => c.section === sec).sort((a, b) => a.order - b.order);
+    const ui = (JT.uiState.checklist = JT.uiState.checklist || { filter: 'all', open: {} });
+    const pct = items.length ? Math.round((done / items.length) * 100) : 0, left = items.length - done;
+    let html = UI.header({ back: true, title: 'Checklist', actions: UI.iconBtn('plus', 'Nueva lista', { act: 'newChecklist' }) });
+    html += '<div class="card cl-hero stack-sm"><div class="row"><div class="cl-hero__pct mono">' + pct + '<small>%</small></div><div class="grow"><strong class="block">' +
+      (!items.length ? 'Sin elementos' : left ? (left === 1 ? 'Te falta 1 cosa' : 'Te faltan ' + left + ' cosas') : '¡Todo listo! 🎉') + '</strong><small class="muted">' + done + ' de ' + items.length + ' hechas</small></div></div>' +
+      UI.progress(items.length ? done / items.length : 0, 'success') + '</div>';
+    html += UI.filterChips([{ value: 'all', label: 'Todo' }, { value: 'pending', label: 'Pendientes (' + left + ')' }], ui.filter, 'clFilter', { scroll: false });
+    const onlyPending = ui.filter === 'pending';
+    const nm = C.nextMove ? C.nextMove(S.today().now.date) : null;
+    CL_ORDER.forEach(function (sec) {
+      const lists = Object.values(s.checklists).filter((c) => (CL_ORDER.indexOf(c.section) > -1 ? c.section : 'custom') === sec).sort((a, b) => a.order - b.order);
       if (!lists.length) return;
-      html += UI.section(D.CHECK_SECTION[sec][1] + ' ' + D.CHECK_SECTION[sec][0], lists.map(function (l) {
-        const its = items.filter((i) => i.checklistId === l.id).sort((a, b) => a.order - b.order);
-        return UI.card('<div class="row row--between"><strong>' + esc(l.title) + '</strong><span class="row"><small class="muted">' + its.filter((i) => i.done).length + '/' + its.length + '</small>' + UI.iconBtn('trash', 'Eliminar lista ' + l.title, { act: 'delChecklist', id: l.id }, { size: 18 }) + '</span></div>' +
-          its.map((i) => '<div class="check' + (i.done ? ' is-done' : '') + '"><button type="button" class="check__main" role="checkbox" aria-checked="' + i.done + '" data-act="toggleItem" data-id="' + i.id + '"><span class="check__box">' + (i.done ? U.icon('check', 14) : '') + '</span><span>' + esc(i.text) + '</span></button>' + UI.iconBtn('x', 'Quitar ' + i.text, { act: 'delItem', id: i.id }, { size: 16 }) + '</div>').join('') +
-          '<form class="row check__add" data-list="' + l.id + '"><input class="input" name="text" placeholder="Añadir elemento…" aria-label="Añadir elemento a ' + esc(l.title) + '"><button type="submit" class="iconbtn accent" aria-label="Añadir">' + U.icon('plus', 22) + '</button></form>', { cls: 'stack-sm' });
-      }).join(''));
+      const secItems = items.filter((i) => lists.some((l) => l.id === i.checklistId)), secDone = secItems.filter((i) => i.done).length;
+      const cards = lists.map(function (l) {
+        // Pendientes primero; lo hecho, al final.
+        const its = items.filter((i) => i.checklistId === l.id).sort((a, b) => (a.done - b.done) || (a.order - b.order));
+        const nDone = its.filter((i) => i.done).length, complete = its.length > 0 && nDone === its.length;
+        if (onlyPending && (complete || !its.length)) return '';
+        const head = '<span class="cl__emoji" aria-hidden="true">' + esc(l.emoji || D.CHECK_SECTION[sec][1]) + '</span><span class="grow cl__titles"><strong class="cl__title">' + esc(l.title) + '</strong>' +
+          '<span class="cl__bar"><span style="width:' + (its.length ? (nDone / its.length) * 100 : 0) + '%"></span></span></span>' +
+          (complete ? UI.pill('Completa', 'success', 'check') : '<span class="cl__count mono">' + nDone + '/' + its.length + '</span>');
+        // Cambio de ciudad: cuál toca, cuándo y cuántos llevas.
+        const move = sec === 'move' && nm ? '<div class="cl__move">' + (nm.move
+          ? '<span class="cl__move-n mono">' + (nm.index + 1) + '<small>/' + nm.total + '</small></span><span class="grow"><strong class="block">' + esc(nm.move.from.name) + ' → ' + esc(nm.move.to.name) + '</strong><small class="muted">Llegas ' + esc(C.moveWhen(nm.days)) + ' · ' + esc(U.fmtDay(nm.move.date)) + '</small></span>'
+          : '<span class="grow muted small">' + (nm.total ? 'Ya no quedan cambios de ciudad.' : 'Asigna ciudades a los días del itinerario para ver aquí cada cambio.') + '</span>') + '</div>' +
+          '<small class="faint">Se desmarca sola al día siguiente de llegar a cada ciudad, lista para el siguiente cambio.</small>' : '';
+        const rows = its.filter((i) => !(onlyPending && i.done)).map((i) => '<div class="check cl__item' + (i.done ? ' is-done' : '') + '"><button type="button" class="check__main" role="checkbox" aria-checked="' + i.done + '" data-act="toggleItem" data-id="' + i.id + '"><span class="check__box">' + (i.done ? U.icon('check', 16) : '') + '</span><span>' + esc(i.text) + '</span></button>' + UI.iconBtn('x', 'Quitar ' + i.text, { act: 'delItem', id: i.id }, { size: 16 }) + '</div>').join('');
+        const body = move + '<div class="cl__items">' + rows + '</div>' +
+          '<form class="row check__add" data-list="' + l.id + '"><input class="input" name="text" placeholder="Añadir a «' + esc(l.title) + '»…" aria-label="Añadir elemento a ' + esc(l.title) + '"><button type="submit" class="iconbtn accent" aria-label="Añadir">' + U.icon('plus', 22) + '</button></form>' +
+          '<div class="row row--end row--wrap">' + (nDone ? UI.btn('Desmarcar todo', { icon: 'refresh', size: 'sm', variant: 'ghost', data: { act: 'clReset', id: l.id } }) : '') +
+            UI.btn('Editar', { icon: 'edit', size: 'sm', variant: 'ghost', data: { act: 'editChecklist', id: l.id } }) + UI.btn('Eliminar', { icon: 'trash', size: 'sm', variant: 'ghost', data: { act: 'delChecklist', id: l.id } }) + '</div>';
+        // Las listas completas se pliegan (se abren al tocarlas); las demás, siempre abiertas.
+        if (complete) return '<details class="card cl tone-' + CL_TONE[sec] + ' is-complete" data-cl="' + l.id + '"' + (ui.open[l.id] ? ' open' : '') + '><summary class="cl__head">' + head + U.icon('down', 18) + '</summary>' + body + '</details>';
+        return '<div class="card cl tone-' + CL_TONE[sec] + '"><div class="cl__head">' + head + '</div>' + body + '</div>';
+      }).join('');
+      if (cards) html += '<section class="section"><h2 class="cl-sec tone-' + CL_TONE[sec] + '"><span aria-hidden="true">' + D.CHECK_SECTION[sec][1] + '</span><span class="grow">' + esc(D.CHECK_SECTION[sec][0]) + '</span><small class="mono">' + secDone + '/' + secItems.length + '</small></h2>' + cards + '</section>';
     });
+    if (onlyPending && !left && items.length) html += UI.empty('🎉', 'Nada pendiente', 'Lo tienes todo hecho.');
     return { html: html + UI.btn('Nueva checklist', { icon: 'plus', variant: 'secondary', block: true, data: { act: 'newChecklist' } }),
       mount: function (root) {
+        root.querySelectorAll('details[data-cl]').forEach((d) => d.addEventListener('toggle', () => { JT.uiState.checklist.open[d.dataset.cl] = d.open; }));
         root.querySelectorAll('.check__add').forEach((f) => f.addEventListener('submit', function (ev) {
           ev.preventDefault();
           const t = f.querySelector('input').value.trim();
@@ -470,14 +505,37 @@
         }));
       } };
   };
+  A.clFilter = (el) => { JT.uiState.checklist.filter = el.dataset.value; JT.app.render(); };
   A.toggleItem = (el) => { const i = S.get().checklistItems[el.dataset.id]; S.update('checklistItems', i.id, { done: !i.done }); };
   A.delItem = (el) => S.remove('checklistItems', el.dataset.id);
   A.delChecklist = async (el) => { const l = S.get().checklists[el.dataset.id]; if (await UI.confirm('¿Eliminar «' + l.title + '»?', 'Se borrarán sus elementos.')) S.remove('checklists', l.id); };
-  A.newChecklist = () => formSheet({
-    id: 'fCl', title: 'Nueva checklist', saveLabel: 'Crear',
-    body: UI.field('Nombre', UI.input('title', '', { placeholder: 'p.ej. Onsen', autofocus: true })) + UI.chips('section', D.options(D.CHECK_SECTION), 'custom'),
-    onSave: (f) => { if (!f.title) return 'Escribe un nombre'; S.create('checklists', { title: f.title, section: f.section, order: Object.keys(S.get().checklists).length }); }
-  });
+  A.clReset = async function (el) {
+    const l = S.get().checklists[el.dataset.id];
+    if (!l || !(await UI.confirm('¿Desmarcar «' + l.title + '»?', 'Todos sus elementos quedarán sin marcar.', { ok: 'Desmarcar', danger: false }))) return;
+    Object.values(S.get().checklistItems).forEach((i) => { if (i.checklistId === l.id && i.done) { i.done = false; i.updatedAt = Date.now(); } });
+    S.update('checklists', l.id, {});
+  };
+
+  /** Nueva lista o editar una: nombre, emoji (de la lista o el que quieras) y apartado. */
+  function checklistForm(id) {
+    const l = id ? S.get().checklists[id] : null, sec = l ? l.section : 'custom', cur = l ? l.emoji || '' : '';
+    const known = CL_EMOJIS.indexOf(cur) > -1;
+    formSheet({
+      id: 'fCl', title: l ? 'Editar lista' : 'Nueva checklist', saveLabel: l ? 'Guardar' : 'Crear',
+      body: UI.field('Nombre', UI.input('title', l ? l.title : '', { placeholder: 'p.ej. Onsen ♨️', autofocus: !l })) +
+        UI.field('Emoji', '<div class="chips emoji-pick">' + CL_EMOJIS.map((e) => '<label class="chip"><input type="radio" name="emoji" value="' + e + '"' + (cur === e ? ' checked' : '') + '><span>' + e + '</span></label>').join('') + '</div>') +
+        UI.field('U otro emoji', UI.input('emojiOther', known ? '' : cur, { placeholder: 'Escribe o pega uno 🙂' }), { optional: true, hint: 'También puedes poner emojis en el nombre y en cada elemento con el teclado del móvil.' }) +
+        UI.field('Apartado', UI.chips('section', D.options(D.CHECK_SECTION), sec), { hint: '«Cada cambio de ciudad» se desmarca sola tras cada llegada.' }),
+      onSave: function (f) {
+        if (!f.title) return 'Escribe un nombre';
+        const emoji = (f.emojiOther || '').trim().slice(0, 8) || f.emoji || undefined;
+        if (l) S.update('checklists', l.id, { title: f.title, emoji: emoji, section: f.section });
+        else S.create('checklists', { title: f.title, emoji: emoji, section: f.section, order: Object.keys(S.get().checklists).length });
+      }
+    });
+  }
+  A.newChecklist = () => checklistForm();
+  A.editChecklist = (el) => checklistForm(el.dataset.id);
 
   /* ══ REGALOS ═════════════════════════════════════════════════
      Para quién, qué idea, dónde comprarlo y si ya está comprado.
@@ -1155,7 +1213,7 @@
       }
       case 'Cambio de moneda': {
         const yen = rates ? U.convert(1, t.mainCurrency === 'JPY' ? 'EUR' : t.mainCurrency, 'JPY', rates) : null;
-        return ({ down1: 'Yen a la baja −1', down2: 'Yen a la baja −2', exact: 'Yen exacto' }[st.yenRounding] || 'Yen a la baja −1') + (yen ? ' · 1 ' + (t.mainCurrency === 'JPY' ? 'EUR' : t.mainCurrency) + ' = ' + U.money(yen, 'JPY') + (rates.date ? ' (BCE ' + U.fmtShort(rates.date) + ')' : '') : ' · sin tipo de cambio');
+        return (st.moneyView === 'eur' ? 'Importes en € · ' : '') + ({ down1: 'Yen a la baja −1', down2: 'Yen a la baja −2', exact: 'Yen exacto' }[st.yenRounding] || 'Yen a la baja −1') + (yen ? ' · 1 ' + (t.mainCurrency === 'JPY' ? 'EUR' : t.mainCurrency) + ' = ' + U.money(yen, 'JPY') + (rates.date ? ' (BCE ' + U.fmtShort(rates.date) + ')' : '') : ' · sin tipo de cambio');
       }
       case 'Tus tipos': {
         const ct = s.customTypes || {}, all = TYPE_KINDS.reduce((a, k) => a.concat(Object.values(ct[k[0]] || {})), []);
@@ -1253,13 +1311,20 @@
 
     // Sólo lo que se usa: el redondeo del yen. Recordatorios y APIs se quitaron en la v1.6.0 (no se usaban).
     const manualSet = Object.keys(st.manualRates || {}).length > 0;
-    html += fold('Cambio de moneda', UI.card('<span class="field__label">Redondeo del yen</span>' +
+    html += fold('Cambio de moneda', UI.card('<span class="field__label">Cómo ver los importes</span>' +
+      seg('setMoneyView', st.moneyView === 'eur' ? 'eur' : 'jpy', [['jpy', '¥ grande · € pequeño'], ['eur', '€ grande · ¥ pequeño']]) +
+      '<small class="muted">También puedes cambiarlo tocando cualquier importe (fuera de botones) o con ⇄ en Gastos. En los formularios siempre se escribe en yenes.</small>' +
+      '<span class="field__label">Redondeo del yen</span>' +
       UI.filterChips([{ value: 'down1', label: 'A la baja −1 ¥' }, { value: 'down2', label: 'A la baja −2 ¥' }, { value: 'exact', label: 'Exacto' }], st.yenRounding, 'setYenRounding', { scroll: false }) +
       '<small class="muted">Así cuentas menos yenes por euro, como al pagar con tarjeta o cambiar dinero: lo que gastas en yenes se ve un poco más caro en euros, más cerca de lo que te cobran.</small>' +
       '<small class="muted">' + esc(yenRoundingExample(rates, t.mainCurrency)) + '</small>' +
+      // Tu tipo real, con los cambios y cajeros en los que apuntaste lo que te costó en euros (Cartera → Efectivo).
+      (C.realRate && C.realRate() ? '<div class="banner banner--neutral">' + U.icon('swap', 20) + '<div class="banner__text"><strong>Tu tipo real: 1 € = ' + C.realRate().rate.toFixed(1).replace('.', ',') + ' ¥</strong><span>' +
+        'Media de ' + C.realRate().n + (C.realRate().n === 1 ? ' cambio' : ' cambios') + ' o cajeros' + esc(C.rateCompare()) + '.</span></div>' +
+        (manualSet ? '' : UI.btn('Usar el mío', { size: 'sm', variant: 'secondary', data: { act: 'useRealRate' } })) + '</div>' : '') +
       '<small class="faint">Tipo de referencia del BCE' + (rates && rates.date ? ' del ' + esc(rates.date) : '') + '. Se guarda para usarlo sin conexión.</small>' +
       '<div class="row row--wrap">' + (SV.online() ? UI.btn('Actualizar tipo de cambio', { size: 'sm', variant: 'ghost', icon: 'refresh', data: { act: 'refreshRates' } }) : '') +
-        (manualSet ? UI.btn('Quitar tipos manuales antiguos', { size: 'sm', variant: 'ghost', data: { act: 'clearManualRates' } }) : '') + '</div>', { cls: 'stack-sm' }));
+        (manualSet ? UI.btn('Volver al tipo del BCE', { size: 'sm', variant: 'ghost', data: { act: 'clearManualRates' } }) : '') + '</div>', { cls: 'stack-sm' }));
 
     // Tus tipos propios: se crean al elegir un tipo («Crear «…»») o aquí; al borrar uno, lo que lo usaba pasa a «Otro».
     const ct = s.customTypes || {};
@@ -1429,9 +1494,19 @@
   A.setUnits = (el) => S.setSettings({ units: el.dataset.value });
   A.setTravel = (el) => S.setSettings({ travelMode: el.dataset.value });
   A.setHomeViews = (el) => S.setSettings({ homeViews: el.dataset.value });
+  A.setMoneyView = (el) => S.setSettings({ moneyView: el.dataset.value });
   A.clearSim = () => S.setSettings({ simulatedDate: '', simulatedTime: '' });
   A.setLead = (el) => S.setSettings({ notifyLeadMinutes: Number(el.dataset.value) });
   A.clearManualRates = () => { S.setSettings({ manualRates: {} }); UI.toast('Se usa el tipo del BCE'); };
+  /** Usa tu tipo real (cambios y cajeros) como tipo manual del yen; «Quitar tipos manuales» vuelve al BCE. */
+  A.useRealRate = function () {
+    const r = C.realRate && C.realRate(), base = S.get().trip.mainCurrency;
+    if (!r) return;
+    const manual = base === 'JPY' ? { EUR: Math.round(r.rate * 100) / 100 } : base === 'EUR' ? { JPY: 1 / r.rate } : null;
+    if (!manual) return UI.toast('Sólo con euros o yenes como moneda principal');
+    S.setSettings({ manualRates: manual });
+    UI.toast('Usando tu tipo real: 1 € = ' + r.rate.toFixed(1).replace('.', ',') + ' ¥');
+  };
   A.setNotif = async function (el) {
     if (el.dataset.value === 'on' && SV.notificationsSupported()) await SV.requestNotifications();
     S.setSettings({ notificationsEnabled: el.dataset.value === 'on' });

@@ -58,7 +58,10 @@ JT.data = (function () {
   };
   const PRIORITY = { high: ['Alta', '🔴'], medium: ['Media', '🟡'], low: ['Baja', '⚪'] };
   const NOTE_SCOPE = { general: ['General', '🗒️'], city: ['Ciudad', '🏙️'], day: ['Día', '📅'], place: ['Lugar', '📍'], restaurant: ['Restaurante', '🍜'] };
-  const CHECK_SECTION = { before: ['Antes del viaje', '🧳'], luggage: ['Maleta', '🎒'], during: ['Durante el viaje', '🗾'], custom: ['Personalizadas', '✅'] };
+  const CHECK_SECTION = { before: ['Antes del viaje', '🧳'], luggage: ['Maleta', '🎒'], move: ['Cada cambio de ciudad', '🚄'], during: ['Durante el viaje', '🗾'], custom: ['Personalizadas', '✅'] };
+  /** Lista que se desmarca sola en cada cambio de ciudad (sección «move»). */
+  const MOVE_CHECKLIST = ['Cambio de ciudad', 'move', ['Hacer la maleta', 'Cargadores y power bank', 'Revisar la habitación (armario, caja fuerte, enchufes)', 'Check-out y devolver la llave',
+    'Billete del tren a mano', 'Recargar la Suica o sacar efectivo', 'Dirección del siguiente alojamiento en japonés', 'Algo de comer o beber para el viaje']];
   const DOC_KIND = {
     flight: ['Vuelo', '✈️'], hotel: ['Hotel', '🏨'], insurance: ['Seguro', '🛡️'], emergency: ['Emergencia', '🆘'],
     ticket: ['Billete', '🎫'], id: ['Identificación', '🪪'], other: ['Otro', '📄']
@@ -329,13 +332,14 @@ JT.data = (function () {
   const CHECKLISTS = [
     ['Antes del viaje', 'before', ['Pasaporte (vigente)', 'Seguro de viaje', 'Adaptador de enchufe (tipo A)', 'Reservas confirmadas', 'JR Pass / transporte', 'eSIM o wifi de bolsillo', 'Dinero en efectivo / tarjeta sin comisiones', 'Medicamentos', 'Copias de documentos']],
     ['Maleta', 'luggage', ['Ropa', 'Zapatillas cómodas', 'Cargadores', 'Power bank', 'Neceser', 'Cámara']],
+    MOVE_CHECKLIST,
     ['Durante el viaje', 'during', ['Recargar tarjeta IC', 'Comprobar último tren', 'Hacer check-in online del vuelo de vuelta']]
   ];
 
   function emptyCollections() {
     return {
       travelers: {}, cities: {}, days: {}, activities: {}, places: {}, restaurants: {}, expenses: {}, notes: {},
-      reservations: {}, transports: {}, checklists: {}, checklistItems: {}, infoArticles: {}, phrases: {}, docs: {}, gifts: {}, foods: {}, suicaMoves: {}
+      reservations: {}, transports: {}, checklists: {}, checklistItems: {}, infoArticles: {}, phrases: {}, docs: {}, gifts: {}, foods: {}, suicaMoves: {}, cashMoves: {}, quickExpenses: {}, lockers: {}
     };
   }
 
@@ -621,6 +625,6 @@ JT.data = (function () {
 
   return {
     ACTIVITY, PLACE, VISIT_MIN, CUISINE, PRICE, EXPENSE, PAYMENT, RESERVATION, LODGING, isLodging, TRANSPORT, MODE, PRIORITY, NOTE_SCOPE,
-    CHECK_SECTION, DOC_KIND, CURRENCIES, DEFAULT_SETTINGS, PHRASES, PHRASE_FIXES, FOODS, ALLERGENS, EMERGENCY_NUMBERS, MOOD, emptyCollections, baseContent, sampleTrip, options
+    CHECK_SECTION, MOVE_CHECKLIST, DOC_KIND, CURRENCIES, DEFAULT_SETTINGS, PHRASES, PHRASE_FIXES, FOODS, ALLERGENS, EMERGENCY_NUMBERS, MOOD, emptyCollections, baseContent, sampleTrip, options
   };
 })();

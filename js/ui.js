@@ -77,7 +77,7 @@ JT.ui = (function () {
   function bars(data, color) {
     const max = Math.max.apply(null, [1].concat(data.map((d) => d.value)));
     return '<div class="bars">' + data.map((d) =>
-      '<div class="bars__row" aria-label="' + esc(d.label + ': ' + d.display) + '"><div class="bars__hdr"><span>' + (d.emoji ? d.emoji + '  ' : '') + esc(d.label) + '</span><strong class="mono">' + esc(d.display) + '</strong></div>' +
+      '<div class="bars__row' + (d.data ? ' bars__row--tap' : '') + '"' + dataAttrs(d.data) + (d.data ? ' role="button" tabindex="0"' : '') + ' aria-label="' + esc(d.label + ': ' + d.display) + '"><div class="bars__hdr"><span>' + (d.emoji ? d.emoji + '  ' : '') + esc(d.label) + '</span><strong class="mono">' + esc(d.display) + '</strong></div>' +
       '<div class="bars__track"><div class="bars__fill" style="width:' + (d.value / max) * 100 + '%;' + (d.color || color ? 'background:' + (d.color || color) : '') + '"></div></div></div>').join('') + '</div>';
   }
 
@@ -201,6 +201,7 @@ JT.ui = (function () {
     if (x) x.addEventListener('click', close);
     sheetStack.push(close);
     requestAnimationFrame(() => root.classList.add('is-open'));
+    try { if (JT.cards && JT.cards.addEur) JT.cards.addEur(root.querySelector('.sheet__body')); } catch (e) { /* sin tipo de cambio */ }
     if (o.onMount) o.onMount(root.querySelector('.sheet'), close);
     const af = root.querySelector('[autofocus]');
     setTimeout(() => (af ? af.focus() : root.querySelector('.sheet').focus && root.querySelector('.sheet').setAttribute('tabindex', '-1')), 60);
@@ -251,13 +252,20 @@ JT.ui = (function () {
   /* ── Toast ────────────────────────────────────────────────── */
 
   let toastTimer;
-  function toast(msg) {
+  /** Aviso breve. Con o = { label, run } añade un botón (p.ej. «Deshacer») y dura un poco más. */
+  function toast(msg, o) {
     let el = document.getElementById('toast');
     if (!el) { el = document.createElement('div'); el.id = 'toast'; el.className = 'toast'; el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite'); document.body.appendChild(el); }
     el.textContent = msg;
+    if (o && o.label) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'toast__btn'; b.textContent = o.label;
+      b.addEventListener('click', function () { el.classList.remove('is-on'); o.run(); });
+      el.appendChild(b);
+    }
     el.classList.add('is-on');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => el.classList.remove('is-on'), 2200);
+    toastTimer = setTimeout(() => el.classList.remove('is-on'), o && o.label ? 5000 : 2200);
   }
 
   return {

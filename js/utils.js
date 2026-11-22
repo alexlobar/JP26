@@ -11,8 +11,8 @@ JT.utils = (function () {
 
   /* Tiene que coincidir con CACHE en sw.js y con data-build en index.html.
      BUILD_DATE es la fecha de esta versión (se ve en Ajustes → Esta instalación). */
-  const VERSION = '1.15.0';
-  const BUILD_DATE = '2026-11-21';
+  const VERSION = '1.19.0';
+  const BUILD_DATE = '2026-11-23';
 
   /* ── Texto y DOM ──────────────────────────────────────────── */
 
@@ -303,6 +303,8 @@ JT.utils = (function () {
   /* ── Iconos (SVG en línea, trazo de 2px) ──────────────────── */
 
   const ICONS = {
+    card: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/>',
+    cash: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 10v4M18 10v4"/>',
     home: '<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>',
     calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
     map: '<path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/>',

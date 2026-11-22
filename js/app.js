@@ -80,6 +80,8 @@ JT.app = (function () {
       setTimeout(() => main.classList.remove(cls), 300);
     }
     if (res.mount) res.mount(main);
+    // Euros en pequeño junto a cada importe en yenes.
+    try { if (JT.cards.addEur) JT.cards.addEur(main); } catch (e) { console.error(e); }
     // Que el filtro elegido quede a la vista en las filas de chips desplazables.
     main.querySelectorAll('.chips--scroll .is-on').forEach(function (c) {
       const row = c.parentElement;

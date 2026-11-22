@@ -266,7 +266,8 @@ details.more > .stack { margin-top: 12px; }
   background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 99px; font-size: 13px; font-weight: 600;
   opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; max-width: calc(100% - 32px); text-align: center;
 }
-.toast.is-on { opacity: 1; transform: translate(-50%, 0); }
+.toast.is-on { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.toast__btn { margin-left: 10px; border: 0; background: transparent; color: var(--bg); font: inherit; font-weight: 800; text-decoration: underline; cursor: pointer; padding: 2px 4px; }
 
 /* ── 10. Componentes de dominio ────────────────────────────── */
 .seg { display: flex; padding: 3px; background: var(--surface-2); border-radius: var(--r-md); }
@@ -507,6 +508,112 @@ body[data-view="learn"] .fab { display: none; }
 .sum__moods span { width: 28px; text-align: center; color: var(--faint); }
 .sum__chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip--static { display: inline-flex; padding: 6px 10px; border-radius: 99px; background: var(--surface); border: 1px solid var(--border); font-size: 13px; font-weight: 600; }
+/* Checklist más visible (v1.16.0) */
+.row--end { justify-content: flex-end; }
+.cl-hero__pct { font-size: 44px; font-weight: 800; line-height: 1; color: var(--success); min-width: 92px; }
+.cl-hero__pct small { font-size: 20px; margin-left: 2px; }
+.cl { display: block; border-left: 5px solid var(--c); padding-top: 12px; padding-bottom: 8px; }
+.cl + .cl { margin-top: 10px; }
+.cl__head { display: flex; align-items: center; gap: 12px; list-style: none; cursor: default; }
+.cl__head::-webkit-details-marker { display: none; }
+details.cl > summary { cursor: pointer; }
+details.cl > summary > svg:last-child { transition: transform .2s; color: var(--muted); }
+details.cl[open] > summary > svg:last-child { transform: rotate(180deg); }
+details.cl[open] > summary { margin-bottom: 8px; }
+.cl__emoji { width: 42px; height: 42px; border-radius: 12px; background: var(--c-soft); display: flex; align-items: center; justify-content: center; font-size: 22px; flex: none; }
+.cl__head strong { font-size: 17px; }
+.cl__bar { display: block; height: 6px; border-radius: 6px; background: var(--surface-2); overflow: hidden; margin-top: 6px; }
+.cl__bar span { display: block; height: 100%; background: var(--c); border-radius: 6px; transition: width .25s; }
+.cl__count { font-weight: 800; font-size: 15px; color: var(--c); background: var(--c-soft); padding: 4px 10px; border-radius: 99px; flex: none; }
+.cl.is-complete { border-left-color: var(--success); }
+.cl.is-complete .cl__bar span { background: var(--success); }
+.cl__items { margin-top: 8px; }
+.cl__item { border-top: 1px solid var(--border); }
+.cl__item .check__main { padding: 13px 0; gap: 14px; font-size: 16px; color: inherit; }
+.cl__item .check__box { width: 28px; height: 28px; border-radius: 8px; border-color: var(--c); }
+.cl__item:not(.is-done) .check__main > span:last-child { font-weight: 600; }
+.cl__item.is-done .check__box { background: var(--success); border-color: var(--success); }
+.cl .check__add { margin-top: 8px; }
+.cl .row--end { margin-top: 2px; }
+/* Euros en pequeño junto a los yenes (v1.18.0): se lee, pero no se ve a primera vista */
+.eur { font-size: 11px; font-weight: 500; color: var(--faint); margin-left: 4px; white-space: nowrap; font-family: inherit; letter-spacing: 0; text-transform: none; }
+strong > .eur, b > .eur, .stat__value > .eur, .wcard__bal > .eur, .exp__amount .eur, .qexp__a > .eur, h1 > .eur, h2 > .eur, .display > .eur { display: block; margin-left: 0; margin-top: 1px; }
+.stat__value > .eur { font-size: 11.5px; }
+.wcard .eur { color: rgba(255, 255, 255, .78); font-size: 12px; font-weight: 600; }
+.accent > .eur, .success > .eur, .warn > .eur { color: var(--faint); }
+.suica__row .grow small.block { white-space: normal; }
+.amt, .eur { cursor: pointer; }
+/* Días que quedan en la ciudad, bajo la franja (v1.19.0) */
+.strip__left { display: block; margin-top: 8px; font-size: 13px; font-weight: 500; color: var(--muted); text-align: left; line-height: 1.35; }
+.strip__left b { color: var(--text); font-weight: 700; }
+.strip__left.is-last { color: var(--warn); }
+/* Gastos frecuentes (v1.18.0) */
+.qexp { display: flex; flex-direction: column; gap: 8px; }
+.qexp__list { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.qexp__btn { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 6px; border-radius: 14px; border: 1px solid var(--border); background: var(--surface-2); color: inherit; font: inherit; cursor: pointer; min-width: 0; }
+.qexp__btn:active { transform: scale(.96); }
+.qexp__emoji { font-size: 24px; line-height: 1.1; }
+.qexp__t { font-size: 13px; font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qexp__a { font-size: 12px; color: var(--muted); text-align: center; }
+.qexp__row { cursor: default; }
+.qexp__row .qexp__emoji { font-size: 22px; width: 30px; text-align: center; }
+/* Taquillas (v1.18.0) */
+.locker__code { display: block; width: 100%; border: 2px dashed var(--c); border-radius: 14px; background: var(--c-soft); color: var(--text); font-size: 34px; font-weight: 800; letter-spacing: .12em; padding: 10px; text-align: center; cursor: pointer; }
+.locker.is-late { border-left-color: var(--accent); }
+.locker-add { margin: -4px 0 4px; text-align: center; }
+/* Bloques del Modo viaje plegables (v1.18.0) */
+.tb__toggle { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; padding: 4px 0; font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
+.tb__toggle svg { transition: transform .2s; }
+.tb.is-folded .tb__toggle svg { transform: rotate(-90deg); }
+.tb.is-folded > :not(.section__hdr) { display: none; }
+.tb.is-folded .section__hdr { opacity: .8; }
+/* Títulos de la checklist bien visibles, emojis y cambio de ciudad (v1.17.0) */
+.cl-sec { display: flex; align-items: center; gap: 10px; margin: 6px 2px 10px; font-size: 19px; font-weight: 800; color: var(--text); letter-spacing: 0; text-transform: none; }
+.cl-sec > span:first-child { font-size: 22px; }
+.cl-sec small { font-size: 13px; font-weight: 700; color: var(--c); background: var(--c-soft); padding: 3px 9px; border-radius: 99px; }
+.cl__titles { min-width: 0; }
+.cl__title { display: block; font-size: 18px !important; font-weight: 800; line-height: 1.25; color: var(--text); overflow-wrap: anywhere; }
+.cl__move { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: var(--c-soft); }
+.cl__move-n { font-size: 26px; font-weight: 800; color: var(--c); line-height: 1; min-width: 44px; }
+.cl__move-n small { font-size: 14px; color: var(--muted); }
+.cl__move + .faint { display: block; margin-top: 6px; }
+.movec .eyebrow { display: block; }
+.emoji-pick { gap: 6px; }
+.emoji-pick .chip span { font-size: 22px; padding: 4px 6px; }
+/* Cartera con aspecto de tarjeta (v1.17.0) */
+.wallets { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.wallets--one { grid-template-columns: minmax(0, 300px); justify-content: center; }
+.wcard { position: relative; display: flex; flex-direction: column; justify-content: space-between; gap: 6px; min-height: 108px; padding: 12px 14px; border-radius: 16px; border: 0; text-align: left; color: #fff; font: inherit; cursor: pointer; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,.18); min-width: 0; }
+.wcard--ic { background: linear-gradient(135deg, #1E9E6A 0%, #16805A 55%, #0F6447 100%); }
+.wcard--cash { background: linear-gradient(135deg, #C99A3A 0%, #A87A22 60%, #8A6318 100%); }
+.wcard--ic::after, .wcard--cash::after { content: ""; position: absolute; right: -30px; bottom: -40px; width: 120px; height: 120px; border-radius: 50%; background: rgba(255,255,255,.10); pointer-events: none; }
+.wcard__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.wcard__name { font-size: 12px; font-weight: 700; letter-spacing: .02em; opacity: .95; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wcard__chip { width: 26px; height: 19px; border-radius: 4px; background: linear-gradient(135deg, #F3D98B, #C9A54A); box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); flex: none; }
+.wcard__yen { width: 26px; height: 26px; border-radius: 50%; border: 2px solid rgba(255,255,255,.75); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex: none; }
+.wcard__bal { font-size: 24px; font-weight: 800; line-height: 1.1; position: relative; z-index: 1; }
+.wcard__sub { font-size: 11.5px; opacity: .9; position: relative; z-index: 1; }
+.wcard--add { align-items: center; justify-content: center; text-align: center; color: var(--muted); background: transparent; border: 2px dashed var(--border); box-shadow: none; }
+.wcard--add strong { color: var(--text); }
+.wcard--add small { font-size: 12px; }
+.wcard:active { transform: scale(.98); }
+/* Accesos rápidos de 5 */
+.quick--5 { grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.quick--5 .quick__btn { padding: 10px 2px; }
+.quick--5 .quick__icon { width: 34px; height: 34px; }
+.quick--5 .quick__btn small { font-size: 11px; }
+/* Últimos gastos de hoy */
+.mini-exps { display: flex; flex-direction: column; gap: 2px; border-top: 1px solid var(--border); padding-top: 8px; }
+.mini-exp { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.mini-exp .grow { min-width: 0; }
+.mini-exp__t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.mini-exp__emoji { width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex: none; background: color-mix(in srgb, var(--cc) 18%, transparent); }
+/* Categorías y formas de pago tocables */
+.bars__row--tap { cursor: pointer; border-radius: 8px; margin: -4px -6px; padding: 4px 6px; }
+.bars__row--tap:active { background: var(--surface-2); }
+.catstack span[data-act] { cursor: pointer; }
+.catlegend__item { display: inline-flex; align-items: center; gap: 5px; border: 0; background: transparent; padding: 3px 0; font: inherit; color: inherit; cursor: pointer; }
+.filter-on { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin-bottom: 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); }
 /* Saldo de la Suica (v1.15.0) */
 .suica { border-left: 4px solid var(--t-green); }
 .suica__bal { font-size: 26px; font-weight: 800; line-height: 1.1; }
