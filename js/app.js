@@ -16,14 +16,14 @@ JT.app = (function () {
     [/^activity\/([\w-]+)$/, 'activity', 'itinerary'], [/^planner$/, 'planner', 'itinerary'],
     // Sitios = lugares para visitar + restaurantes, en una sola pestaña.
     [/^sites$/, 'sites', 'sites'], [/^places$/, 'places', 'sites'], [/^place\/([\w-]+)$/, 'place', 'sites'],
-    [/^food$/, 'food', 'sites'], [/^dishes$/, 'dishes', 'sites'], [/^restaurant\/([\w-]+)$/, 'restaurant', 'sites'],
+    [/^food$/, 'food', 'sites'], [/^dishes$/, 'dishes', 'sites'], [/^stamps$/, 'stamps', 'sites'], [/^restaurant\/([\w-]+)$/, 'restaurant', 'sites'],
     // Sin pestaña «Más»: Planificar está en el Itinerario e Importar en Sitios y en el botón (+). #/more antiguo → Inicio.
     [/^expenses$/, 'expenses', 'expenses'], [/^import$/, 'import', 'sites'], [/^emergency$/, 'emergency', 'home'],
     // Se abren desde Inicio («Tu viaje» y los iconos de arriba): la pestaña marcada es Inicio.
     [/^cities$/, 'cities', 'home'], [/^city\/([\w-]+)$/, 'city', 'home'], [/^reservations$/, 'reservations', 'home'], [/^reservation\/([\w-]+)$/, 'reservation', 'home'],
     [/^transport$/, 'transport', 'home'], [/^notes$/, 'notes', 'home'], [/^checklist$/, 'checklist', 'home'], [/^info$/, 'info', 'home'],
     [/^phrases$/, 'phrases', 'home'], [/^documents$/, 'documents', 'home'], [/^search$/, 'search', 'home'], [/^settings$/, 'settings', 'home'],
-    [/^ready$/, 'ready', 'home'], [/^diary$/, 'diary', 'home'], [/^gifts$/, 'gifts', 'home'], [/^learn$/, 'learn', 'home'], [/^summary$/, 'summary', 'home']
+    [/^ready$/, 'ready', 'home'], [/^diary$/, 'diary', 'home'], [/^gifts$/, 'gifts', 'home'], [/^learn$/, 'learn', 'home'], [/^summary$/, 'summary', 'home'], [/^book$/, 'book', 'home']
   ];
 
   let main, lastPath = null, pending = false;
@@ -359,6 +359,9 @@ JT.app = (function () {
     S.load();
     applyTheme();
     S.subscribe(function () { applyTheme(); scheduleRender(); });
+    // Red de seguridad: ningún formulario se envía «a la antigua» (recargaría la página y pondría los datos en la URL).
+    // Cada formulario tiene su propio manejador, que sigue funcionando igual.
+    document.addEventListener('submit', (ev) => ev.preventDefault(), true);
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
     window.addEventListener('hashchange', () => render());
     // Punto «sin conexión» junto al título: lo que ves es lo guardado en el móvil.

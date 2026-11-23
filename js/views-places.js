@@ -45,16 +45,18 @@
   }
   A.sitesLayout = (el) => { JT.uiState.sites.layout = el.dataset.value; JT.app.render(); };
 
-  V.sites = (p, q) => (JT.uiState.sites.kind === 'food' ? V.food : JT.uiState.sites.kind === 'dishes' ? V.dishes : V.places)(p, q);
+  V.sites = (p, q) => ({ food: V.food, dishes: V.dishes, stamps: V.stamps }[JT.uiState.sites.kind] || V.places)(p, q);
 
   function sitesHeader(kind) {
     const s = S.get();
     JT.uiState.sites.kind = kind;
     const foods = Object.values(s.foods), tried = foods.filter((f) => f.tried).length;
-    const tabs = [['visit', 'places', '📍 Visitar', Object.keys(s.places).length], ['food', 'food', '🍜 Comer', Object.keys(s.restaurants).length], ['dishes', 'dishes', '🍱 Probar', tried + '/' + foods.length]];
-    const seg = '<div class="seg" role="tablist">' + tabs.map((t) => '<button type="button" role="tab" class="seg__item' + (t[0] === kind ? ' is-on' : '') + '" aria-selected="' + (t[0] === kind) + '" data-act="go" data-to="' + t[1] + '">' + t[2] + ' · ' + t[3] + '</button>').join('') + '</div>';
+    const tabs = [['visit', 'places', '📍 Visitar', Object.keys(s.places).length], ['food', 'food', '🍜 Comer', Object.keys(s.restaurants).length], ['dishes', 'dishes', '🍱 Probar', tried + '/' + foods.length], ['stamps', 'stamps', '🔖 Sellos', Object.keys(s.stamps || {}).length]];
+    // Cuatro pestañas: el número va debajo, para que quepan en el móvil.
+    const seg = '<div class="seg seg--4" role="tablist">' + tabs.map((t) => '<button type="button" role="tab" class="seg__item' + (t[0] === kind ? ' is-on' : '') + '" aria-selected="' + (t[0] === kind) + '" data-act="go" data-to="' + t[1] + '">' + t[2] + '<small class="seg__n">' + t[3] + '</small></button>').join('') + '</div>';
     const add = kind === 'food' ? UI.iconBtn('plus', 'Nuevo restaurante', { act: 'newRestaurant', city: JT.uiState.food.city })
       : kind === 'dishes' ? UI.iconBtn('plus', 'Nueva comida', { act: 'newFood' })
+      : kind === 'stamps' ? UI.iconBtn('plus', 'Nuevo sello', { act: 'newStamp' })
       : UI.iconBtn('plus', 'Nuevo lugar', { act: 'newPlace', city: JT.uiState.places.city });
     return UI.header({ title: 'Sitios', subtitle: 'Qué ver y dónde comer', actions: UI.iconBtn('clipboard', 'Importar texto o enlace', { act: 'go', to: 'import' }) + add }) + C.sampleBanner() + seg;
   }
@@ -179,6 +181,54 @@
       : UI.empty('🍜', 'Nada por aquí', 'Guarda restaurantes que quieras probar o busca cerca de tu próxima actividad.', UI.btn('Añadir restaurante', { data: { act: 'newRestaurant', city: st.city } }));
     return { html: html };
   };
+
+  /* ── Sellos: la colección del viaje (estaciones, templos y santuarios, museos…) ── */
+  const STAMP_KIND = { eki: ['Estación', '🚉'], goshuin: ['Templo o santuario', '⛩️'], shop: ['Museo o tienda', '🏛️'], other: ['Otro', '🔖'] };
+  function stampCard(x) {
+    const k = STAMP_KIND[x.kind] || STAMP_KIND.other;
+    return '<button type="button" class="stamp" data-act="editStamp" data-id="' + x.id + '"><span class="stamp__seal" aria-hidden="true">' + k[1] + '</span>' +
+      '<span class="stamp__name">' + esc(x.name) + '</span><small class="muted">' + esc([k[0], x.date ? U.fmtShort(x.date) : ''].filter(Boolean).join(' · ')) + '</small>' +
+      (x.note ? '<small class="stamp__note">' + esc(x.note) + '</small>' : '') + '</button>';
+  }
+  V.stamps = function () {
+    const s = S.get(), all = Object.values(s.stamps || {}).sort((a, b) => (a.date || '').localeCompare(b.date || '') || a.createdAt - b.createdAt);
+    let html = sitesHeader('stamps');
+    if (!all.length) return { html: html + UI.empty('🔖', 'Tu colección de sellos', 'En muchas estaciones, templos, santuarios y museos hay sellos para coleccionar. Apunta cada uno: dónde, cuándo y de qué tipo, y ve cuántos llevas en cada ciudad.', UI.btn('Añadir sello', { data: { act: 'newStamp' } })) };
+    const byKind = {};
+    all.forEach((x) => { const k = STAMP_KIND[x.kind] ? x.kind : 'other'; byKind[k] = (byKind[k] || 0) + 1; });
+    html += UI.card('<div class="stamp-hero"><span class="stamp-hero__n mono">' + all.length + '</span><span class="grow"><strong class="block">' + (all.length === 1 ? 'sello' : 'sellos') + ' en tu colección</strong><small class="muted">' +
+      Object.keys(byKind).map((k) => STAMP_KIND[k][1] + ' ' + byKind[k]).join(' · ') + '</small></span>' + UI.btn('Añadir', { icon: 'plus', size: 'sm', data: { act: 'newStamp' } }) + '</div>');
+    return { html: html + C.byCityGroups(all, stampCard, 'stamps') };
+  };
+  F.stamp = function (id) {
+    const s = S.get(), ex = id ? (s.stamps || {})[id] : null, t = S.today();
+    const x = ex || { kind: 'eki', date: t.now.date, cityId: t.phase === 'during' && t.city ? t.city.id : undefined };
+    const close = UI.sheet({
+      title: ex ? 'Editar sello' : 'Nuevo sello',
+      body: '<form id="fStamp" class="stack" novalidate>' + UI.field('Dónde', UI.input('name', x.name || '', { placeholder: 'p.ej. Estación de Kanazawa, Kinkaku-ji…', autofocus: !ex })) +
+        UI.field('Tipo', UI.chips('kind', Object.keys(STAMP_KIND).map((k) => ({ value: k, label: STAMP_KIND[k][1] + ' ' + STAMP_KIND[k][0] })), x.kind)) +
+        UI.field('Fecha', UI.input('date', x.date || '', { type: 'date' })) +
+        UI.field('Ciudad', UI.chips('cityId', C.cityOptions(), x.cityId, { allowNone: true, noneLabel: '—' }), { optional: true }) +
+        UI.field('Nota', UI.input('note', x.note || '', { placeholder: 'p.ej. En la página 3 del cuaderno, costó 500 ¥' }), { optional: true }) +
+        '<p class="error" hidden></p></form>',
+      footer: '<div class="row">' + (ex ? UI.btn('Eliminar', { variant: 'danger', icon: 'trash', data: { del: '1' } }) : '') + UI.btn('Guardar', { type: 'submit', form: 'fStamp', block: true }) + '</div>',
+      onMount: function (root) {
+        const form = root.querySelector('#fStamp'), del = root.querySelector('[data-del]');
+        if (del) del.addEventListener('click', async () => { if (await UI.confirm('¿Eliminar el sello?', ex.name)) { S.remove('stamps', ex.id); close(); } });
+        form.addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          const f = UI.formData(form), err = form.querySelector('.error');
+          if (!f.name) { err.textContent = 'Escribe dónde lo conseguiste'; err.hidden = false; return; }
+          const data = { name: f.name, kind: f.kind || 'other', date: f.date || undefined, cityId: f.cityId || undefined, note: f.note || undefined };
+          if (ex) S.update('stamps', ex.id, data); else S.create('stamps', data);
+          close();
+          UI.toast(ex ? 'Sello guardado' : '🔖 ¡Sello nº ' + Object.keys(S.get().stamps).length + '!');
+        });
+      }
+    });
+  };
+  A.newStamp = () => F.stamp();
+  A.editStamp = (el) => F.stamp(el.dataset.id);
 
   /* ── Por probar: comidas típicas para ir tachando ──
      Al tacharla se guarda la fecha y la ciudad de ese día. Las de serie no se borran; las tuyas sí. */

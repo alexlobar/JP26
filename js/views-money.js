@@ -72,7 +72,7 @@
     let html = UI.card('<div class="stats">' + UI.stat('Total gastado', total.text, '', true) + (budget ? UI.stat('Restante', U.money(budget - total.total, main), Math.round((total.total / budget) * 100) + '% del presupuesto') : '') + '</div>' +
       (budget ? UI.progress(total.total / budget, total.total > budget ? 'accent' : 'info') : '') +
       '<div class="stats">' + UI.stat('Hoy', C.moneySum(list.filter((e) => e.date === t.now.date)).text) + UI.stat('Media diaria', U.money(avg, main), nDays ? nDays + ' días con gastos' : 'en el viaje') + '</div>' +
-      (total.extra ? '<small class="warn">Sin convertir: ' + esc(total.extra) + '</small>' : ''), { cls: 'stack' });
+      (total.extra ? '<small class="warn">Sin convertir: ' + esc(total.extra) + '</small>' : '') + forecast(list, total.total), { cls: 'stack' });
     html += ratesInfo(list);
     // Reparto de un vistazo (barra de colores) y, debajo, cada categoría con su color y su %.
     const catTotal = byCat.reduce((a, x) => a + x[1], 0);
@@ -85,12 +85,37 @@
       label: x[0] === 'none' ? 'Sin indicar' : (D.PAYMENT[x[0]] || ['Otro'])[0], emoji: x[0] === 'none' ? '·' : (D.PAYMENT[x[0]] || ['', '•'])[1], value: x[1],
       color: 'var(--t-' + (PAY_TONE[x[0]] || 'slate') + ')', display: U.money(x[1], main) + ' · ' + C.pctText(x[1], payTotal), data: { act: 'expFilter', k: 'paymentMethod', v: x[0] === 'none' ? '' : x[0] }
     })))));
+    // Por ciudad, con la media por día de estancia (para ver qué ciudad sale más cara).
+    const daysIn = {};
+    S.sortedDays().forEach((d) => { if (d.cityId) daysIn[d.cityId] = (daysIn[d.cityId] || 0) + 1; });
     html += UI.section('Por ciudad', UI.card(UI.bars(byCity.map(function (x) {
-      const c = s.cities[x[0]];
-      return { label: c ? c.name : 'Sin ciudad / antes del viaje', value: x[1], display: U.money(x[1], main) + (c && c.budget ? ' / ' + U.money(c.budget, main, true) : '') };
-    }), '#2F6F73')));
+      const c = s.cities[x[0]], nd = c ? daysIn[c.id] : 0;
+      return { label: (c ? c.name : 'Sin ciudad / antes del viaje') + (nd ? ' · ' + nd + (nd === 1 ? ' día' : ' días') : ''), value: x[1],
+        display: U.money(x[1], main) + (nd ? ' · ' + U.money(x[1] / nd, main) + '/día' : '') + (c && c.budget ? ' / ' + U.money(c.budget, main, true) : '') };
+    }), '#2F6F73')), '<small class="faint">con su media por día</small>');
     if (byDay.length) html += UI.section('Por día', UI.card(UI.bars(byDay.map((x) => ({ label: U.fmtDay(x[0]), value: x[1], display: U.money(x[1], main) })), '#B0893E')));
+    html += taxFreeSection(list);
     return html;
+  }
+
+  /** Durante el viaje: al ritmo de gasto de los días ya vividos, cuánto acabarás gastando (comparado con el presupuesto). */
+  function forecast(list, totalNow) {
+    const s = S.get(), t = S.today(), main = s.trip.mainCurrency;
+    if (t.phase !== 'during' || t.dayNumber < 2) return '';
+    const lived = list.filter((e) => e.date >= s.trip.startDate && e.date <= t.now.date);
+    const perDay = C.moneySum(lived).total / t.dayNumber, left = t.totalDays - t.dayNumber;
+    const end = totalNow + perDay * left, budget = s.trip.totalBudget;
+    return '<div class="forecast"><span class="grow"><small class="eyebrow muted block">PREVISIÓN AL ACABAR</small><strong class="forecast__v mono">' + U.money(end, main) + '</strong>' +
+      '<small class="muted block">Al ritmo de ' + U.money(perDay, main) + '/día durante los ' + left + (left === 1 ? ' día' : ' días') + ' que quedan</small></span>' +
+      (budget ? '<span class="pill pill--' + (end > budget ? 'accent' : 'success') + '">' + (end > budget ? 'Te pasarías ' + U.money(end - budget, main) : 'Te sobrarían ' + U.money(budget - end, main)) + '</span>' : '') + '</div>';
+  }
+
+  /** Compras marcadas como tax free, para tenerlas localizadas antes del vuelo. */
+  function taxFreeSection(list) {
+    const tf = list.filter((e) => e.taxFree).sort((a, b) => a.date.localeCompare(b.date));
+    if (!tf.length) return '';
+    return UI.section('Compras tax free · ' + tf.length, UI.card(tf.map((e) => '<button type="button" class="suica__row" data-act="editExpense" data-id="' + e.id + '"><span class="mono faint">' + U.fmtShort(e.date) + '</span><span class="grow">🛍️ ' + esc(e.description || (D.EXPENSE[e.category] || ['Compra'])[0]) + (e.placeName ? '<small class="muted block">' + esc(e.placeName) + '</small>' : '') + '</span><strong class="mono">' + U.money(e.amount, e.currency) + '</strong></button>').join('') +
+      '<div class="row row--between tf__total"><strong>Total</strong><strong class="mono">' + C.moneySum(tf).text + '</strong></div>', { cls: 'card--list' }), '<small class="faint">para tenerlas a mano antes del vuelo</small>');
   }
 
   const PAY_TONE = { cash: 'amber', card: 'blue', ic: 'green', mobile: 'violet', other: 'slate', none: 'slate' };
@@ -104,6 +129,11 @@
     window.scrollTo(0, 0);
   };
   A.expFilterClear = () => { JT.uiState.expenses.filter = null; JT.app.render(); };
+  A.expAll = function () {
+    const st = JT.uiState.expenses;
+    st.filter = null; st.tab = 'list';
+    if (location.hash.indexOf('#/expenses') === 0) JT.app.render(); else JT.go('expenses');
+  };
   A.expSummary = function () {
     JT.uiState.expenses.tab = 'summary';
     if (location.hash.indexOf('#/expenses') === 0) JT.app.render(); else JT.go('expenses');
@@ -130,16 +160,77 @@
   function split(list) {
     const s = S.get(), main = s.trip.mainCurrency, rates = SV.rates(), ids = Object.keys(s.travelers);
     if (ids.length < 2) return UI.empty('👥', 'Viaje individual', 'Añade viajeros en Ajustes para repartir gastos: quién pagó y entre quién se divide.', UI.btn('Ajustes', { data: { act: 'go', to: 'settings' } }));
-    const r = L.balances(list, ids, (e) => U.convert(e.amount, e.currency, main, rates));
-    const name = (id) => esc(s.travelers[id] ? s.travelers[id].name : '?');
-    let html = UI.section('Balance por persona', UI.card(r.list.map((b) =>
-      '<div class="row bal"><span class="dot" style="background:' + esc(s.travelers[b.id].color) + '"></span><div class="grow"><strong>' + name(b.id) + '</strong><small class="muted block">Pagó ' + U.money(b.paid, main) + ' · le corresponde ' + U.money(b.share, main) + '</small></div>' +
-      '<strong class="mono ' + (b.balance > 0.5 ? 'success' : b.balance < -0.5 ? 'accent' : 'muted') + '">' + (b.balance > 0 ? '+' : '') + U.money(b.balance, main) + '</strong></div>').join(''), { cls: 'stack' }));
-    html += UI.section('Para quedar en paz', (r.transfers.length ? UI.card(r.transfers.map((x) => '<p><strong>' + name(x.from) + '</strong> paga <strong class="mono">' + U.money(x.amount, main) + '</strong> a <strong>' + name(x.to) + '</strong></p>').join(''), { cls: 'stack-sm' }) : '<p class="muted">Todo cuadrado 🎉</p>') +
-      (r.skipped ? '<small class="warn">' + r.skipped + ' gasto(s) en otra moneda sin tipo de cambio no se han incluido.</small>' : '') +
-      '<p class="faint small">Sólo cuentan los gastos con «quién pagó». Si no se indica entre quién, se considera personal.</p>');
+    const toMain = (amount, cur) => U.convert(amount, cur || main, main, rates);
+    const setts = Object.values(s.settlements || {}).sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
+    const r = L.balances(list, ids, (e) => toMain(e.amount, e.currency), setts.map((x) => ({ fromId: x.fromId, toId: x.toId, value: toMain(x.amount, x.currency) })));
+    const tr = (id) => s.travelers[id] || { name: '?', color: 'var(--border)' };
+    const who = (id) => '<span class="who"><span class="avatar" style="background:' + esc(tr(id).color) + '" aria-hidden="true">' + esc(tr(id).name.charAt(0).toUpperCase()) + '</span>' + esc(tr(id).name) + '</span>';
+    const round = (v) => (main === 'JPY' ? Math.round(v) : Math.round(v * 100) / 100);
+    // 1) Lo que hay que hacer: quién paga a quién (con «Saldado» para apuntarlo cuando ocurra).
+    let html = UI.section('Para quedar en paz', (r.transfers.length ? r.transfers.map((x) =>
+      '<div class="card debt"><div class="debt__who">' + who(x.from) + '<span class="debt__arrow" aria-hidden="true">→</span>' + who(x.to) + '</div>' +
+      '<div class="row row--between"><span><small class="muted block">' + esc(tr(x.from).name) + ' debe a ' + esc(tr(x.to).name) + '</small><strong class="debt__amt mono">' + U.money(round(x.amount), main) + '</strong></span>' +
+      UI.btn('Saldado', { icon: 'check', size: 'sm', data: { act: 'settle', from: x.from, to: x.to, amount: round(x.amount) } }) + '</div></div>').join('')
+      : UI.card('<p class="success"><strong>Todo cuadrado 🎉</strong></p><small class="muted">Nadie debe nada a nadie.</small>', { cls: 'stack-sm' })),
+      UI.btn('Apuntar un pago', { icon: 'plus', size: 'sm', variant: 'ghost', data: { act: 'settle' } }));
+    // 2) Cada persona: lo que ha pagado, lo que le corresponde, los pagos entre vosotros y cómo queda.
+    html += UI.section('Cada uno', r.list.map(function (b) {
+      const st = b.balance > 0.5 ? 'le deben' : b.balance < -0.5 ? 'debe' : 'en paz';
+      const line = (label, v, cls) => '<div class="row row--between bal__line"><span class="muted">' + label + '</span><span class="mono ' + (cls || '') + '">' + v + '</span></div>';
+      return '<div class="card bal stack-sm"><div class="row row--between">' + who(b.id) + '<span class="pill pill--' + (b.balance > 0.5 ? 'success' : b.balance < -0.5 ? 'accent' : 'neutral') + '">' + st + '</span></div>' +
+        line('Ha pagado', U.money(b.paid, main)) + line('Le corresponde (su parte)', U.money(b.share, main)) +
+        (b.sent ? line('Pagos hechos a otros', '+' + U.money(b.sent, main)) : '') + (b.got ? line('Pagos recibidos', '−' + U.money(b.got, main)) : '') +
+        '<div class="row row--between bal__total"><strong>' + (b.balance > 0.5 ? 'Le deben' : b.balance < -0.5 ? 'Debe' : 'Saldo') + '</strong><strong class="mono ' + (b.balance > 0.5 ? 'success' : b.balance < -0.5 ? 'accent' : 'muted') + '">' + U.money(Math.abs(round(b.balance)), main) + '</strong></div></div>';
+    }).join(''));
+    // 3) Pagos entre vosotros (deudas saldadas): tocar para corregir o borrar.
+    if (setts.length) html += UI.section('Pagos entre vosotros', UI.card(setts.map((x) => '<button type="button" class="suica__row" data-act="editSettle" data-id="' + x.id + '"><span class="mono faint">' + U.fmtShort(x.date) + '</span><span class="grow">' + esc(tr(x.fromId).name) + ' → ' + esc(tr(x.toId).name) + (x.note ? '<small class="muted block">' + esc(x.note) + '</small>' : '') + '</span><strong class="mono">' + U.money(x.amount, x.currency || main) + '</strong></button>').join(''), { cls: 'card--list' }));
+    // 4) Gastos compartidos, con lo que le toca a cada uno.
+    const shared = list.filter((e) => e.paidById && s.travelers[e.paidById] && (e.splitWithIds || []).filter((id) => s.travelers[id]).length && ((e.splitWithIds || []).length > 1 || e.splitWithIds[0] !== e.paidById));
+    if (shared.length) html += UI.section('Gastos compartidos · ' + shared.length, UI.card(shared.slice(0, 60).map(function (e) {
+      const parts = e.splitWithIds.filter((id) => s.travelers[id]), each = e.amount / parts.length;
+      return '<button type="button" class="shrow" data-act="editExpense" data-id="' + e.id + '"><span class="grow"><strong class="block">' + esc(e.description || (D.EXPENSE[e.category] || ['Gasto'])[0]) + '</strong>' +
+        '<small class="muted block">' + esc(U.fmtShort(e.date) + ' · pagó ' + tr(e.paidById).name + ' · entre ' + parts.length) + '</small>' +
+        '<span class="shrow__parts">' + parts.map((id) => '<span class="part"><i style="background:' + esc(tr(id).color) + '"></i>' + esc(tr(id).name) + ' ' + U.money(each, e.currency) + '</span>').join('') + '</span></span>' +
+        '<strong class="mono">' + U.money(e.amount, e.currency) + '</strong></button>';
+    }).join('') + (shared.length > 60 ? '<small class="faint">y ' + (shared.length - 60) + ' más</small>' : ''), { cls: 'card--list' }));
+    html += (r.skipped ? '<small class="warn">' + r.skipped + ' gasto(s) en otra moneda sin tipo de cambio no se han incluido.</small>' : '') +
+      '<p class="faint small">Sólo cuentan los gastos con «quién pagó». Si no se indica entre quién, se considera personal. Los pagos entre vosotros no son gasto del viaje: sólo saldan deudas.</p>';
     return html;
   }
+
+  /* ── Pagos entre viajeros (saldar deudas) ── */
+  A.settle = (el) => F.settlement(null, { fromId: el.dataset.from, toId: el.dataset.to, amount: el.dataset.amount ? Number(el.dataset.amount) : undefined });
+  A.editSettle = (el) => F.settlement(el.dataset.id);
+  F.settlement = function (id, def) {
+    const s = S.get(), ex = id ? s.settlements[id] : null, main = s.trip.mainCurrency, t = S.today();
+    const x = ex || Object.assign({ currency: main, date: t.now.date }, def || {});
+    const people = Object.values(s.travelers).map((p) => ({ value: p.id, label: p.name }));
+    const body = '<form id="fSettle" class="stack" novalidate>' +
+      UI.field('Quién paga', UI.chips('fromId', people, x.fromId)) + UI.field('A quién', UI.chips('toId', people, x.toId)) +
+      '<label class="field"><span class="field__label">Importe</span><input class="input input--lg" name="amount" inputmode="decimal" placeholder="0" value="' + esc(x.amount ? String(x.amount).replace('.', ',') : '') + '" autocomplete="off"><span class="field__hint">' + (def && def.amount ? 'Es lo que falta para quedar en paz. Si sólo pagó una parte, cámbialo.' : '') + '</span></label>' +
+      UI.chips('currency', D.CURRENCIES.map((c) => ({ value: c, label: c })), x.currency || main) +
+      UI.field('Fecha', UI.input('date', x.date, { type: 'date' })) +
+      UI.field('Nota', UI.input('note', x.note || '', { placeholder: 'p.ej. Bizum, en efectivo…' }), { optional: true }) +
+      '<p class="error" hidden></p></form>';
+    const close = UI.sheet({
+      title: ex ? 'Editar pago' : 'Deuda saldada', body: body,
+      footer: '<div class="row">' + (ex ? UI.btn('Eliminar', { variant: 'danger', icon: 'trash', data: { del: '1' } }) : '') + UI.btn('Guardar', { type: 'submit', form: 'fSettle', block: true }) + '</div>',
+      onMount: function (root) {
+        const form = root.querySelector('#fSettle'), del = root.querySelector('[data-del]');
+        if (del) del.addEventListener('click', async () => { if (await UI.confirm('¿Eliminar este pago?', 'La deuda volverá a aparecer.')) { S.remove('settlements', ex.id); close(); } });
+        form.addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          const f = UI.formData(form), err = form.querySelector('.error'), amount = U.parseAmount(f.amount);
+          const problem = !f.fromId || !f.toId ? 'Elige quién paga y a quién' : f.fromId === f.toId ? 'Tienen que ser dos personas distintas' : !amount ? 'Introduce un importe' : !U.isISODate(f.date) ? 'Fecha no válida' : '';
+          if (problem) { err.textContent = problem; err.hidden = false; return; }
+          const data = { fromId: f.fromId, toId: f.toId, amount: amount, currency: f.currency || main, date: f.date, note: f.note || undefined };
+          if (ex) S.update('settlements', ex.id, data); else S.create('settlements', data);
+          close();
+          UI.toast('Pago apuntado: ' + s.travelers[f.fromId].name + ' → ' + s.travelers[f.toId].name + ' ' + U.money(amount, data.currency));
+        });
+      }
+    });
+  };
 
   A.dupExpense = function (el) {
     const e = Object.assign({}, S.get().expenses[el.dataset.id]);
@@ -175,6 +266,7 @@
       // Sólo para saber cómo se pagó: el total de gastos es uno solo, se pague como se pague.
       UI.field('Pagado con', UI.chips('paymentMethod', D.options(D.PAYMENT), e.paymentMethod, { allowNone: true, noneLabel: '—' }), { optional: true, hint: ' ', hintId: 'suicaHint' }) +
       UI.field('Descripción', UI.input('description', e.description || '', { placeholder: 'p.ej. Cena ramen' }), { optional: true }) +
+      UI.chipsMulti('taxFree', [{ value: '1', label: '🛍️ Compra tax free' }], e.taxFree ? ['1'] : []) +
       UI.details('Más detalles',
         UI.field('Fecha', UI.input('date', e.date, { type: 'date' })) +
         UI.field('Ciudad', UI.chips('cityId', C.cityOptions(), e.cityId, { allowNone: true, noneLabel: 'Sin ciudad' }), { optional: true }) +
@@ -198,7 +290,8 @@
             const w = f.paymentMethod, x = wInfo[w];
             const counts = x && x.active && (w !== 'cash' || f.currency === 'JPY');
             const jpy = v ? toJpy({ amount: v, currency: f.currency }) : 0;
-            const after = wBase(w) - (jpy || 0);
+            // Sólo Suica y efectivo tienen saldo (con tarjeta o sin indicar no hay nada que calcular).
+            const after = counts ? wBase(w) - (jpy || 0) : 0;
             sHint.textContent = counts ? x.name + ' después: ' + U.money(after, 'JPY') + eurP(after) : '';
           }
           // Lo que vale en tu moneda principal y, si no es en euros, también en euros.
@@ -228,7 +321,7 @@
           const splitIds = travelers.length > 1 ? UI.list(f.split) : e.splitWithIds;
           const paid = travelers.length > 1 ? f.paidById : e.paidById;
           const data = { amount: amount, currency: f.currency, category: f.category, description: f.description || undefined, date: f.date || e.date, cityId: f.cityId || undefined,
-            placeName: f.placeName || undefined, paymentMethod: f.paymentMethod || undefined, paidById: paid, splitWithIds: splitIds.length ? splitIds : paid ? [paid] : [], notes: f.notes || undefined, activityId: e.activityId, reservationId: e.reservationId, transportId: e.transportId, giftId: e.giftId };
+            placeName: f.placeName || undefined, paymentMethod: f.paymentMethod || undefined, paidById: paid, splitWithIds: splitIds.length ? splitIds : paid ? [paid] : [], notes: f.notes || undefined, taxFree: f.taxFree ? true : undefined, activityId: e.activityId, reservationId: e.reservationId, transportId: e.transportId, giftId: e.giftId };
           if (ex) S.update('expenses', ex.id, data); else S.create('expenses', data);
           UI.toast('Gasto de ' + U.money(amount, f.currency) + ' guardado');
           close();
@@ -580,5 +673,39 @@
   };
 
   A.newExpense = (el) => F.expense(null, { paymentMethod: el.dataset.pay, date: el.dataset.date, cityId: el.dataset.city, placeName: el.dataset.place, activityId: el.dataset.activity });
-  A.editExpense = (el) => F.expense(el.dataset.id);
+  /* Los gastos de días anteriores se abren bloqueados (para no cambiarlos sin querer): se ve todo el detalle
+     y «Editar» los desbloquea. Al guardar vuelven a quedar bloqueados. Los de hoy se editan directamente. */
+  A.editExpense = function (el) {
+    const e = S.get().expenses[el.dataset.id];
+    if (!e) return;
+    if (e.date < S.today().now.date && !el.dataset.unlock) return expenseView(e.id);
+    F.expense(e.id);
+  };
+  function expenseView(id) {
+    const s = S.get(), e = s.expenses[id], main = s.trip.mainCurrency;
+    const c = D.EXPENSE[e.category] || ['Gasto', '•'], pay = e.paymentMethod && D.PAYMENT[e.paymentMethod], city = e.cityId && s.cities[e.cityId];
+    const multi = Object.keys(s.travelers).length > 1, parts = (e.splitWithIds || []).filter((x) => s.travelers[x]);
+    const v = e.currency !== main ? U.convert(e.amount, e.currency, main, SV.rates()) : null;
+    const row = (k, val) => (val ? '<div class="xv__row"><span class="muted">' + k + '</span><span>' + val + '</span></div>' : '');
+    const body = '<div class="stack">' +
+      '<div class="xv__head"><span class="exp__emoji" style="background:color-mix(in srgb, ' + C.catColor(e.category) + ' 18%, transparent)" aria-hidden="true">' + c[1] + '</span>' +
+        '<div class="grow"><strong class="xv__title">' + esc(e.description || c[0]) + '</strong><small class="muted block">' + esc(U.fmtLong(e.date)) + '</small></div></div>' +
+      '<div class="xv__amt mono">' + U.money(e.amount, e.currency) + (v !== null ? '<small class="muted block" data-noeur>≈ ' + U.money(v, main) + '</small>' : '') + '</div>' +
+      '<div class="xv__rows">' + row('Categoría', esc(c[1] + ' ' + c[0])) + row('Pagado con', pay ? esc(pay[1] + ' ' + pay[0]) : '') + row('Ciudad', city ? esc(city.name) : '') + row('Lugar', e.placeName ? esc(e.placeName) : '') +
+        row('Pagó', multi && e.paidById && s.travelers[e.paidById] ? esc(s.travelers[e.paidById].name) : '') +
+        row('Para quién', multi && parts.length ? parts.map((x) => esc(s.travelers[x].name) + ' <span class="mono">' + U.money(e.amount / parts.length, e.currency) + '</span>').join('<br>') : '') +
+        row('Tax free', e.taxFree ? '🛍️ Sí' : '') + row('Notas', e.notes ? '<span class="pre">' + esc(e.notes) + '</span>' : '') + '</div>' +
+      '<p class="xv__lock small muted">🔒 Es de un día anterior: está bloqueado para no cambiarlo sin querer.</p></div>';
+    const close = UI.sheet({
+      title: 'Gasto', body: body,
+      footer: '<div class="row">' + UI.btn('Duplicar', { icon: 'copy', variant: 'secondary', data: { xv: 'dup' } }) + UI.btn('Editar', { icon: 'lock', block: true, data: { xv: 'edit' } }) + '</div>',
+      onMount: function (root) {
+        root.querySelectorAll('[data-xv]').forEach((b) => b.addEventListener('click', function () {
+          close();
+          if (b.dataset.xv === 'edit') F.expense(id);
+          else { const d = Object.assign({}, e); delete d.id; delete d.isSample; d.date = S.today().now.date; const nid = S.create('expenses', d); UI.toast('Duplicado para hoy', { label: 'Deshacer', run: () => S.remove('expenses', nid) }); }
+        }));
+      }
+    });
+  }
 })();

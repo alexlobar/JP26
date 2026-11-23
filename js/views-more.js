@@ -566,25 +566,35 @@
 
   V.gifts = function () {
     const s = S.get(), t = S.today(), st = JT.uiState.gifts || (JT.uiState.gifts = { show: 'all' });
-    const all = Object.values(s.gifts).sort((a, b) => a.bought - b.bought || (a.createdAt || 0) - (b.createdAt || 0));
+    st.kind = st.kind || 'gifts';
+    const mineMode = st.kind === 'mine';
+    const every = Object.values(s.gifts), nMine = every.filter((g) => g.mine).length;
+    // Arriba: «Regalos» (para otros) o «Para mí» (lo que quieres comprarte tú).
+    const kindSeg = '<div class="seg seg--kind" role="tablist">' + [['gifts', '🎁 Regalos · ' + (every.length - nMine)], ['mine', '🛍️ Para mí · ' + nMine]].map((o) =>
+      '<button type="button" role="tab" class="seg__item' + (st.kind === o[0] ? ' is-on' : '') + '" aria-selected="' + (st.kind === o[0]) + '" data-act="giftKind" data-value="' + o[0] + '">' + o[1] + '</button>').join('') + '</div>';
+    const all = every.filter((g) => !!g.mine === mineMode).sort((a, b) => a.bought - b.bought || (a.createdAt || 0) - (b.createdAt || 0));
     const bought = all.filter((g) => g.bought).length;
-    const head = UI.header({ back: true, title: 'Regalos', subtitle: all.length ? bought + ' de ' + all.length + ' comprados' : 'Para quién, qué y dónde', actions: UI.iconBtn('plus', 'Nuevo regalo', { act: 'newGift' }) });
-    if (!all.length) return { html: head + UI.empty('🎁', 'Sin regalos apuntados', 'Apunta para quién quieres traer algo, una idea y notas (talla, color, tienda…). Al comprarlo, se apunta en Gastos con un toque.', UI.btn('Añadir regalo', { data: { act: 'newGift' } })) };
+    const head = UI.header({ back: true, title: 'Regalos y compras', subtitle: all.length ? bought + ' de ' + all.length + ' comprados' : mineMode ? 'Lo que quieres comprarte' : 'Para quién, qué y dónde', actions: UI.iconBtn('plus', mineMode ? 'Nueva compra para mí' : 'Nuevo regalo', { act: 'newGift' }) }) + kindSeg;
+    if (!all.length) return { html: head + (mineMode
+      ? UI.empty('🛍️', 'Nada apuntado para ti', 'KitKat de sabores, un cuchillo, cerámica, ropa…: apunta qué quieres, dónde comprarlo y el precio. Al comprarlo, se apunta en Gastos con un toque.', UI.btn('Añadir', { data: { act: 'newGift' } }))
+      : UI.empty('🎁', 'Sin regalos apuntados', 'Apunta para quién quieres traer algo, una idea y notas (talla, color, tienda…). Al comprarlo, se apunta en Gastos con un toque.', UI.btn('Añadir regalo', { data: { act: 'newGift' } }))) };
     const spent = C.moneySum(all.map((g) => giftExpense(g.id)).filter(Boolean));
     const pendingCost = C.moneySum(all.filter((g) => !g.bought && g.cost).map((g) => ({ amount: g.cost, currency: g.currency || 'JPY' })));
     let html = head + UI.card('<div class="stats">' + UI.stat('Comprados', bought + ' / ' + all.length, '', true) + UI.stat('Gastado', spent.total ? spent.text : '—') + UI.stat('Falta (aprox.)', pendingCost.total ? pendingCost.text : '—') + '</div>' +
       UI.progress(bought / all.length, 'success'), { cls: 'stack' });
     // Durante el viaje: lo que toca comprar en la ciudad donde estás.
-    const here = t.phase === 'during' && t.city ? giftsPendingIn(t.city.id) : [];
-    if (here.length) html += UI.banner('accent', 'gift', 'En ' + t.city.name + ': ' + here.length + (here.length === 1 ? ' regalo por comprar' : ' regalos por comprar'), here.map((g) => g.idea + (g.person ? ' (' + g.person + ')' : '')).join(' · '));
+    const here = t.phase === 'during' && t.city ? giftsPendingIn(t.city.id).filter((g) => !!g.mine === mineMode) : [];
+    if (here.length) html += UI.banner('accent', mineMode ? 'wallet' : 'gift', 'En ' + t.city.name + ': ' + here.length + ' por comprar', here.map((g) => g.idea + (g.person ? ' (' + g.person + ')' : '')).join(' · '));
     html += '<div class="seg" role="tablist">' + [['all', 'Todos'], ['pending', 'Por comprar · ' + (all.length - bought)], ['bought', 'Comprados · ' + bought]].map((o) =>
       '<button type="button" role="tab" class="seg__item' + (st.show === o[0] ? ' is-on' : '') + '" aria-selected="' + (st.show === o[0]) + '" data-act="giftShow" data-value="' + o[0] + '">' + o[1] + '</button>').join('') + '</div>';
     const list = all.filter((g) => st.show === 'all' || (st.show === 'bought' ? g.bought : !g.bought));
     if (!list.length) return { html: html + '<p class="muted center">' + (st.show === 'bought' ? 'Aún no has comprado ninguno.' : 'Todo comprado 🎉') + '</p>' };
     const people = {};
-    list.forEach((g) => { const k = (g.person || '').trim() || 'Sin asignar'; (people[k] = people[k] || []).push(g); });
-    const total = (p) => all.filter((g) => ((g.person || '').trim() || 'Sin asignar') === p);
-    html += Object.keys(people).sort((a, b) => (a === 'Sin asignar') - (b === 'Sin asignar') || a.localeCompare(b, 'es')).map(function (p, i) {
+    // Regalos: por persona. Para mí: por ciudad donde comprarlo.
+    const keyOf = (g) => (mineMode ? (g.cityId && s.cities[g.cityId] ? s.cities[g.cityId].name : 'Donde sea') : (g.person || '').trim() || 'Sin asignar');
+    list.forEach((g) => { const k = keyOf(g); (people[k] = people[k] || []).push(g); });
+    const total = (p) => all.filter((g) => keyOf(g) === p);
+    html += Object.keys(people).sort((a, b) => (a === 'Sin asignar' || a === 'Donde sea') - (b === 'Sin asignar' || b === 'Donde sea') || a.localeCompare(b, 'es')).map(function (p, i) {
       const mine = total(p), done = mine.filter((x) => x.bought).length;
       const tone = ['indigo', 'pink', 'teal', 'orange', 'violet', 'blue', 'green', 'amber'][i % 8];
       return '<section class="section"><div class="section__hdr"><h2 class="gift__person"><span class="avatar tone-' + tone + '" aria-hidden="true">' + esc(p.charAt(0).toUpperCase()) + '</span>' + esc(p) + '</h2>' +
@@ -594,6 +604,7 @@
     return { html: html };
   };
   A.giftShow = (el) => { (JT.uiState.gifts || (JT.uiState.gifts = {})).show = el.dataset.value; JT.app.render(); };
+  A.giftKind = (el) => { (JT.uiState.gifts || (JT.uiState.gifts = {})).kind = el.dataset.value; JT.app.render(); };
 
   A.toggleGift = async function (el) {
     const g = S.get().gifts[el.dataset.id];
@@ -601,19 +612,20 @@
     S.update('gifts', g.id, { bought: !g.bought });
     if (g.bought || giftExpense(g.id)) return; // desmarcado, o ya estaba en Gastos
     if (await UI.confirm('¡Comprado! 🎁', '¿Lo apuntas también en Gastos?', { ok: 'Apuntar en Gastos', danger: false })) {
-      F.expense(null, { amount: g.cost, currency: g.currency || 'JPY', category: 'gifts', description: 'Regalo · ' + (g.person ? g.person + ': ' : '') + g.idea, cityId: g.cityId, giftId: g.id });
+      F.expense(null, { amount: g.cost, currency: g.currency || 'JPY', category: g.mine ? 'shopping' : 'gifts', description: g.mine ? g.idea : 'Regalo · ' + (g.person ? g.person + ': ' : '') + g.idea, cityId: g.cityId, giftId: g.id });
     }
   };
 
   F.gift = function (id) {
     const s = S.get(), ex = id ? s.gifts[id] : null, t = S.today();
-    const g = ex || { person: '', idea: '', currency: 'JPY', cityId: t.phase === 'during' && t.city ? t.city.id : undefined };
+    const g = ex || { person: '', idea: '', currency: 'JPY', cityId: t.phase === 'during' && t.city ? t.city.id : undefined, mine: (JT.uiState.gifts || {}).kind === 'mine' };
     const people = Array.from(new Set(Object.values(s.gifts).map((x) => (x.person || '').trim()).filter(Boolean))).sort();
     const ex2 = ex && giftExpense(ex.id);
     return formSheet({
-      id: 'fGift', title: ex ? 'Editar regalo' : 'Nuevo regalo',
-      body: UI.field('Para quién', '<input class="input" name="person" list="giftPeople" value="' + esc(g.person || '') + '" placeholder="p.ej. Mamá"' + (ex ? '' : ' autofocus') + ' autocomplete="off"><datalist id="giftPeople">' + people.map((p) => '<option value="' + esc(p) + '">').join('') + '</datalist>') +
-        UI.field('Idea', UI.input('idea', g.idea || '', { placeholder: 'p.ej. Té matcha de Uji' })) +
+      id: 'fGift', title: ex ? (g.mine ? 'Editar compra' : 'Editar regalo') : g.mine ? 'Quiero comprarme' : 'Nuevo regalo',
+      body: UI.chips('mine', [{ value: '', label: '🎁 Regalo' }, { value: '1', label: '🛍️ Para mí' }], g.mine ? '1' : '') +
+        '<div class="gift-person"' + (g.mine ? ' hidden' : '') + '>' + UI.field('Para quién', '<input class="input" name="person" list="giftPeople" value="' + esc(g.person || '') + '" placeholder="p.ej. Mamá"' + (ex || g.mine ? '' : ' autofocus') + ' autocomplete="off"><datalist id="giftPeople">' + people.map((p) => '<option value="' + esc(p) + '">').join('') + '</datalist>') + '</div>' +
+        UI.field(g.mine ? 'Qué' : 'Idea', UI.input('idea', g.idea || '', { placeholder: g.mine ? 'p.ej. KitKat de sabores, cuchillo de cocina…' : 'p.ej. Té matcha de Uji', autofocus: !ex && g.mine })) +
         UI.field('Notas', UI.textarea('notes', g.notes || '', 'Talla, color, marca, tienda, foto que te enseñaron…'), { optional: true, hint: 'Se ven en la lista, debajo de la idea.' }) +
         '<div class="row row--top">' + UI.field('Precio', UI.input('cost', g.cost ? String(g.cost).replace('.', ',') : '', { inputmode: 'decimal', placeholder: 'aprox.' }), { optional: true }) + UI.field('Moneda', UI.chips('currency', D.CURRENCIES.map((c) => ({ value: c, label: c })), g.currency || 'JPY')) + '</div>' +
         UI.field('Dónde comprarlo', UI.chips('cityId', C.cityOptions(), g.cityId, { allowNone: true, noneLabel: 'Donde sea' }), { optional: true }) +
@@ -624,10 +636,12 @@
         const cost = f.cost ? U.parseAmount(f.cost) : undefined;
         if (!f.idea) return 'Escribe una idea';
         if (cost === null) return 'Precio no válido';
-        const data = { person: (f.person || '').trim() || undefined, idea: f.idea, cost: cost || undefined, currency: cost ? f.currency : undefined, cityId: f.cityId || undefined, bought: !!f.bought, notes: f.notes || undefined };
+        const data = { mine: f.mine ? true : undefined, person: f.mine ? undefined : (f.person || '').trim() || undefined, idea: f.idea, cost: cost || undefined, currency: cost ? f.currency : undefined, cityId: f.cityId || undefined, bought: !!f.bought, notes: f.notes || undefined };
         if (ex) S.update('gifts', ex.id, data); else S.create('gifts', data);
-        UI.toast('Regalo guardado');
-      }
+        UI.toast(data.mine ? 'Guardado en «Para mí»' : 'Regalo guardado');
+      },
+      // Al elegir «Para mí» se oculta «Para quién».
+      onMount: (form) => form.addEventListener('change', () => { const p = form.querySelector('.gift-person'); if (p) p.hidden = !!UI.formData(form).mine; })
     });
   };
   A.newGift = () => F.gift(null);
@@ -639,7 +653,7 @@
     const s = S.get(), list = Object.values(s.infoArticles).sort((a, b) => a.order - b.order), rates = SV.rates();
     const jpyEur = U.convert(1, 'JPY', 'EUR', rates);
     const conv = UI.card('<small class="eyebrow muted">💱 CONVERSOR JPY → EUR</small>' + (jpyEur
-      ? '<input class="input" inputmode="decimal" value="1000" data-input="convJpy" data-rate="' + jpyEur + '" aria-label="Yenes"><h2 class="title" id="convOut">' + U.money(1000, 'JPY') + ' ≈ ' + U.money(1000 * jpyEur, 'EUR') + '</h2><small class="faint">' + (rates.source === 'manual' ? 'Tipo manual' : 'BCE' + (rates.date ? ' · ' + rates.date : '') + (rates.rounding ? ' · yen a la baja ' + (rates.rounding === 'down2' ? '−2' : '−1') : '')) + '</small>'
+      ? '<input class="input" inputmode="decimal" value="1000" data-input="convJpy" data-rate="' + jpyEur + '" aria-label="Yenes"><h2 class="title" id="convOut">' + U.money(1000, 'JPY') + ' ≈ ' + U.money(1000 * jpyEur, 'EUR') + '</h2><div class="conv__ja" id="convJa">' + C.jaPrice(1000) + '</div><small class="faint">' + (rates.source === 'manual' ? 'Tipo manual' : 'BCE' + (rates.date ? ' · ' + rates.date : '') + (rates.rounding ? ' · yen a la baja ' + (rates.rounding === 'down2' ? '−2' : '−1') : '')) + '</small>'
       : '<p class="muted">Sin tipo de cambio: conéctate una vez para descargarlo (se guarda para usarlo sin conexión).</p>'), { tone: 'muted', cls: 'stack-sm' });
     return { html: UI.header({ back: true, title: 'Información útil', actions: UI.iconBtn('plus', 'Nueva ficha', { act: 'newInfo' }) }) +
       UI.banner('neutral', 'info', 'Orientativo, no oficial', 'Verifica normativa y datos vigentes en fuentes oficiales (JNTO, embajada, aerolínea). Puedes editar cada ficha.') + conv +
@@ -648,6 +662,8 @@
   JT.changes.convJpy = function (el) {
     const n = Number(el.value.replace(',', '.')) || 0, out = document.getElementById('convOut');
     if (out) out.textContent = U.money(n, 'JPY') + ' ≈ ' + U.money(n * Number(el.dataset.rate), 'EUR');
+    const ja = document.getElementById('convJa');
+    if (ja) ja.innerHTML = C.jaPrice(n);
   };
 
   F.info = function (id) {

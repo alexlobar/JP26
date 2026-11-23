@@ -141,9 +141,18 @@ JT.logic = (function () {
 
   /* ── Reparto de gastos ────────────────────────────────────── */
 
-  function balances(expenses, ids, toMain) {
-    const paid = {}, share = {};
-    ids.forEach((id) => { paid[id] = 0; share[id] = 0; });
+  /**
+   * Quién ha pagado, cuánto le corresponde y quién debe a quién.
+   * settlements (opcional): pagos entre viajeros para saldar deudas [{ fromId, toId, value }] ya en la moneda principal:
+   * quien paga sube su saldo y quien cobra lo baja (no son gasto del viaje).
+   */
+  function balances(expenses, ids, toMain, settlements) {
+    const paid = {}, share = {}, sent = {}, got = {};
+    ids.forEach((id) => { paid[id] = 0; share[id] = 0; sent[id] = 0; got[id] = 0; });
+    (settlements || []).forEach(function (x) {
+      if (sent[x.fromId] === undefined || got[x.toId] === undefined || !(x.value > 0)) return;
+      sent[x.fromId] += x.value; got[x.toId] += x.value;
+    });
     let skipped = 0;
     expenses.forEach(function (e) {
       if (!e.paidById || paid[e.paidById] === undefined) return;
@@ -154,7 +163,7 @@ JT.logic = (function () {
       paid[e.paidById] += v;
       parts.forEach((p) => (share[p] += v / parts.length));
     });
-    const list = ids.map((id) => ({ id: id, paid: paid[id], share: share[id], balance: paid[id] - share[id] }));
+    const list = ids.map((id) => ({ id: id, paid: paid[id], share: share[id], sent: sent[id], got: got[id], balance: paid[id] - share[id] + sent[id] - got[id] }));
     const EPS = 0.5;
     const debt = list.filter((b) => b.balance < -EPS).map((b) => ({ id: b.id, v: -b.balance })).sort((a, b) => b.v - a.v);
     const cred = list.filter((b) => b.balance > EPS).map((b) => ({ id: b.id, v: b.balance })).sort((a, b) => b.v - a.v);

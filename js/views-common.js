@@ -132,16 +132,24 @@ JT.cards = (function () {
       '<button type="button" class="iconbtn fav' + (r.favorite ? ' is-on' : '') + '" aria-pressed="' + !!r.favorite + '" aria-label="Favorito" data-act="fav" data-col="restaurants" data-id="' + r.id + '">' + U.icon('heart', 20) + '</button></div>';
   }
 
+  /** Fila de gasto con todo el detalle: categoría, ciudad y lugar; cómo se pagó, quién y cuánto toca a cada uno; notas.
+      Los de días anteriores llevan 🔒 (se abren bloqueados). */
   function expenseRow(e, mainValue) {
-    const s = S.get(), c = D.EXPENSE[e.category], payer = e.paidById && s.travelers[e.paidById];
-    const pay = e.paymentMethod && D.PAYMENT[e.paymentMethod];
-    const meta = [U.fmtShort(e.date), pay ? pay[1] + ' ' + pay[0] : '', e.placeName, payer ? 'pagó ' + payer.name : '', (e.splitWithIds || []).length > 1 ? '÷' + e.splitWithIds.length : ''].filter(Boolean).join(' · ');
+    const s = S.get(), c = D.EXPENSE[e.category] || ['Gasto', '•'], payer = e.paidById && s.travelers[e.paidById];
+    const pay = e.paymentMethod && D.PAYMENT[e.paymentMethod], city = e.cityId && s.cities[e.cityId];
+    const parts = (e.splitWithIds || []).filter((id) => s.travelers[id]), multi = Object.keys(s.travelers).length > 1;
+    const line1 = [c[0], city ? city.name : '', e.placeName].filter(Boolean).join(' · ');
+    const line2 = [pay ? pay[1] + ' ' + pay[0] : '', multi && payer ? 'pagó ' + payer.name : '', parts.length > 1 ? 'entre ' + parts.length + ': ' + U.money(e.amount / parts.length, e.currency) + ' c/u' : ''].filter(Boolean).join(' · ');
+    const locked = e.date < S.today().now.date;
+    const meta = '<small class="muted block">' + esc(line1) + '</small>' + (line2 ? '<small class="muted block">' + esc(line2) + '</small>' : '') +
+      (e.notes ? '<small class="exp__note">' + esc(e.notes) + '</small>' : '') +
+      (e.taxFree || locked ? '<small class="exp__tags">' + (e.taxFree ? '<span class="pill pill--neutral">🛍️ Tax free</span>' : '') + (locked ? '<span class="exp__lock" title="Bloqueado: de un día anterior">🔒</span>' : '') + '</small>' : '');
     return '<div class="swipe" data-swipe>' +
       '<div class="swipe__actions"><button type="button" class="swipe__btn" data-act="dupExpense" data-id="' + e.id + '">' + U.icon('copy', 18) + 'Duplicar</button>' +
       '<button type="button" class="swipe__btn swipe__btn--danger" data-act="delExpense" data-id="' + e.id + '">' + U.icon('trash', 18) + 'Eliminar</button></div>' +
       '<div class="swipe__content exp card--tap" tabindex="0" data-act="editExpense" data-id="' + e.id + '">' +
-      '<span class="exp__emoji tone-' + (CAT_TONE[e.category] || 'slate') + '" aria-hidden="true">' + c[1] + '</span><div class="grow"><strong>' + esc(e.description || c[0]) + '</strong><small class="muted">' + esc(meta) + '</small></div>' +
-      '<div class="exp__amount"><strong class="mono">' + U.money(e.amount, e.currency) + '</strong>' + (mainValue ? '<small class="muted">' + esc(mainValue) + '</small>' : '') + '</div></div></div>';
+      '<span class="exp__emoji tone-' + (CAT_TONE[e.category] || 'slate') + '" aria-hidden="true">' + c[1] + '</span><div class="grow"><strong>' + esc(e.description || c[0]) + '</strong>' + meta + '</div>' +
+      '<div class="exp__amount"><strong class="mono">' + U.money(e.amount, e.currency) + '</strong>' + (mainValue ? '<small class="muted" data-noeur>' + esc(mainValue) + '</small>' : '') + '</div></div></div>';
   }
 
   /* Billetes: vuelos y trenes con aspecto de billete (origen → destino en grande, hora, asiento y código),
@@ -525,14 +533,52 @@ JT.cards = (function () {
       '<div class="conv"><span class="conv__sym" aria-hidden="true">' + (sym[from] || from) + '</span>' +
         '<input class="input input--lg conv__in" inputmode="decimal" placeholder="' + (from === 'JPY' ? '1000' : '10') + '" value="' + esc(st.value || '') + '" data-input="quickConv" data-rate="' + rate + '" data-to="' + to + '" aria-label="Importe en ' + from + '" autocomplete="off">' +
         UI.iconBtn('swap', 'Cambiar ' + from + ' ⇄ ' + to, { act: 'convSwap' }) + '</div>' +
-      '<div class="conv__out" id="qconvOut">' + (n ? '≈ ' + esc(U.money(n * rate, to)) : 'Escribe un importe en ' + from) + '</div>', { cls: 'stack-sm' });
+      '<div class="conv__out" id="qconvOut">' + (n ? '≈ ' + esc(U.money(n * rate, to)) : 'Escribe un importe en ' + from) + '</div>' +
+      '<div class="conv__ja" id="qconvJa">' + jaPrice(from === 'JPY' ? n : n * rate) + '</div>', { cls: 'stack-sm' });
   }
   JT.changes = JT.changes || {};
   JT.changes.quickConv = function (el) {
     JT.uiState.conv.value = el.value;
-    const n = U.parseAmount(el.value) || 0, out = document.getElementById('qconvOut');
+    const n = U.parseAmount(el.value) || 0, out = document.getElementById('qconvOut'), ja = document.getElementById('qconvJa');
     if (out) out.textContent = n ? '≈ ' + U.money(n * Number(el.dataset.rate), el.dataset.to) : 'Escribe un importe';
+    if (ja) ja.innerHTML = jaPrice(el.dataset.to === 'JPY' ? n * Number(el.dataset.rate) : n);
   };
+
+  /* ── Precios en japonés: cómo se dice «1.500 ¥» (せんごひゃくえん · sen gohyaku en) ──
+     Con los cambios de sonido de siempre: 300 sanbyaku, 600 roppyaku, 800 happyaku, 3.000 sanzen, 8.000 hassen;
+     «sen» sola para 1.000 e «issen» delante de man/oku; 4 ¥ = yo en. */
+  const JA_D = [['', ''], ['ichi', 'いち'], ['ni', 'に'], ['san', 'さん'], ['yon', 'よん'], ['go', 'ご'], ['roku', 'ろく'], ['nana', 'なな'], ['hachi', 'はち'], ['kyū', 'きゅう']];
+  const JA_100 = { 1: ['hyaku', 'ひゃく'], 3: ['sanbyaku', 'さんびゃく'], 6: ['roppyaku', 'ろっぴゃく'], 8: ['happyaku', 'はっぴゃく'] };
+  const JA_1000 = { 1: ['sen', 'せん'], 3: ['sanzen', 'さんぜん'], 8: ['hassen', 'はっせん'] };
+  function jaBlock(n, big) {
+    const th = Math.floor(n / 1000), h = Math.floor((n % 1000) / 100), t = Math.floor((n % 100) / 10), o = n % 10, out = [];
+    if (th) out.push(th === 1 && big ? ['issen', 'いっせん'] : JA_1000[th] || [JA_D[th][0] + 'sen', JA_D[th][1] + 'せん']);
+    if (h) out.push(JA_100[h] || [JA_D[h][0] + 'hyaku', JA_D[h][1] + 'ひゃく']);
+    if (t) out.push(t === 1 ? ['jū', 'じゅう'] : [JA_D[t][0] + 'jū', JA_D[t][1] + 'じゅう']);
+    if (o) out.push(JA_D[o]);
+    return out;
+  }
+  /** [romaji, hiragana] de un número entero (hasta 9.999 oku). */
+  function jaNumber(num) {
+    const n = Math.round(Math.abs(num));
+    if (!n) return ['zero', 'ゼロ'];
+    const oku = Math.floor(n / 1e8), man = Math.floor((n % 1e8) / 1e4), rest = n % 1e4, words = [];
+    const add = (parts, suf) => { if (!parts.length) return; const r = parts.map((p) => p[0]), k = parts.map((p) => p[1]).join(''); if (suf) r[r.length - 1] += suf[0]; words.push([r.join(' '), k + (suf ? suf[1] : '')]); };
+    add(oku ? jaBlock(oku, true) : [], ['oku', 'おく']);
+    add(man ? jaBlock(man, true) : [], ['man', 'まん']);
+    add(rest ? jaBlock(rest, false) : [], null);
+    return [words.map((w) => w[0]).join(' '), words.map((w) => w[1]).join('')];
+  }
+  function jaPrice(yen) {
+    const n = Math.round(yen || 0);
+    if (!n) return '';
+    const r = jaNumber(n);
+    let rom = r[0] + ' en', kana = r[1] + 'えん';
+    if (n % 10 === 4) { rom = rom.replace(/yon en$/, 'yo en'); kana = kana.replace(/よんえん$/, 'よえん'); }
+    const digits = String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '円';
+    return '<div class="jap"><div class="grow"><small class="eyebrow muted block">ASÍ SE DICE</small><span class="jap__digits mono" lang="ja">' + digits + '</span>' +
+      '<span class="jap__kana" lang="ja">' + esc(kana) + '</span><span class="jap__rom">' + esc(rom) + '</span></div>' + speakBtn(n + '円', 'Escuchar el precio en japonés') + '</div>';
+  }
   JT.actions.convSwap = function () {
     const st = JT.uiState.conv;
     st.dir = st.dir === 'jpy' ? 'main' : 'jpy';
@@ -679,5 +725,5 @@ JT.cards = (function () {
     });
   }
 
-  return { q, sampleBanner, offlineBanner, isNow, timelineItem, travelLeg, timeline, placeCard, restaurantCard, expenseRow, reservationCard, transportCard, noteCard, noteRef, quick, tripHub, speakBtn, showcase, typePicker, customTypeSheet, TONE, catColor, byCategory, catStack, pctText, cityStrip, quickConverter, cityRanges, byCityGroups, cityJa, clocks, siteTile, cityOptions, moneySum, parseCoords, coordsField, bindCoords, eurOf, addEur };
+  return { q, sampleBanner, offlineBanner, isNow, timelineItem, travelLeg, timeline, placeCard, restaurantCard, expenseRow, reservationCard, transportCard, noteCard, noteRef, quick, tripHub, speakBtn, showcase, typePicker, customTypeSheet, TONE, catColor, byCategory, catStack, pctText, cityStrip, quickConverter, cityRanges, byCityGroups, cityJa, clocks, siteTile, cityOptions, moneySum, parseCoords, coordsField, bindCoords, eurOf, addEur, jaPrice, jaNumber };
 })();

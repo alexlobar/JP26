@@ -59,7 +59,7 @@
   }
   function lockerCards(n, addBtn) {
     const list = Object.values(S.get().lockers || {}).sort((a, b) => a.createdAt - b.createdAt);
-    if (!list.length) return addBtn ? '<p class="locker-add">' + UI.btn('Apuntar una taquilla', { icon: 'lock', size: 'sm', variant: 'ghost', data: { act: 'newLocker' } }) + '</p>' : '';
+    const add = addBtn ? '<p class="locker-add">' + UI.btn('Apuntar taquilla', { icon: 'lock', size: 'sm', variant: 'ghost', data: { act: 'newLocker' } }) + UI.btn('Enviar maleta', { icon: 'car', size: 'sm', variant: 'ghost', data: { act: 'newShipment' } }) + '</p>' : '';
     return list.map(function (l) {
       const left = lockerLeft(l, n), late = left !== null && left < 0, soon = left !== null && left >= 0 && left <= 120;
       const op = OPENS[l.opens] || OPENS.code;
@@ -71,9 +71,79 @@
           : '<small class="muted">Se abre con: ' + op[1] + ' ' + op[0] + (l.code ? ' · ' + esc(l.code) : '') + '</small>') +
         (l.note ? '<small class="muted">' + esc(l.note) + '</small>' : '') +
         '<div class="row row--wrap">' + UI.btn('Ya la vacié', { icon: 'check', size: 'sm', data: { act: 'lockerDone', id: l.id } }) + UI.btn('Editar', { icon: 'edit', size: 'sm', variant: 'ghost', data: { act: 'editLocker', id: l.id } }) + '</div></div>';
-    }).join('');
+    }).join('') + shipmentCards(n) + add;
   }
   C.lockerCards = lockerCards;
+
+  /* ── Envío de maletas (takkyubin): de dónde a dónde, número de seguimiento y cuándo llega ──
+     Sale arriba en Inicio y en el Modo viaje hasta que pulsas «Ya la tengo». */
+  function shipmentCards(n) {
+    const list = Object.values(S.get().shipments || {}).sort((a, b) => (a.arrival || '').localeCompare(b.arrival || ''));
+    return list.map(function (x) {
+      const d = x.arrival ? U.diffDays(n.date, x.arrival) : null;
+      const when = d === null ? 'En camino' : d > 1 ? 'Llega el ' + U.fmtShort(x.arrival) + ' (en ' + d + ' días)' : d === 1 ? 'Llega mañana (' + U.fmtShort(x.arrival) + ')' : d === 0 ? 'Llega hoy' : 'Debía llegar el ' + U.fmtShort(x.arrival) + ': pregunta en recepción';
+      return '<div class="card cl ship tone-teal stack-sm' + (d !== null && d <= 0 ? ' is-today' : '') + '"><div class="cl__head"><span class="cl__emoji" aria-hidden="true">🧳</span><span class="grow"><small class="eyebrow muted block">MALETA EN CAMINO' + (x.company ? ' · ' + esc(x.company.toUpperCase()) : '') + '</small>' +
+        '<strong class="cl__title">' + esc((x.from || '¿?') + ' → ' + (x.to || '¿?')) + '</strong><small class="' + (d !== null && d <= 0 ? 'warn' : 'muted') + '">' + esc(when) + '</small></span></div>' +
+        (x.tracking ? '<button type="button" class="locker__code mono ship__code" data-act="shipCode" data-id="' + x.id + '" aria-label="Ver el número de seguimiento en grande">' + esc(x.tracking) + '</button>' : '') +
+        (x.note ? '<small class="muted">' + esc(x.note) + '</small>' : '') +
+        '<div class="row row--wrap">' + UI.btn('Ya la tengo', { icon: 'check', size: 'sm', data: { act: 'shipDone', id: x.id } }) + UI.btn('Editar', { icon: 'edit', size: 'sm', variant: 'ghost', data: { act: 'editShipment', id: x.id } }) + '</div></div>';
+    }).join('');
+  }
+
+  F.shipment = function (id) {
+    const s = S.get(), x = id ? s.shipments[id] : null, n = S.now(), hotel = S.hotelTonight(n.date);
+    const lodgings = Object.values(s.reservations).filter((r) => JT.data.isLodging(r.type)).sort((a, b) => (a.date || '').localeCompare(b.date || '')).map((r) => r.name);
+    const body = '<form id="fShip" class="stack" novalidate>' +
+      UI.field('Desde', UI.input('from', x ? x.from || '' : hotel ? hotel.name : '', { placeholder: 'p.ej. Hotel de Tokio', list: 'shipLodg' })) +
+      UI.field('Hasta', UI.input('to', x ? x.to || '' : '', { placeholder: 'p.ej. Ryokan de Takayama', list: 'shipLodg' })) +
+      '<datalist id="shipLodg">' + lodgings.map((l) => '<option value="' + esc(l) + '">').join('') + '</datalist>' +
+      '<div class="row row--top">' + UI.field('Enviada', UI.input('sent', x ? x.sent || '' : n.date, { type: 'date' })) + UI.field('Llega', UI.input('arrival', x ? x.arrival || '' : U.addDays(n.date, 1), { type: 'date' })) + '</div>' +
+      UI.field('Nº de seguimiento', UI.input('tracking', x ? x.tracking || '' : '', { placeholder: 'el del resguardo' }), { optional: true }) +
+      UI.field('Empresa', UI.input('company', x ? x.company || '' : '', { placeholder: 'la que pone el resguardo' }), { optional: true }) +
+      (x ? '' : '<div class="row row--top">' + UI.field('Coste (¥)', UI.input('cost', '', { inputmode: 'numeric' }), { optional: true }) + '</div>' +
+        UI.field('Pagado con', UI.chips('pay', D.options(D.PAYMENT), 'cash', { allowNone: true, noneLabel: '—' }), { optional: true, hint: 'Si pones el coste, se apunta como gasto de transporte.' })) +
+      UI.field('Nota', UI.input('note', x ? x.note || '' : '', { placeholder: 'p.ej. 2 maletas, la pequeña va con nosotros' }), { optional: true }) +
+      '<p class="error" hidden></p></form>';
+    const close = UI.sheet({
+      title: x ? 'Editar envío' : 'Enviar maleta', body: body,
+      footer: '<div class="row">' + (x ? UI.btn('Eliminar', { variant: 'danger', icon: 'trash', data: { del: '1' } }) : '') + UI.btn('Guardar', { type: 'submit', form: 'fShip', block: true }) + '</div>',
+      onMount: function (root) {
+        const form = root.querySelector('#fShip'), del = root.querySelector('[data-del]');
+        if (del) del.addEventListener('click', async () => { if (await UI.confirm('¿Eliminar el envío?', '')) { S.remove('shipments', x.id); close(); } });
+        form.addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          const f = UI.formData(form), err = form.querySelector('.error');
+          if (!f.to) { err.textContent = 'Apunta a dónde la envías'; err.hidden = false; return; }
+          const data = { from: f.from || undefined, to: f.to, sent: f.sent || undefined, arrival: f.arrival || undefined, tracking: f.tracking || undefined, company: f.company || undefined, note: f.note || undefined };
+          if (x) S.update('shipments', x.id, data);
+          else {
+            S.create('shipments', data);
+            const cost = U.parseAmount(f.cost);
+            if (cost) {
+              const t = S.today(), me = Object.values(s.travelers).find((p) => p.isMe) || Object.values(s.travelers)[0];
+              S.create('expenses', { amount: cost, currency: 'JPY', category: 'transport', paymentMethod: f.pay || undefined, description: 'Envío de maleta → ' + f.to, date: f.sent || t.now.date,
+                cityId: t.phase === 'during' && t.city ? t.city.id : undefined, paidById: me && me.id, splitWithIds: me ? [me.id] : [] });
+            }
+          }
+          close();
+          UI.toast(x ? 'Envío guardado' : 'Envío apuntado: te saldrá arriba hasta que la tengas');
+        });
+      }
+    });
+  };
+  A.newShipment = () => F.shipment();
+  A.editShipment = (el) => F.shipment(el.dataset.id);
+  A.shipDone = function (el) {
+    const x = S.get().shipments[el.dataset.id];
+    if (!x) return;
+    const copy = Object.assign({}, x);
+    S.remove('shipments', x.id);
+    UI.toast('🧳 ¡Maleta recibida!', { label: 'Deshacer', run: () => S.create('shipments', copy) });
+  };
+  A.shipCode = function (el) {
+    const x = S.get().shipments[el.dataset.id];
+    if (x && x.tracking) C.showcase({ ja: x.tracking, sub: (x.from || '') + ' → ' + (x.to || ''), es: 'Número de seguimiento', lang: 'none', noSpeak: true }, { fullscreen: true });
+  };
 
   F.locker = function (id) {
     const l = id ? S.get().lockers[id] : null, n = S.now();
@@ -261,9 +331,9 @@
   /* El Modo viaje está hecho de bloques que eliges y ordenas en Ajustes → Modo viaje.
      Los avisos (simulación, check-out) van siempre arriba. */
   const TRAVEL_BLOCKS = [
-    ['where', 'Dónde estás (día y ciudades)'], ['now', 'Ahora y siguiente plan'], ['lockers', 'Taquillas (dónde dejaste la maleta)'], ['quick', 'Accesos rápidos'],
+    ['where', 'Dónde estás (día y ciudades)'], ['now', 'Ahora y siguiente plan'], ['lockers', 'Taquillas y envíos de maletas'], ['quick', 'Accesos rápidos'],
     ['diary', 'Diario (por la noche)'], ['tomorrow', 'Mañana en un vistazo (por la noche)'], ['move', 'Cambio de ciudad (checklist, 2 días antes)'], ['converter', 'Conversor ¥ ⇄ €'], ['talk', 'Para comunicarte (frases y alergias)'],
-    ['hotel', 'Esta noche duermes en'], ['gifts', 'Regalos por comprar aquí'], ['money', 'Gastos (hoy, total, categorías y últimos)'], ['suica', 'Cartera (Suica y efectivo)'],
+    ['hotel', 'Esta noche duermes en'], ['gifts', 'Regalos y compras por hacer aquí'], ['money', 'Gastos (hoy, total, categorías y últimos)'], ['suica', 'Cartera (Suica y efectivo)'],
     ['reservations', 'Reservas de hoy'], ['later', 'Más tarde hoy'], ['notes', 'Notas de la ciudad'], ['hub', 'Tu viaje (apartados)']
   ];
 
@@ -284,14 +354,18 @@
 
   /** Los 3 últimos gastos de hoy (tocar uno lo abre para corregirlo). */
   function lastToday(all, date) {
-    const list = all.filter((e) => e.date === date).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    // Si hoy aún no hay gastos, los últimos apuntados (de días anteriores se abren bloqueados; «Editar» los desbloquea).
+    let list = all.filter((e) => e.date === date).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    const today = list.length > 0;
+    if (!today) list = all.filter((e) => e.date < date).sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || 0) - (a.createdAt || 0));
     if (!list.length) return '';
-    return '<div class="mini-exps"><small class="eyebrow muted">ÚLTIMOS DE HOY</small>' + list.slice(0, 3).map(function (e) {
+    return '<div class="mini-exps"><small class="eyebrow muted">' + (today ? 'ÚLTIMOS DE HOY' : 'ÚLTIMOS GASTOS') + '</small>' + list.slice(0, 3).map(function (e) {
       const c = D.EXPENSE[e.category] || ['Gasto', '•'], pay = e.paymentMethod && D.PAYMENT[e.paymentMethod];
       return '<button type="button" class="mini-exp" data-act="editExpense" data-id="' + e.id + '"><span class="mini-exp__emoji" style="--cc:' + C.catColor(e.category) + '" aria-hidden="true">' + c[1] + '</span>' +
-        '<span class="grow"><span class="block mini-exp__t">' + esc(e.description || c[0]) + '</span><small class="muted">' + esc([c[0], pay ? pay[1] + ' ' + pay[0] : ''].filter(Boolean).join(' · ')) + '</small></span>' +
+        '<span class="grow"><span class="block mini-exp__t">' + esc(e.description || c[0]) + '</span><small class="muted">' + esc([e.date !== date ? '🔒 ' + U.fmtShort(e.date) : '', c[0], pay ? pay[1] + ' ' + pay[0] : ''].filter(Boolean).join(' · ')) + '</small></span>' +
         '<strong class="mono">' + U.money(e.amount, e.currency) + '</strong></button>';
-    }).join('') + (list.length > 3 ? '<small class="faint">y ' + (list.length - 3) + ' más hoy</small>' : '') + '</div>';
+    }).join('') + (today && list.length > 3 ? '<small class="faint">y ' + (list.length - 3) + ' más hoy</small>' : '') +
+      '<button type="button" class="mini-exps__all" data-act="expAll">Ver todos los gastos ›</button></div>';
   }
 
   /* ── Cambios de ciudad (Tokio → Kanazawa → Takayama…) ──
@@ -334,7 +408,7 @@
       '<strong class="block">' + esc(nm.move.from.name) + ' → ' + esc(nm.move.to.name) + '</strong><span class="cl__bar"><span style="width:' + (items.length ? (done / items.length) * 100 : 0) + '%"></span></span></span><span class="cl__count mono">' + done + '/' + items.length + '</span></div>' +
       (pend.length ? '<div class="cl__items">' + pend.slice(0, 4).map((i) => '<div class="check cl__item"><button type="button" class="check__main" role="checkbox" aria-checked="false" data-act="toggleItem" data-id="' + i.id + '"><span class="check__box"></span><span>' + esc(i.text) + '</span></button></div>').join('') + '</div>' +
         (pend.length > 4 ? '<small class="faint">y ' + (pend.length - 4) + ' más</small>' : '') : '<p class="success small"><strong>¡Todo listo para el cambio! 🎉</strong></p>') +
-      '<div class="row row--end row--wrap">' + UI.btn('Apuntar taquilla', { size: 'sm', variant: 'ghost', icon: 'lock', data: { act: 'newLocker' } }) + UI.btn('Ver la checklist', { size: 'sm', variant: 'ghost', icon: 'checklist', data: { act: 'go', to: 'checklist' } }) + '</div></div>';
+      '<div class="row row--end row--wrap">' + UI.btn('Apuntar taquilla', { size: 'sm', variant: 'ghost', icon: 'lock', data: { act: 'newLocker' } }) + UI.btn('Enviar maleta', { size: 'sm', variant: 'ghost', icon: 'car', data: { act: 'newShipment' } }) + UI.btn('Ver la checklist', { size: 'sm', variant: 'ghost', icon: 'checklist', data: { act: 'go', to: 'checklist' } }) + '</div></div>';
   }
 
   function travelMode(t) {
@@ -384,7 +458,7 @@
       },
       gifts: function () {
         const gifts = city && C.giftsPendingIn ? C.giftsPendingIn(city.id) : [];
-        return gifts.length ? UI.banner('accent', 'gift', 'En ' + city.name + ': ' + gifts.length + (gifts.length === 1 ? ' regalo por comprar' : ' regalos por comprar'), gifts.map((g) => g.idea).join(' · '), { data: { act: 'go', to: 'gifts' } }) : '';
+        return gifts.length ? UI.banner('accent', 'gift', 'En ' + city.name + ': ' + gifts.length + ' por comprar', gifts.map((g) => g.idea + (g.mine ? ' (para ti)' : '')).join(' · '), { data: { act: 'go', to: 'gifts' } }) : '';
       },
       money: function () {
         // Igual que «Gastos» del Resumen (total, restante, barra de categorías) más lo de hoy.
@@ -613,11 +687,28 @@
     return { done: list.filter((a) => a.status === 'done').length, total: list.length, spent: C.moneySum(Object.values(S.get().expenses).filter((e) => e.date === day.date)) };
   }
 
+  /** Cierre del día: lo gastado hoy, lo que te queda en la Suica y en efectivo, y el día más caro hasta ahora. */
+  function dayClose(day) {
+    const s = S.get(), main = s.trip.mainCurrency, rates = SV.rates();
+    const spent = C.moneySum(Object.values(s.expenses).filter((e) => e.date === day.date));
+    const tiles = ['<div class="dclose__t"><small>Hoy</small><strong class="mono">' + esc(spent.text) + '</strong></div>'];
+    ['ic', 'cash'].forEach(function (w) {
+      const x = C.walletInfo && C.walletInfo(w);
+      if (x && x.active) tiles.push('<div class="dclose__t dclose__t--' + w + '"><small>' + (w === 'ic' ? '🚃 ' + esc(x.name) : '💴 Efectivo') + '</small><strong class="mono' + (x.balance < x.cfg.low ? ' warn' : '') + '">' + U.money(x.balance, 'JPY') + '</strong></div>');
+    });
+    // El día más caro del viaje hasta hoy (y si hoy lo supera).
+    const byDay = {};
+    Object.values(s.expenses).filter((e) => e.date >= s.trip.startDate && e.date <= day.date).forEach((e) => { const v = U.convert(e.amount, e.currency, main, rates); if (v !== null) byDay[e.date] = (byDay[e.date] || 0) + v; });
+    const top = Object.keys(byDay).sort((a, b) => byDay[b] - byDay[a])[0];
+    const topTxt = top ? (top === day.date ? '🔺 Hoy es el día más caro del viaje' : 'Día más caro: ' + U.fmtShort(top) + ' · ' + U.money(byDay[top], main)) : '';
+    return '<div class="dclose"><div class="dclose__row">' + tiles.join('') + '</div>' + (topTxt ? '<small class="muted">' + esc(topTxt) + '</small>' : '') + '</div>';
+  }
+
   /** Tarjeta «¿Qué tal hoy?»: por la noche en Inicio y en el Modo viaje. */
   function diaryCard(day) {
     const st = dayStats(day), mood = day.mood && D.MOOD[day.mood];
     return UI.card('<div class="row row--between"><span class="eyebrow">' + (day.diary || mood ? 'TU DIARIO DE HOY' : '¿QUÉ TAL HOY?') + '</span>' + (mood ? '<span class="diary__mood" aria-label="' + esc(mood[0]) + '">' + mood[1] + '</span>' : '') + '</div>' +
-      '<small class="muted">' + st.done + ' de ' + st.total + ' planes hechos · ' + esc(st.spent.text) + ' gastado</small>' +
+      '<small class="muted">' + st.done + ' de ' + st.total + ' planes hechos</small>' + dayClose(day) +
       (day.diary ? '<p class="pre clamp4">' + esc(day.diary) + '</p>' : '<p class="muted small">Apunta lo mejor del día antes de que se te olvide: al volver tendrás el viaje contado día a día.</p>') +
       '<div class="row row--wrap">' + UI.btn(day.diary || mood ? 'Editar' : 'Escribir el diario', { icon: 'edit', size: 'sm', variant: day.diary ? 'ghost' : 'primary', data: { act: 'editDiary', id: day.id } }) +
         UI.btn('Ver diario', { icon: 'book', size: 'sm', variant: 'ghost', data: { act: 'go', to: 'diary' } }) + '</div>', { cls: 'stack-sm' });
@@ -726,9 +817,62 @@
     if (x.foodsTried.length) html += UI.section('Comidas probadas', '<div class="sum__chips">' + x.foodsTried.map((f) => '<span class="chip chip--static">' + esc(f.emoji + ' ' + f.name) + '</span>').join('') + '</div>');
     const favVisited = x.visited.filter((p) => p.favorite).concat(x.tried.filter((r) => r.favorite));
     if (favVisited.length) html += UI.section('Tus favoritos', '<div class="sum__chips">' + favVisited.map((p) => '<span class="chip chip--static">♥ ' + esc(p.name) + '</span>').join('') + '</div>');
-    html += UI.btn('Compartir el resumen', { icon: 'share', block: true, variant: 'secondary', data: { act: 'shareSummary' } });
+    const stamps = Object.values(s.stamps || {});
+    if (stamps.length) html += UI.section('Sellos · ' + stamps.length, '<div class="sum__chips">' + stamps.map((x) => '<span class="chip chip--static">🔖 ' + esc(x.name) + '</span>').join('') + '</div>');
+    html += '<div class="stack-sm">' + UI.btn('Libro del viaje (imprimir o PDF)', { icon: 'book', block: true, data: { act: 'go', to: 'book' } }) +
+      UI.btn('Compartir el resumen', { icon: 'share', block: true, variant: 'secondary', data: { act: 'shareSummary' } }) + '</div>';
     return { html: html };
   };
+
+  /* ══ LIBRO DEL VIAJE ═════════════════════════════════════════
+     Una página para imprimir o guardar en PDF (Imprimir → Guardar como PDF):
+     portada, ruta, cada día con su diario, planes hechos, comidas y sellos, y al final gastos y favoritos.
+     Durante el viaje llega hasta hoy; antes, es el plan. */
+  V.book = function () {
+    const x = tripStats(), s = x.s, t = x.t, main = s.trip.mainCurrency;
+    const days = t.phase === 'during' ? x.lived : x.days;
+    const ja = x.stays.map((st) => C.cityJa(s.cities[st.cityId])).filter((v, i, a) => v && a.indexOf(v) === i).join(' · ');
+    let html = UI.header({ back: true, title: 'Libro del viaje', subtitle: t.phase === 'during' ? 'Hasta hoy · día ' + t.dayNumber + ' de ' + t.totalDays : t.phase === 'before' ? 'Lo planificado' : 'Viaje completo' }) +
+      '<div class="book__actions stack-sm">' + UI.btn('Imprimir o guardar en PDF', { icon: 'download', block: true, data: { act: 'printBook' } }) +
+      '<small class="faint center">En el móvil: Compartir o el menú ⋮ → Imprimir → Guardar como PDF.</small></div>';
+    html += '<article class="book">';
+    // Portada.
+    html += '<header class="book__cover"><div class="book__flag" aria-hidden="true">' + esc(s.trip.emoji || '🇯🇵') + '</div><h1 class="book__title">' + esc(s.trip.name) + '</h1>' +
+      '<p class="book__dates">' + esc(U.fmtRange(s.trip.startDate, s.trip.endDate)) + '</p>' + (ja ? '<p class="book__ja" lang="ja">' + esc(ja) + '</p>' : '') +
+      '<p class="book__stats">' + esc((function () {
+        const nCities = new Set(x.stays.map((st) => st.cityId)).size, nSt = Object.keys(s.stamps || {}).length;
+        const pl = (n, one, many) => (n ? n + ' ' + (n === 1 ? one : many) : '');
+        return [pl(days.length, 'día', 'días'), pl(nCities, 'ciudad', 'ciudades'), pl(x.done.length, 'plan hecho', 'planes hechos'), pl(x.foodsTried.length, 'comida probada', 'comidas probadas'), pl(nSt, 'sello', 'sellos')].filter(Boolean).join(' · ');
+      })()) + '</p></header>';
+    // Ruta.
+    if (x.stays.length) html += '<section class="book__sec"><h2>La ruta</h2>' + x.stays.map(function (st) {
+      const c = s.cities[st.cityId] || {};
+      return '<div class="book__stay" style="--city:' + esc(c.color || 'var(--accent)') + '"><span class="book__kanji" lang="ja">' + esc(C.cityJa(c) || '·') + '</span><span class="grow"><strong>' + esc(c.name || 'Ciudad') + '</strong><small class="block">' + esc(U.fmtRange(st.start, st.end) + ' · ' + st.nights + (st.nights === 1 ? ' noche' : ' noches')) + '</small></span></div>';
+    }).join('') + '</section>';
+    // Día a día.
+    html += '<section class="book__sec"><h2>Día a día</h2>' + days.map(function (d) {
+      const city = d.cityId && s.cities[d.cityId], mood = d.mood && D.MOOD[d.mood];
+      const acts = S.dayActivities(d.id).filter((a) => t.phase === 'before' || a.status === 'done');
+      const foods = Object.values(s.foods).filter((f) => f.tried && f.triedDate === d.date);
+      const stamps = Object.values(s.stamps || {}).filter((st) => st.date === d.date);
+      const spent = C.moneySum(Object.values(s.expenses).filter((e) => e.date === d.date));
+      return '<div class="book__day" style="--city:' + esc(city ? city.color || 'var(--accent)' : 'var(--border)') + '"><div class="book__dayhead"><span class="book__dayn">Día ' + S.dayNumber(d.id) + '</span><strong class="grow">' + esc(U.fmtLong(d.date)) + (city ? ' · ' + esc(city.name) : '') + '</strong>' + (mood ? '<span class="book__mood">' + mood[1] + '</span>' : '') + '</div>' +
+        (d.diary ? '<p class="book__diary pre">' + esc(d.diary) + '</p>' : '') +
+        (acts.length ? '<ul class="book__acts">' + acts.map((a) => '<li>' + (a.startTime ? '<span class="mono">' + esc(a.startTime) + '</span> ' : '') + (D.ACTIVITY[a.category] ? D.ACTIVITY[a.category][1] + ' ' : '') + esc(a.title) + '</li>').join('') + '</ul>' : '') +
+        (foods.length || stamps.length || spent.total ? '<p class="book__extra">' + [foods.length ? '🍱 ' + foods.map((f) => f.name).join(', ') : '', stamps.length ? '🔖 ' + stamps.map((st) => st.name).join(', ') : '', spent.total ? '💴 ' + spent.text : ''].filter(Boolean).map(esc).join(' · ') + '</p>' : '') + '</div>';
+    }).join('') + '</section>';
+    // Comidas, sellos, favoritos y gastos.
+    if (x.foodsTried.length) html += '<section class="book__sec"><h2>Comidas probadas</h2><p>' + x.foodsTried.map((f) => esc(f.emoji + ' ' + f.name)).join(' · ') + '</p></section>';
+    const stampsAll = Object.values(s.stamps || {});
+    if (stampsAll.length) html += '<section class="book__sec"><h2>Sellos</h2><p>' + stampsAll.map((st) => '🔖 ' + esc(st.name)).join(' · ') + '</p></section>';
+    const favs = x.visited.filter((p) => p.favorite).concat(x.tried.filter((r) => r.favorite));
+    if (favs.length) html += '<section class="book__sec"><h2>Favoritos</h2><p>' + favs.map((p) => '♥ ' + esc(p.name)).join(' · ') + '</p></section>';
+    if (x.all.total) html += '<section class="book__sec"><h2>Gastos</h2><p><strong>' + esc(x.all.text) + '</strong>' + (x.avg ? ' · media ' + esc(U.money(x.avg, main)) + ' al día' : '') + (x.topDay ? ' · día más caro: ' + esc(U.fmtDay(x.topDay)) : '') + '</p>' +
+      C.catStack(Object.values(s.expenses), 6) + '</section>';
+    html += '<footer class="book__foot">Hecho con Japón Travel · ' + esc(U.fmtShort(t.now.date)) + '</footer></article>';
+    return { html: html };
+  };
+  A.printBook = () => window.print();
 
   A.shareSummary = async function () {
     const x = tripStats(), s = x.s, t = x.t;
