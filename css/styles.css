@@ -45,7 +45,7 @@
     --t-slate: #A7B3C4; --t-slate-soft: #262B33; --on-tone: #111113;
   }
 }
-:root[data-theme="dark"] {
+:root[data-theme="dark"], :root[data-theme="black"] {
   --bg: #111113; --surface: #1B1B1E; --surface-2: #26262A; --text: #F3F1EC; --muted: #A9A9AE; --faint: #76767B; --border: #2D2D32;
   --accent: #E5384F; --accent-soft: #3A1B21; --success: #5FBF8F; --success-soft: #1D3229; --warn: #E0A44A; --warn-soft: #3A2D18;
   --info: #6FB3B7; --info-soft: #1D3133; --overlay: rgba(0, 0, 0, .6); --shadow: none; color-scheme: dark;
@@ -53,6 +53,10 @@
   --t-green: #5FBF8F; --t-green-soft: #1D3229; --t-teal: #4FC1B5; --t-teal-soft: #16302E; --t-blue: #6FA8F0; --t-blue-soft: #1A2A40;
   --t-indigo: #9C96F2; --t-indigo-soft: #25233F; --t-violet: #C18BEA; --t-violet-soft: #2E2140; --t-pink: #F07AAE; --t-pink-soft: #3A1A2A;
   --t-slate: #A7B3C4; --t-slate-soft: #262B33; --on-tone: #111113;
+}
+/* Negro puro (OLED): los píxeles negros se apagan y gastan menos batería. Mismos colores que el oscuro. */
+:root[data-theme="black"] {
+  --bg: #000000; --surface: #0D0D0F; --surface-2: #17171A; --border: #232327; --on-tone: #000000;
 }
 
 /* ── 2. Base ───────────────────────────────────────────────── */
@@ -543,6 +547,10 @@ strong > .eur, b > .eur, .stat__value > .eur, .wcard__bal > .eur, .exp__amount .
 .accent > .eur, .success > .eur, .warn > .eur { color: var(--faint); }
 .suica__row .grow small.block { white-space: normal; }
 .amt, .eur { cursor: pointer; }
+/* ── v1.21.0 ── */
+.retc .check__main .grow { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.retc .check__main .grow small { font-weight: 400; }
+.retc .cl__item .iconbtn { color: var(--muted); }
 /* ── v1.20.0 ── */
 /* Reparto: quién debe a quién, cada uno y gastos compartidos */
 .who { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; }
@@ -629,7 +637,7 @@ strong > .eur, b > .eur, .stat__value > .eur, .wcard__bal > .eur, .exp__amount .
 .book__extra { font-size: 13px; color: var(--muted); }
 .book__foot { text-align: center; font-size: 12px; color: var(--faint); padding: 12px 0 4px; }
 @media print {
-  :root, :root[data-theme="dark"], :root[data-theme="light"] { --bg: #fff !important; --surface: #fff !important; --surface-2: #f4f4f5 !important; --text: #111 !important; --muted: #555 !important; --faint: #777 !important; --border: #ddd !important; }
+  :root, :root[data-theme="dark"], :root[data-theme="black"], :root[data-theme="light"] { --bg: #fff !important; --surface: #fff !important; --surface-2: #f4f4f5 !important; --text: #111 !important; --muted: #555 !important; --faint: #777 !important; --border: #ddd !important; }
   body { background: #fff !important; color: #111 !important; }
   .hdr, .book__actions, .banner, .toast, .sheet-wrap { display: none !important; }
   .book__cover { background: #fff; }
@@ -732,7 +740,7 @@ strong > .eur, b > .eur, .stat__value > .eur, .wcard__bal > .eur, .exp__amount .
 :root[data-contrast="high"] { --muted: #2E2E33; --faint: #4D4D52; --border: #A8A296; --surface-2: #E4DFD5; }
 :root[data-contrast="high"] body { font-weight: 500; }
 :root[data-contrast="high"] .card, :root[data-contrast="high"] .tile, :root[data-contrast="high"] .fold, :root[data-contrast="high"] .quick__btn { border-width: 2px; }
-:root[data-contrast="high"][data-theme="dark"] { --muted: #E2E2E6; --faint: #C4C4CA; --border: #5C5C64; }
+:root[data-contrast="high"][data-theme="dark"], :root[data-contrast="high"][data-theme="black"] { --muted: #E2E2E6; --faint: #C4C4CA; --border: #5C5C64; }
 @media (prefers-color-scheme: dark) { :root[data-contrast="high"]:not([data-theme="light"]) { --muted: #E2E2E6; --faint: #C4C4CA; --border: #5C5C64; } }
 /* Elegir tipo con buscador */
 .tpick { display: flex; flex-direction: column; gap: 8px; }

@@ -23,7 +23,7 @@ JT.app = (function () {
     [/^cities$/, 'cities', 'home'], [/^city\/([\w-]+)$/, 'city', 'home'], [/^reservations$/, 'reservations', 'home'], [/^reservation\/([\w-]+)$/, 'reservation', 'home'],
     [/^transport$/, 'transport', 'home'], [/^notes$/, 'notes', 'home'], [/^checklist$/, 'checklist', 'home'], [/^info$/, 'info', 'home'],
     [/^phrases$/, 'phrases', 'home'], [/^documents$/, 'documents', 'home'], [/^search$/, 'search', 'home'], [/^settings$/, 'settings', 'home'],
-    [/^ready$/, 'ready', 'home'], [/^diary$/, 'diary', 'home'], [/^gifts$/, 'gifts', 'home'], [/^learn$/, 'learn', 'home'], [/^summary$/, 'summary', 'home'], [/^book$/, 'book', 'home']
+    [/^ready$/, 'ready', 'home'], [/^diary$/, 'diary', 'home'], [/^gifts$/, 'gifts', 'home'], [/^learn$/, 'learn', 'home'], [/^summary$/, 'summary', 'home'], [/^book$/, 'book', 'home'], [/^missing$/, 'missing', 'home']
   ];
 
   let main, lastPath = null, pending = false;
@@ -142,9 +142,9 @@ JT.app = (function () {
     if (S.get().settings.contrast === 'high') document.documentElement.setAttribute('data-contrast', 'high'); else document.documentElement.removeAttribute('data-contrast');
     if (t === 'system') document.documentElement.removeAttribute('data-theme');
     else document.documentElement.setAttribute('data-theme', t);
-    const dark = t === 'dark' || (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    const dark = t === 'dark' || t === 'black' || (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', dark ? '#111113' : '#F7F5F0');
+    if (meta) meta.setAttribute('content', t === 'black' ? '#000000' : dark ? '#111113' : '#F7F5F0');
   }
 
   /* ── Delegación de eventos ────────────────────────────────── */
@@ -248,6 +248,31 @@ JT.app = (function () {
     s.content.style.transform = open ? 'translateX(-160px)' : '';
     suppressClick = true;
     setTimeout(() => (suppressClick = false), 300);
+  }
+
+  /* ── Deslizar entre pestañas (Inicio · Itinerario · Sitios · Gastos) ──
+     Sólo en la pantalla principal de cada pestaña; gesto claramente horizontal, de al menos 70 px y rápido.
+     No interfiere con lo que ya se desliza (filas de gastos, chips, franja, conversor) ni con lo que se escribe. */
+  const TAB_ORDER = ['home', 'itinerary', 'sites', 'expenses'];
+  const TAB_OF = { '': 'home', home: 'home', itinerary: 'itinerary', sites: 'sites', places: 'sites', food: 'sites', dishes: 'sites', stamps: 'sites', expenses: 'expenses' };
+  let tabSwipe = null;
+  function currentTabRoot() { return TAB_OF[location.hash.replace(/^#\/?/, '').split('?')[0]]; }
+  function onTabTouchStart(ev) {
+    tabSwipe = null;
+    if (ev.touches.length !== 1 || !currentTabRoot() || document.querySelector('.sheet-wrap, .showcase')) return;
+    if (ev.target.closest('.chips--scroll, .swipe, [data-swipe], input, textarea, select, .strip, .conv, .catstack, .qexp__list')) return;
+    tabSwipe = { x: ev.touches[0].clientX, y: ev.touches[0].clientY, t: Date.now() };
+  }
+  function onTabTouchEnd(ev) {
+    if (!tabSwipe) return;
+    const s = tabSwipe, tch = ev.changedTouches[0], dx = tch.clientX - s.x, dy = tch.clientY - s.y;
+    tabSwipe = null;
+    if (Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx) * 0.6 || Date.now() - s.t > 600) return;
+    const tab = currentTabRoot(); if (!tab) return;
+    const i = TAB_ORDER.indexOf(tab), j = i + (dx < 0 ? 1 : -1);
+    if (j < 0 || j >= TAB_ORDER.length) return;
+    JT.uiState.daySlide = dx < 0 ? 'next' : 'prev'; // misma animación lateral que entre días
+    location.hash = TAB_ORDER[j] === 'home' ? '#/' : '#/' + TAB_ORDER[j];
   }
 
   /* ── Botón (+) ────────────────────────────────────────────── */
@@ -386,6 +411,8 @@ JT.app = (function () {
     document.addEventListener('touchstart', onTouchStart, { passive: true });
     document.addEventListener('touchmove', onTouchMove, { passive: true });
     document.addEventListener('touchend', onTouchEnd);
+    document.addEventListener('touchstart', onTabTouchStart, { passive: true });
+    document.addEventListener('touchend', onTabTouchEnd, { passive: true });
     window.addEventListener('scroll', onScrollFab, { passive: true });
     takeShared();
     render();

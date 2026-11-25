@@ -280,6 +280,7 @@ JT.cards = (function () {
       window.removeEventListener('resize', fit);
       document.removeEventListener('fullscreenchange', onFs);
       window.removeEventListener('hashchange', close);
+      UI.backForget(close);
       ov.remove();
       document.body.classList.remove('has-showcase');
       showcaseOpen = null;
@@ -291,6 +292,7 @@ JT.cards = (function () {
     const onFs = function () { if (entered && !document.fullscreenElement) close(); };
     document.addEventListener('fullscreenchange', onFs);
     window.addEventListener('hashchange', close);
+    UI.backPush(close); // «atrás» del móvil: cierra la pantalla completa sin salir de donde estás
     ov.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', close));
     const say = ov.querySelector('[data-say]');
     if (say) say.addEventListener('click', () => JT.services.speak(o.speak || o.ja));

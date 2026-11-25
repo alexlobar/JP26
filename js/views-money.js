@@ -145,8 +145,11 @@
     let head = '';
     if (f) {
       list = list.filter((e) => (e[f.k] || '') === f.v);
-      const lbl = f.k === 'category' ? (D.EXPENSE[f.v] ? D.EXPENSE[f.v][1] + ' ' + D.EXPENSE[f.v][0] : f.v) : f.v ? (D.PAYMENT[f.v] ? D.PAYMENT[f.v][1] + ' ' + D.PAYMENT[f.v][0] : f.v) : 'Sin forma de pago';
-      head = '<div class="filter-on"><span class="grow"><small class="muted block">' + (f.k === 'category' ? 'Categoría' : 'Pagado con') + '</small><strong>' + esc(lbl) + '</strong> · <span class="mono">' + C.moneySum(list).text + '</span> · ' + list.length + (list.length === 1 ? ' gasto' : ' gastos') + '</span>' +
+      const trv = S.get().travelers;
+      const lbl = f.k === 'category' ? (D.EXPENSE[f.v] ? D.EXPENSE[f.v][1] + ' ' + D.EXPENSE[f.v][0] : f.v)
+        : f.k === 'paidById' ? (f.v && trv[f.v] ? trv[f.v].name : 'Sin indicar quién pagó')
+        : f.v ? (D.PAYMENT[f.v] ? D.PAYMENT[f.v][1] + ' ' + D.PAYMENT[f.v][0] : f.v) : 'Sin forma de pago';
+      head = '<div class="filter-on"><span class="grow"><small class="muted block">' + (f.k === 'category' ? 'Categoría' : f.k === 'paidById' ? 'Pagó' : 'Pagado con') + '</small><strong>' + esc(lbl) + '</strong> · <span class="mono">' + C.moneySum(list).text + '</span> · ' + list.length + (list.length === 1 ? ' gasto' : ' gastos') + '</span>' +
         UI.btn('Quitar filtro', { icon: 'x', size: 'sm', variant: 'ghost', data: { act: 'expFilterClear' } }) + '</div>';
       if (!list.length) return head + '<p class="muted center">No hay gastos con este filtro.</p>';
     }

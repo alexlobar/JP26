@@ -200,7 +200,10 @@
   };
 
   function alerts(t) {
-    const s = S.get(), out = [checkoutAlerts(t.now), lockerCards(t.now, false)], n = t.now;
+    const s = S.get(), out = [checkoutAlerts(t.now), returnCard(t), lockerCards(t.now, false)], n = t.now;
+    // Datos importantes sin completar (ciudades de los días, noches sin alojamiento, hoteles para el taxista).
+    const imp = t.phase !== 'after' && JT.missing ? JT.missing.important() : 0;
+    if (imp) out.push(UI.banner('neutral', 'list', 'Datos por completar', JT.missing.count() + ' cosas que harían que la app te ayude más: ciudades de los días, alojamientos, horas…', { data: { act: 'go', to: 'missing' } }));
     // A menos de 30 días ya lo cuenta «¿Listo para el viaje?», que incluye la checklist.
     if (t.phase === 'before' && t.daysUntil > 30) {
       const lists = Object.values(s.checklists).filter((c) => c.section === 'before').map((c) => c.id);
@@ -332,7 +335,7 @@
      Los avisos (simulación, check-out) van siempre arriba. */
   const TRAVEL_BLOCKS = [
     ['where', 'Dónde estás (día y ciudades)'], ['now', 'Ahora y siguiente plan'], ['lockers', 'Taquillas y envíos de maletas'], ['quick', 'Accesos rápidos'],
-    ['diary', 'Diario (por la noche)'], ['tomorrow', 'Mañana en un vistazo (por la noche)'], ['move', 'Cambio de ciudad (checklist, 2 días antes)'], ['converter', 'Conversor ¥ ⇄ €'], ['talk', 'Para comunicarte (frases y alergias)'],
+    ['diary', 'Diario (por la noche)'], ['tomorrow', 'Mañana en un vistazo (por la noche)'], ['move', 'Cambio de ciudad (checklist, 2 días antes)'], ['return', 'Antes del vuelo (los 2 últimos días)'], ['converter', 'Conversor ¥ ⇄ €'], ['talk', 'Para comunicarte (frases y alergias)'],
     ['hotel', 'Esta noche duermes en'], ['gifts', 'Regalos y compras por hacer aquí'], ['money', 'Gastos (hoy, total, categorías y últimos)'], ['suica', 'Cartera (Suica y efectivo)'],
     ['reservations', 'Reservas de hoy'], ['later', 'Más tarde hoy'], ['notes', 'Notas de la ciudad'], ['hub', 'Tu viaje (apartados)']
   ];
@@ -395,6 +398,44 @@
   }
   C.cityMoves = cityMoves; C.nextMove = nextMove; C.moveWhen = moveWhen; C.syncMoveLists = syncMoveLists;
 
+  /* ── Antes del vuelo (los 2 últimos días) ──
+     Una lista que sale de lo que ya tiene la app: tax free, saldo de la Welcome Suica, efectivo que sobra,
+     maletas en camino, taquillas, regalos por comprar, check-in del vuelo, maletas y copia de seguridad.
+     Lo que marcas se guarda (settings.returnDone). */
+  function returnItems() {
+    const s = S.get(), items = [], n = S.now();
+    const flight = Object.values(s.transports).filter((x) => x.kind === 'flight' && x.date && x.date >= n.date).sort((a, b) => b.date.localeCompare(a.date))[0];
+    items.push({ k: 'checkin', t: 'Check-in online del vuelo de vuelta', sub: flight ? '✈️ ' + (flight.origin || '') + ' → ' + (flight.destination || '') + ' · ' + U.fmtShort(flight.date) + (flight.departTime ? ' a las ' + flight.departTime : '') : 'Suele abrirse en la web o la app de la aerolínea.' });
+    const tf = Object.values(s.expenses).filter((e) => e.taxFree);
+    if (tf.length) items.push({ k: 'taxfree', t: 'Compras tax free a mano', sub: tf.length + (tf.length === 1 ? ' compra · ' : ' compras · ') + C.moneySum(tf).text, data: { act: 'expSummary' } });
+    const ic = C.walletInfo && C.walletInfo('ic'), cash = C.walletInfo && C.walletInfo('cash');
+    if (ic && ic.active && ic.welcome && ic.balance > 0) items.push({ k: 'suica', t: 'Gastar el saldo de la Welcome Suica', sub: U.money(ic.balance, 'JPY') + ' · no se devuelve: konbinis, máquinas, tiendas del aeropuerto' });
+    if (cash && cash.active && cash.balance > 0) items.push({ k: 'cash', t: 'Efectivo que te sobra', sub: U.money(cash.balance, 'JPY') + ' · gástalo o guárdalo para otro viaje' });
+    Object.values(s.shipments || {}).forEach((x) => items.push({ k: 'ship-' + x.id, t: 'Maleta en camino a ' + (x.to || '¿?'), sub: x.arrival ? 'Llega el ' + U.fmtShort(x.arrival) : 'Sin fecha de llegada' }));
+    Object.values(s.lockers || {}).forEach((l) => items.push({ k: 'lock-' + l.id, t: 'Vaciar la taquilla', sub: (l.place || '') + (l.number ? ' · nº ' + l.number : '') }));
+    const gifts = Object.values(s.gifts).filter((g) => !g.bought);
+    if (gifts.length) items.push({ k: 'gifts', t: gifts.length + (gifts.length === 1 ? ' compra pendiente' : ' compras pendientes'), sub: gifts.slice(0, 3).map((g) => g.idea).join(' · ') + (gifts.length > 3 ? '…' : ''), data: { act: 'go', to: 'gifts' } });
+    items.push({ k: 'bags', t: 'Peso y tamaño de las maletas', sub: 'Compáralo con lo que incluye tu billete' });
+    items.push({ k: 'backup', t: 'Copia de seguridad del viaje', sub: 'Para tenerlo todo al volver', data: { act: 'exportJson' } });
+    return items;
+  }
+  function returnCard(t) {
+    if (t.phase !== 'during' || t.totalDays - t.dayNumber > 1) return '';
+    const done = S.get().settings.returnDone || {}, items = returnItems();
+    const nDone = items.filter((i) => done[i.k]).length, left = t.totalDays - t.dayNumber;
+    const sorted = items.slice().sort((a, b) => !!done[a.k] - !!done[b.k]);
+    return '<div class="card cl tone-blue retc stack-sm"><div class="cl__head"><span class="cl__emoji" aria-hidden="true">✈️</span><span class="grow"><small class="eyebrow muted block">ANTES DEL VUELO · ' + (left === 0 ? 'VUELVES HOY' : 'VUELVES MAÑANA') + '</small>' +
+      '<strong class="cl__title">Preparar la vuelta</strong><span class="cl__bar"><span style="width:' + (items.length ? (nDone / items.length) * 100 : 0) + '%"></span></span></span><span class="cl__count mono">' + nDone + '/' + items.length + '</span></div>' +
+      '<div class="cl__items">' + sorted.map((i) => '<div class="check cl__item' + (done[i.k] ? ' is-done' : '') + '"><button type="button" class="check__main" role="checkbox" aria-checked="' + !!done[i.k] + '" data-act="returnToggle" data-k="' + esc(i.k) + '"><span class="check__box">' + (done[i.k] ? U.icon('check', 16) : '') + '</span><span class="grow"><span class="block">' + esc(i.t) + '</span>' + (i.sub ? '<small class="muted">' + esc(i.sub) + '</small>' : '') + '</span></button>' +
+        (i.data && !done[i.k] ? UI.iconBtn('chevron', 'Abrir', i.data, { size: 16 }) : '') + '</div>').join('') + '</div></div>';
+  }
+  C.returnCard = returnCard;
+  A.returnToggle = function (el) {
+    const done = Object.assign({}, S.get().settings.returnDone || {}), k = el.dataset.k;
+    if (done[k]) delete done[k]; else done[k] = true;
+    S.setSettings({ returnDone: done });
+  };
+
   /** Modo viaje: 2 días antes de cada cambio, la checklist con lo pendiente para marcar ahí mismo. */
   function moveCard(date) {
     const s = S.get(), nm = nextMove(date);
@@ -443,6 +484,7 @@
         ]), ic ? '5' : '');
       },
       move: () => moveCard(n.date),
+      return: () => returnCard(t),
       lockers: () => lockerCards(n, true),
       diary: () => (day && n.minutes >= 18 * 60 ? diaryCard(day) : ''),
       tomorrow: () => (n.minutes >= 18 * 60 ? tomorrowCard(U.addDays(n.date, 1)) : ''),
@@ -604,7 +646,8 @@
     const loose = days.filter((d) => !d.cityId && !isPast(d));
     if (loose.length) body += UI.section('Días sin ciudad', loose.map(card).join(''), UI.btn('Asignar', { size: 'sm', variant: 'ghost', data: { act: 'go', to: 'cities' } }));
     html += '<div class="itin">' + body + '</div>';
-    html += '<div class="row row--center row--wrap">' + UI.btn('Ciudades', { icon: 'city', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'cities' } }) + UI.btn('Transporte', { icon: 'train', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'transport' } }) + UI.btn('Resumen', { icon: 'sparkle', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'summary' } }) + '</div>';
+    html += '<div class="row row--center row--wrap">' + UI.btn('Ciudades', { icon: 'city', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'cities' } }) + UI.btn('Transporte', { icon: 'train', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'transport' } }) + UI.btn('Resumen', { icon: 'sparkle', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'summary' } }) +
+      UI.btn('Datos que faltan' + (JT.missing && JT.missing.count() ? ' · ' + JT.missing.count() : ''), { icon: 'list', size: 'sm', variant: 'secondary', data: { act: 'go', to: 'missing' } }) + '</div>';
     return { html: html };
   };
   A.goToday = (el) => { const c = document.getElementById('day-' + el.dataset.id); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'center' }); };

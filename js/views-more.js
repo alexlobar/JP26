@@ -1145,6 +1145,68 @@
 
   JT.ready = { syncSummary: () => { const c = syncChecks(); return { pending: c.filter((x) => !x.ok).length, total: c.length }; } };
 
+  /* ══ DATOS QUE FALTAN ════════════════════════════════════════
+     Lo que no está completo y hace que la app ayude menos: días sin ciudad, noches sin alojamiento,
+     hoteles sin dirección en japonés o sin hora de salida, reservas y trayectos sin hora o código,
+     gastos sin forma de pago o sin quién pagó, sitios sin ciudad o sin ubicación. Cada uno con su botón. */
+  function missingChecks() {
+    const s = S.get(), out = [], days = S.sortedDays();
+    const few = (arr, f) => arr.slice(0, 3).map(f).join(', ') + (arr.length > 3 ? ' y ' + (arr.length - 3) + ' más' : '');
+    const b = (label, data) => UI.btn(label, { size: 'sm', variant: 'secondary', data: data });
+    const add = (id, title, bad, okText, badText, action) => out.push({ id: id, title: title, ok: !bad.length, n: bad.length, sub: bad.length ? badText : okText, action: bad.length ? action : '' });
+    // Ciudades y alojamiento
+    const noCity = days.filter((d) => !d.cityId || !s.cities[d.cityId]);
+    add('days', 'Días sin ciudad', noCity, 'Todos los días tienen su ciudad.', noCity.length + (noCity.length === 1 ? ' día: ' : ' días: ') + few(noCity, (d) => U.fmtShort(d.date)) + '. Sin ciudad no salen los cambios de ciudad, la franja ni la media por ciudad.', b('Asignar', { act: 'editDay', id: noCity[0] && noCity[0].id }));
+    const lodg = Object.values(s.reservations).filter((r) => JT.data.isLodging(r.type) && r.date).sort((a, b2) => a.date.localeCompare(b2.date));
+    const nights = days.slice(0, -1).filter((d) => !lodg.some((r) => d.date >= r.date && d.date < (r.endDate || U.addDays(r.date, 1))));
+    add('nights', 'Noches sin alojamiento', nights, 'Todas las noches tienen alojamiento en Reservas.', few(nights, (d) => U.fmtShort(d.date)) + (nights.length > 1 ? ' (' + nights.length + ' noches)' : '') + '.', b('Añadir', { act: 'newReservation', type: 'hotel', date: nights[0] && nights[0].date }));
+    if (lodg.length) {
+      const noJa = lodg.filter((r) => !r.addressJa), noOut = lodg.filter((r) => r.endDate && !r.checkoutTime), noCode = lodg.filter((r) => !r.confirmationCode);
+      add('hotelJa', 'Alojamientos sin dirección en japonés', noJa, 'Todos la tienen: listos para el taxista.', few(noJa, (r) => r.name) + '.', b('Completar', { act: 'editReservation', id: noJa[0] && noJa[0].id }));
+      add('hotelOut', 'Alojamientos sin hora de salida', noOut, 'Todos tienen hora de check-out.', few(noOut, (r) => r.name) + '. Sin ella, el aviso no dice a qué hora salir.', b('Completar', { act: 'editReservation', id: noOut[0] && noOut[0].id }));
+      add('hotelCode', 'Alojamientos sin código de reserva', noCode, 'Todos tienen su código.', few(noCode, (r) => r.name) + '.', b('Completar', { act: 'editReservation', id: noCode[0] && noCode[0].id }));
+    }
+    // Reservas y trayectos
+    const other = Object.values(s.reservations).filter((r) => !JT.data.isLodging(r.type));
+    const oNoTime = other.filter((r) => !r.time), oNoCode = other.filter((r) => !r.confirmationCode);
+    if (other.length) {
+      add('resTime', 'Reservas sin hora', oNoTime, 'Todas tienen hora.', few(oNoTime, (r) => r.name) + '.', b('Completar', { act: 'editReservation', id: oNoTime[0] && oNoTime[0].id }));
+      add('resCode', 'Reservas sin código', oNoCode, 'Todas tienen código.', few(oNoCode, (r) => r.name) + '.', b('Completar', { act: 'editReservation', id: oNoCode[0] && oNoCode[0].id }));
+    }
+    const trs = Object.values(s.transports);
+    if (trs.length) {
+      const tNoTime = trs.filter((x) => !x.departTime), tNoSeat = trs.filter((x) => ['flight', 'shinkansen', 'train'].indexOf(x.kind) > -1 && !x.seat && !x.bookingCode);
+      const trName = (x) => (x.origin || '¿?') + ' → ' + (x.destination || '¿?');
+      add('trTime', 'Trayectos sin hora de salida', tNoTime, 'Todos tienen hora.', few(tNoTime, trName) + '.', b('Completar', { act: 'editTransport', id: tNoTime[0] && tNoTime[0].id }));
+      add('trSeat', 'Trenes y vuelos sin asiento ni código', tNoSeat, 'Todos tienen asiento o código.', few(tNoSeat, trName) + '.', b('Completar', { act: 'editTransport', id: tNoSeat[0] && tNoSeat[0].id }));
+    }
+    // Gastos
+    const exps = Object.values(s.expenses).filter((e) => !e.isSample);
+    const noPay = exps.filter((e) => !e.paymentMethod);
+    add('expPay', 'Gastos sin forma de pago', noPay, 'Todos dicen cómo se pagaron.', noPay.length + (noPay.length === 1 ? ' gasto' : ' gastos') + '. Sin ella no cuentan para la Suica ni el efectivo.', b('Ver', { act: 'expFilter', k: 'paymentMethod', v: '' }));
+    if (Object.keys(s.travelers).length > 1) {
+      const noPayer = exps.filter((e) => !e.paidById || !s.travelers[e.paidById]);
+      add('expPayer', 'Gastos sin quién pagó', noPayer, 'Todos dicen quién pagó.', noPayer.length + (noPayer.length === 1 ? ' gasto' : ' gastos') + '. No entran en el reparto.', b('Ver', { act: 'expFilter', k: 'paidById', v: '' }));
+    }
+    // Sitios
+    const sites = Object.values(s.places).map((p) => ['place', p]).concat(Object.values(s.restaurants).map((r) => ['restaurant', r]));
+    const sNoCity = sites.filter((x) => !x[1].cityId || !s.cities[x[1].cityId]);
+    const sNoLoc = sites.filter((x) => !x[1].coords && !x[1].address && !(x[1].location && (x[1].location.coords || x[1].location.address)));
+    const editSite = (x) => x && { act: x[0] === 'place' ? 'editPlace' : 'editRestaurant', id: x[1].id };
+    add('siteCity', 'Sitios sin ciudad', sNoCity, 'Todos están en su ciudad.', few(sNoCity, (x) => x[1].name) + '. No salen agrupados ni en «Lo que queda por ver».', b('Completar', editSite(sNoCity[0])));
+    add('siteLoc', 'Sitios sin ubicación', sNoLoc, 'Todos tienen dirección o coordenadas.', few(sNoLoc, (x) => x[1].name) + '. Sin ella no funciona «Cómo llegar» ni la distancia.', b('Completar', editSite(sNoLoc[0])));
+    return out;
+  }
+  JT.missing = { count: () => missingChecks().filter((c) => !c.ok).length, important: () => missingChecks().filter((c) => !c.ok && ['days', 'nights', 'hotelJa', 'hotelOut'].indexOf(c.id) > -1).length };
+
+  V.missing = function () {
+    const checks = missingChecks(), bad = checks.filter((c) => !c.ok), good = checks.filter((c) => c.ok);
+    return { html: UI.header({ back: true, title: 'Datos que faltan', subtitle: bad.length ? bad.length + (bad.length === 1 ? ' cosa por completar' : ' cosas por completar') : 'Todo completo' }) +
+      UI.card('<div class="row row--between"><strong>' + good.length + ' de ' + checks.length + ' completo</strong><small class="faint">Cuanto más completo, más te ayuda la app</small></div>' + UI.progress(checks.length ? good.length / checks.length : 1, 'success'), { cls: 'stack-sm' }) +
+      (bad.length ? UI.section('Por completar', UI.card(bad.map(readyRow).join(''), { cls: 'ready' })) : UI.empty('🎉', 'Todo completo', 'No falta nada importante.')) +
+      (good.length ? UI.section('Completo', UI.card(good.map(readyRow).join(''), { cls: 'ready' })) : '') };
+  };
+
   function readyRow(c) {
     const icon = c.ok === null ? '<span class="ready__dot is-wait" aria-label="Comprobando">…</span>' : c.ok ? '<span class="ready__dot is-ok" aria-label="Listo">' + U.icon('check', 14) + '</span>' : '<span class="ready__dot is-warn" aria-label="Pendiente">!</span>';
     return '<div class="ready__row" id="ready-' + c.id + '">' + icon + '<div class="grow"><strong class="block">' + esc(c.title) + '</strong><small class="muted">' + esc(c.sub) + '</small></div>' + (c.ok ? '' : c.action || '') + '</div>';
@@ -1163,7 +1225,8 @@
         UI.card('<div class="row row--between"><strong id="readyCount">' + checks.filter((c) => c.ok).length + ' de ' + all.length + ' listo</strong><small class="faint">Se comprueba en este móvil</small></div>' +
           '<div class="progress"><div class="progress__fill progress__fill--info" id="readyBar" style="width:' + (checks.filter((c) => c.ok).length / all.length) * 100 + '%"></div></div>', { cls: 'stack-sm' }) +
         UI.card(all.map(readyRow).join(''), { cls: 'ready' }) +
-        '<p class="faint small">Hazlo en el móvil que vas a llevar: la copia sin conexión, la voz y la protección de datos son de cada navegador.</p>',
+        '<p class="faint small">Hazlo en el móvil que vas a llevar: la copia sin conexión, la voz y la protección de datos son de cada navegador.</p>' +
+        UI.btn('Datos que faltan' + (JT.missing.count() ? ' · ' + JT.missing.count() : ''), { icon: 'list', block: true, variant: 'secondary', data: { act: 'go', to: 'missing' } }),
       mount: function (root) {
         const results = {};
         checks.forEach((c) => (results[c.id] = c.ok));
@@ -1221,7 +1284,7 @@
     switch (title) {
       case 'Viaje': return [t.name, U.fmtRange(t.startDate, t.endDate), t.mainCurrency, t.totalBudget ? 'presupuesto ' + U.money(t.totalBudget, t.mainCurrency) : ''].filter(Boolean).join(' · ');
       case 'Viajeros': return Object.values(s.travelers).sort((a, b) => a.createdAt - b.createdAt).map((x) => x.name + (x.isMe ? ' (yo)' : '')).join(', ') || 'Nadie todavía';
-      case 'Apariencia y unidades': return 'Tema ' + ({ system: 'del sistema', light: 'claro', dark: 'oscuro' }[st.theme] || st.theme) + ' · letra ' + ({ normal: 'normal', large: 'grande', xl: 'muy grande' }[st.textSize || 'normal']) + (st.contrast === 'high' ? ' · alto contraste' : '') + ' · ' + (st.units === 'mi' ? 'millas' : 'km');
+      case 'Apariencia y unidades': return 'Tema ' + ({ system: 'del sistema', light: 'claro', dark: 'oscuro', black: 'negro' }[st.theme] || st.theme) + ' · letra ' + ({ normal: 'normal', large: 'grande', xl: 'muy grande' }[st.textSize || 'normal']) + (st.contrast === 'high' ? ' · alto contraste' : '') + ' · ' + (st.units === 'mi' ? 'millas' : 'km');
       case 'Modo viaje': {
         const lay = C.travelLayout ? C.travelLayout() : [];
         const hv = st.homeViews || 'both';
@@ -1301,7 +1364,7 @@
       '<form id="fTraveler" class="row"><input class="input" name="name" placeholder="Nombre del viajero" aria-label="Nombre del viajero">' + UI.btn('Añadir', { type: 'submit', size: 'sm' }) + '</form>' +
       '<small class="faint">Con 2 o más viajeros puedes indicar quién pagó cada gasto y repartirlo.</small>', { cls: 'stack' }));
 
-    html += fold('Apariencia y unidades', UI.card(seg('setTheme', st.theme, [['system', 'Sistema'], ['light', 'Claro'], ['dark', 'Oscuro']]) +
+    html += fold('Apariencia y unidades', UI.card(seg('setTheme', st.theme, [['system', 'Sistema'], ['light', 'Claro'], ['dark', 'Oscuro'], ['black', 'Negro']]) + '<small class="muted">Negro: fondo negro puro; en pantallas OLED gasta menos batería.</small>' +
       '<span class="field__label">Tamaño de letra</span>' + seg('setTextSize', st.textSize || 'normal', [['normal', 'Normal'], ['large', 'Grande'], ['xl', 'Muy grande']]) +
       '<small class="muted">Agranda toda la app (textos, botones e iconos) para leer mejor en la calle o enseñar la pantalla. Sólo en este dispositivo.</small>' +
       '<span class="field__label">Contraste</span>' + seg('setContrast', st.contrast || 'normal', [['normal', 'Normal'], ['high', 'Alto (para la calle)']]) +

@@ -173,6 +173,28 @@ JT.ui = (function () {
 
   let sheetStack = [];
 
+  /* ── Botón «atrás» del móvil ──
+     Al abrir una hoja (o una frase/código a pantalla completa) se añade una entrada al historial con la misma
+     dirección. Si pulsas «atrás», sólo se cierra lo que está abierto (sin guardar) y te quedas donde estabas.
+     Si la cierras de otra forma (✕, Guardar, tocando fuera), esa entrada sobra: el siguiente «atrás» la salta
+     sola para que no tengas que pulsar dos veces. Sin nada abierto, «atrás» funciona como siempre. */
+  const backStack = [];
+  let lastHref = location.href;
+  function backPush(close) {
+    backStack.push(close);
+    try { history.pushState({ jtOverlay: true }, '', location.href); } catch (e) { /* sin historial */ }
+  }
+  function backForget(close) {
+    const i = backStack.lastIndexOf(close);
+    if (i > -1) backStack.splice(i, 1);
+  }
+  window.addEventListener('popstate', function () {
+    const top = backStack.pop();
+    if (top) { top(); return; }                      // había algo abierto: se cierra y ya
+    if (location.href === lastHref) history.back();   // entrada sobrante de una hoja ya cerrada: se salta
+  });
+  window.addEventListener('hashchange', function () { lastHref = location.href; });
+
   /**
    * Abre una hoja inferior. o = { title, body, footer, onMount(el, close), wide }.
    * Devuelve close(). Esc o tocar fuera también cierran.
@@ -193,6 +215,7 @@ JT.ui = (function () {
       closed = true;
       root.classList.remove('is-open');
       sheetStack = sheetStack.filter((x) => x !== close);
+      backForget(close);
       setTimeout(() => { root.remove(); if (prevFocus && prevFocus.focus) prevFocus.focus(); }, 200);
       if (o.onClose) o.onClose();
     }
@@ -200,6 +223,7 @@ JT.ui = (function () {
     const x = root.querySelector('.sheet__hdr .iconbtn');
     if (x) x.addEventListener('click', close);
     sheetStack.push(close);
+    backPush(close);
     requestAnimationFrame(() => root.classList.add('is-open'));
     try { if (JT.cards && JT.cards.addEur) JT.cards.addEur(root.querySelector('.sheet__body')); } catch (e) { /* sin tipo de cambio */ }
     if (o.onMount) o.onMount(root.querySelector('.sheet'), close);
@@ -271,6 +295,6 @@ JT.ui = (function () {
   return {
     dataAttrs, btn, iconBtn, card, pill, banner, header, section, empty, stat, progress, bars, listRow, stars, openBadge,
     field, input, textarea, chips, chipsMulti, filterChips, details, formData, list,
-    sheet, closeTopSheet, menu, confirm, alert, toast
+    sheet, closeTopSheet, menu, confirm, alert, toast, backPush, backForget
   };
 })();
