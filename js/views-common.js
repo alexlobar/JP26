@@ -141,9 +141,10 @@ JT.cards = (function () {
     const line1 = [c[0], city ? city.name : '', e.placeName].filter(Boolean).join(' · ');
     const line2 = [pay ? pay[1] + ' ' + pay[0] : '', multi && payer ? 'pagó ' + payer.name : '', parts.length > 1 ? 'entre ' + parts.length + ': ' + U.money(e.amount / parts.length, e.currency) + ' c/u' : ''].filter(Boolean).join(' · ');
     const locked = e.date < S.today().now.date;
+    const cov = JT.cards && JT.cards.coveredOf ? JT.cards.coveredOf(e) : null; // dinero recibido para este gasto
     const meta = '<small class="muted block">' + esc(line1) + '</small>' + (line2 ? '<small class="muted block">' + esc(line2) + '</small>' : '') +
       (e.notes ? '<small class="exp__note">' + esc(e.notes) + '</small>' : '') +
-      (e.taxFree || locked ? '<small class="exp__tags">' + (e.taxFree ? '<span class="pill pill--neutral">🛍️ Tax free</span>' : '') + (locked ? '<span class="exp__lock" title="Bloqueado: de un día anterior">🔒</span>' : '') + '</small>' : '');
+      (e.taxFree || locked || cov ? '<small class="exp__tags">' + (cov ? '<span class="pill pill--success">💝 ' + (cov.full ? 'Pagado' : 'Cubierto ' + U.money(cov.amount, e.currency)) + (cov.from ? ' · ' + esc(cov.from) : '') + '</span>' : '') + (e.taxFree ? '<span class="pill pill--neutral">🛍️ Tax free</span>' : '') + (locked ? '<span class="exp__lock" title="Bloqueado: de un día anterior">🔒</span>' : '') + '</small>' : '');
     return '<div class="swipe" data-swipe>' +
       '<div class="swipe__actions"><button type="button" class="swipe__btn" data-act="dupExpense" data-id="' + e.id + '">' + U.icon('copy', 18) + 'Duplicar</button>' +
       '<button type="button" class="swipe__btn swipe__btn--danger" data-act="delExpense" data-id="' + e.id + '">' + U.icon('trash', 18) + 'Eliminar</button></div>' +
@@ -312,9 +313,12 @@ JT.cards = (function () {
      Escribes «onsen» y se quedan sólo los que coinciden; Intro elige el primero.
      Si no existe, «Crear «onsen»» lo añade a tus tipos propios y queda elegido. */
   function typePicker(name, catalog, value, kind) {
+    let chips = UI.chips(name, D.options(catalog), value);
+    // Gastos: cada categoría con su color (el mismo que en las barras y la leyenda).
+    if (kind === 'expense') chips = chips.replace(/<label class="chip"><input type="radio" name="([^"]+)" value="([^"]*)"/g, (m, n, v) => '<label class="chip chip--tone" style="--chip:' + catColor(v) + '"><input type="radio" name="' + n + '" value="' + v + '"');
     return '<div class="tpick" data-kind="' + (kind || '') + '" data-name="' + name + '">' +
       '<label class="search tpick__search"><span class="search__icon">' + U.icon('search', 16) + '</span><input class="input" type="search" placeholder="Buscar tipo…" data-input="tpickFilter" aria-label="Buscar tipo" autocomplete="off" enterkeyhint="done"></label>' +
-      UI.chips(name, D.options(catalog), value) +
+      chips +
       '<small class="muted tpick__none" hidden>Ningún tipo coincide.</small>' +
       (kind ? '<button type="button" class="btn btn--ghost btn--sm tpick__new" data-act="tpickCreate" data-kind="' + kind + '">' + U.icon('plus', 16) + '<span>Crear un tipo nuevo</span></button>' : '') + '</div>';
   }

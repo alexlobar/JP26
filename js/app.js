@@ -23,7 +23,8 @@ JT.app = (function () {
     [/^cities$/, 'cities', 'home'], [/^city\/([\w-]+)$/, 'city', 'home'], [/^reservations$/, 'reservations', 'home'], [/^reservation\/([\w-]+)$/, 'reservation', 'home'],
     [/^transport$/, 'transport', 'home'], [/^notes$/, 'notes', 'home'], [/^checklist$/, 'checklist', 'home'], [/^info$/, 'info', 'home'],
     [/^phrases$/, 'phrases', 'home'], [/^documents$/, 'documents', 'home'], [/^search$/, 'search', 'home'], [/^settings$/, 'settings', 'home'],
-    [/^ready$/, 'ready', 'home'], [/^diary$/, 'diary', 'home'], [/^gifts$/, 'gifts', 'home'], [/^learn$/, 'learn', 'home'], [/^summary$/, 'summary', 'home'], [/^book$/, 'book', 'home'], [/^missing$/, 'missing', 'home']
+    [/^ready$/, 'ready', 'home'], [/^diary$/, 'diary', 'home'], [/^gifts$/, 'gifts', 'home'], [/^learn$/, 'learn', 'home'], [/^summary$/, 'summary', 'home'], [/^book$/, 'book', 'home'], [/^missing$/, 'missing', 'home'],
+    [/^convert$/, 'convert', 'home']
   ];
 
   let main, lastPath = null, pending = false;
@@ -80,6 +81,11 @@ JT.app = (function () {
       setTimeout(() => main.classList.remove(cls), 300);
     }
     if (res.mount) res.mount(main);
+    // Atajo del icono «Nuevo gasto» (#/expenses?add=1): abre el formulario y deja la dirección limpia.
+    if (r.view === 'expenses' && h.query.add === '1') {
+      try { history.replaceState(history.state, '', location.pathname + location.search + '#/expenses'); } catch (e) { /* sin historial */ }
+      setTimeout(() => JT.forms.expense(), 0);
+    }
     // Euros en pequeño junto a cada importe en yenes.
     try { if (JT.cards.addEur) JT.cards.addEur(main); } catch (e) { console.error(e); }
     // Que el filtro elegido quede a la vista en las filas de chips desplazables.

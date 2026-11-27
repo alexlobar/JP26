@@ -46,9 +46,27 @@
         out.push(UI.banner('warn', 'bed', 'Hoy dejas ' + r.name + (r.checkoutTime ? ' · salida antes de las ' + r.checkoutTime : ''), checkedText(r, 'Toca para repasar lo que no te puedes dejar.'), { data: { act: 'checkoutList', id: r.id } }));
       else if (r.endDate === tomorrow && n.minutes >= 18 * 60)
         out.push(UI.banner('info', 'bed', 'Mañana dejas ' + r.name + at, checkedText(r, 'Buen momento para ir haciendo la maleta. Toca para ver la lista.'), { data: { act: 'checkoutList', id: r.id } }));
+      // Pagar en el alojamiento: tiene coste, no está en Gastos y no lo has marcado como pagado.
+      const ex = JT.cards.costExpense ? JT.cards.costExpense('reservations', r.id) : null;
+      if (r.cost && !ex && !r.payNoted && (r.endDate === n.date || (r.endDate === tomorrow && n.minutes >= 18 * 60)))
+        out.push('<div class="banner banner--accent paybar">' + U.icon('wallet', 20) + '<div class="banner__text"><strong>' + esc((r.endDate === n.date ? 'Hoy pagas en ' : 'Mañana pagas en ') + r.name) + ': ' + U.money(r.cost, r.currency || 'JPY') + '</strong>' +
+          '<span>Si ya estaba pagado (por ejemplo, en la web al reservar), márcalo y no vuelve a salir.</span>' +
+          '<span class="row row--wrap paybar__btns">' + UI.btn('Apuntar el pago', { icon: 'plus', size: 'sm', data: { act: 'payLodging', id: r.id } }) + UI.btn('Ya estaba pagado', { size: 'sm', variant: 'ghost', data: { act: 'payNoted', id: r.id } }) + '</span></div></div>');
     });
     return out.join('');
   }
+  /** Apunta el pago del alojamiento como gasto de hoy (enlazado a la reserva para no repetirlo). */
+  A.payLodging = function (el) {
+    const r = S.get().reservations[el.dataset.id];
+    if (!r) return;
+    F.expense(null, { amount: r.cost, currency: r.currency || 'JPY', category: 'hotel', description: r.name, date: S.today().now.date, cityId: r.cityId, reservationId: r.id });
+  };
+  A.payNoted = function (el) {
+    const r = S.get().reservations[el.dataset.id];
+    if (!r) return;
+    S.update('reservations', r.id, { payNoted: true });
+    UI.toast('Marcado como pagado', { label: 'Deshacer', run: () => S.update('reservations', r.id, { payNoted: undefined }) });
+  };
 
   /* ── Taquillas (coin lockers): dónde dejaste la maleta, número, cómo se abre y hasta cuándo ──
      Salen arriba en Inicio y en el Modo viaje hasta que pulsas «Ya la vacié» (entonces se borran, código incluido). */
@@ -238,7 +256,7 @@
     const travel = views === 'travel' ? true : views === 'overview' ? false : S.travelModeActive();
     const head = UI.header({
       large: true, title: (s.trip.name + ' ' + (s.trip.emoji || '')).trim(), subtitle: U.fmtRange(s.trip.startDate, s.trip.endDate),
-      actions: UI.iconBtn('sos', 'Emergencia', { act: 'go', to: 'emergency' }) + UI.iconBtn('search', 'Buscar', { act: 'go', to: 'search' }) + UI.iconBtn('settings', 'Ajustes', { act: 'go', to: 'settings' })
+      actions: UI.iconBtn('sos', 'Emergencia', { act: 'go', to: 'emergency' }) + UI.iconBtn('swap', 'Conversor ¥ → €', { act: 'go', to: 'convert' }) + UI.iconBtn('search', 'Buscar', { act: 'go', to: 'search' }) + UI.iconBtn('settings', 'Ajustes', { act: 'go', to: 'settings' })
     });
     const seg = views !== 'both' ? '' : '<div class="seg" role="tablist">' +
       '<button type="button" role="tab" class="seg__item' + (!travel ? ' is-on' : '') + '" aria-selected="' + !travel + '" data-act="travelMode" data-value="off">Resumen</button>' +
@@ -616,9 +634,11 @@
     const tags = (leaving ? '<span class="daycard__tag">🧳 Check-out' + (leaving.checkoutTime ? ' ' + leaving.checkoutTime : '') + '</span>' : '') + trips.map((x) => '<span class="daycard__tag">' + D.TRANSPORT[x.kind][1] + ' ' + esc(x.origin + ' → ' + x.destination) + (x.departTime ? ' · ' + x.departTime : '') + '</span>').join('') +
       // El día que llegas al hotel: «Check-in 15:00 · nombre»; los demás días, sólo dónde dormís.
       (hotel ? '<span class="daycard__tag">🏨 ' + (hotel.date === d.date ? 'Check-in' + (hotel.time ? ' ' + hotel.time : '') + ' · ' : '') + esc(hotel.name) + '</span>' : '');
-    return '<div id="day-' + d.id + '" class="card card--tap daycard' + (isToday ? ' card--accent' : '') + '" style="--city:' + esc(city ? city.color || '#C8102E' : 'transparent') + '" tabindex="0" data-act="go" data-to="day/' + d.id + '">' +
+    // Pasados más tenues; hoy y mañana resaltados (para centrarte en lo que viene).
+    const nowDate = S.today().now.date, isPast = d.date < nowDate, isTomorrow = d.date === U.addDays(nowDate, 1);
+    return '<div id="day-' + d.id + '" class="card card--tap daycard' + (isToday ? ' card--accent' : '') + (isPast ? ' is-past' : '') + (isTomorrow ? ' is-tomorrow' : '') + '" style="--city:' + esc(city ? city.color || '#C8102E' : 'transparent') + '" tabindex="0" data-act="go" data-to="day/' + d.id + '">' +
       '<div class="daycard__top"><span class="daynum' + (isToday ? ' is-today' : '') + '"><small>DÍA</small><strong>' + num + '</strong></span>' +
-      '<div class="grow"><strong>' + esc(U.fmtDay(d.date)) + '</strong> ' + (isToday ? UI.pill('Hoy', 'accent') : '') + (d.title ? '<small class="muted block">' + esc(d.title) + '</small>' : '') + '</div>' +
+      '<div class="grow"><strong>' + esc(U.fmtDay(d.date)) + '</strong> ' + (isToday ? UI.pill('Hoy', 'accent') : isTomorrow ? UI.pill('Mañana', 'info') : '') + (d.title ? '<small class="muted block">' + esc(d.title) + '</small>' : '') + '</div>' +
       '<small class="faint">' + (list.length ? done + '/' + list.length : '') + '</small></div>' +
       (tags ? '<div class="daycard__meta">' + tags + '</div>' : '') +
       (shown.length ? '<div class="daycard__preview">' + shown.slice(0, 4).map((a) => '<small class="' + (a.status === 'done' ? 'faint' : 'muted') + '"><b class="mono">' + (a.startTime || '··:··') + '</b>  ' + D.ACTIVITY[a.category][1] + ' ' + esc(a.title) + '</small>').join('') +

@@ -25,6 +25,27 @@
     return { html: html };
   };
 
+  /* ── Conversor ¥ ⇄ € a pantalla entera (atajo del icono, botón ⇄ de Inicio) ──
+     Escribes yenes y ves los euros en grande (o al revés con ⇄), con importes rápidos y cómo se dice en japonés. */
+  V.convert = function () {
+    const st = JT.uiState.conv || (JT.uiState.conv = { dir: 'jpy', value: '' });
+    const rates = SV.rates(), main = S.get().trip.mainCurrency, other = main === 'JPY' ? 'EUR' : main;
+    const quick = st.dir === 'jpy' ? [100, 500, 1000, 3000, 5000, 10000] : [5, 10, 20, 50, 100, 200];
+    return {
+      html: UI.header({ back: true, title: 'Conversor', subtitle: st.dir === 'jpy' ? 'Yenes → ' + (other === 'EUR' ? 'euros' : other) : (other === 'EUR' ? 'Euros' : other) + ' → yenes' }) +
+        '<div class="convpage">' + C.quickConverter() +
+        (rates ? '<div class="chips convpage__quick">' + quick.map((v) => '<button type="button" class="chip chip--btn" data-act="convQuick" data-v="' + v + '"><span>' + (st.dir === 'jpy' ? U.money(v, 'JPY') : U.money(v, other)) + '</span></button>').join('') + '</div>' : '') +
+        '<small class="faint center block">' + (rates ? (rates.source === 'manual' ? 'Tipo manual' : 'Tipo del BCE' + (rates.date ? ' del ' + U.fmtShort(rates.date) : '') + (rates.rounding ? ' · yen a la baja ' + (rates.rounding === 'down2' ? '−2' : '−1') : '')) + '. Funciona sin conexión.' : '') + '</small></div>',
+      mount: function (root) { const i = root.querySelector('.conv__in'); if (i && !st.value) setTimeout(() => i.focus(), 50); }
+    };
+  };
+  A.convQuick = function (el) {
+    const i = document.querySelector('.conv__in');
+    if (!i) return;
+    i.value = el.dataset.v;
+    JT.changes.quickConv(i);
+  };
+
   A.expTab = (el) => { JT.uiState.expenses.tab = el.dataset.value; JT.app.render(); };
   A.shareExpenses = async () => { const r = await SV.share(L.shareExpenses(SV.rates()), 'Gastos'); if (r === 'copied') UI.toast('Copiado'); };
   A.exportCsv = () => SV.download('gastos-japon.csv', L.expensesCsv(), 'text/csv');
@@ -69,11 +90,13 @@
     };
     const byCat = C.byCategory(list), byCity = group((e) => e.cityId || 'none');
     const byDay = group((e) => (e.date >= s.trip.startDate && e.date <= s.trip.endDate ? e.date : undefined)).sort((a, b) => a[0].localeCompare(b[0]));
-    let html = UI.card('<div class="stats">' + UI.stat('Total gastado', total.text, '', true) + (budget ? UI.stat('Restante', U.money(budget - total.total, main), Math.round((total.total / budget) * 100) + '% del presupuesto') : '') + '</div>' +
+    let html = UI.card('<div class="stats">' + UI.stat(meInfo().multi ? 'Total del viaje (todos)' : 'Total gastado', total.text, '', true) + (budget ? UI.stat('Restante', U.money(budget - total.total, main), Math.round((total.total / budget) * 100) + '% del presupuesto') : '') + '</div>' +
       (budget ? UI.progress(total.total / budget, total.total > budget ? 'accent' : 'info') : '') +
       '<div class="stats">' + UI.stat('Hoy', C.moneySum(list.filter((e) => e.date === t.now.date)).text) + UI.stat('Media diaria', U.money(avg, main), nDays ? nDays + ' días con gastos' : 'en el viaje') + '</div>' +
-      (total.extra ? '<small class="warn">Sin convertir: ' + esc(total.extra) + '</small>' : '') + forecast(list, total.total), { cls: 'stack' });
+      (total.extra ? '<small class="warn">Sin convertir: ' + esc(total.extra) + '</small>' : '') + netLine(total.total) + forecast(list, total.total), { cls: 'stack' });
     html += ratesInfo(list);
+    html += phaseSection(list, total.total);
+    html += refundsSection();
     // Reparto de un vistazo (barra de colores) y, debajo, cada categoría con su color y su %.
     const catTotal = byCat.reduce((a, x) => a + x[1], 0);
     html += UI.section('Por categoría', UI.card('<div class="stack">' + C.catStack(list) +
@@ -91,12 +114,119 @@
     html += UI.section('Por ciudad', UI.card(UI.bars(byCity.map(function (x) {
       const c = s.cities[x[0]], nd = c ? daysIn[c.id] : 0;
       return { label: (c ? c.name : 'Sin ciudad / antes del viaje') + (nd ? ' · ' + nd + (nd === 1 ? ' día' : ' días') : ''), value: x[1],
-        display: U.money(x[1], main) + (nd ? ' · ' + U.money(x[1] / nd, main) + '/día' : '') + (c && c.budget ? ' / ' + U.money(c.budget, main, true) : '') };
-    }), '#2F6F73')), '<small class="faint">con su media por día</small>');
-    if (byDay.length) html += UI.section('Por día', UI.card(UI.bars(byDay.map((x) => ({ label: U.fmtDay(x[0]), value: x[1], display: U.money(x[1], main) })), '#B0893E')));
+        display: U.money(x[1], main) + (nd ? ' · ' + U.money(x[1] / nd, main) + '/día' : '') + (c && c.budget ? ' / ' + U.money(c.budget, main, true) : ''),
+        data: { act: 'expFilter', k: 'cityId', v: c ? c.id : '' } };
+    }), '#2F6F73')), '<small class="faint">toca una para ver sus gastos</small>');
+    if (byDay.length) html += UI.section('Por día', UI.card(UI.bars(byDay.map((x) => ({ label: U.fmtDay(x[0]), value: x[1], display: U.money(x[1], main), data: { act: 'expFilter', k: 'date', v: x[0] } })), '#B0893E')));
     html += taxFreeSection(list);
     return html;
   }
+
+  /* ── Antes, durante y después del viaje ── */
+  const PHASE = { pre: ['✈️', 'Antes del viaje'], trip: ['🗾', 'Durante el viaje'], post: ['🏠', 'Después del viaje'] };
+  function phaseOf(e) { const t = S.get().trip; return e.date < t.startDate ? 'pre' : e.date > t.endDate ? 'post' : 'trip'; }
+  C.phaseOf = phaseOf;
+  function phaseSection(list, total) {
+    const s = S.get(), main = s.trip.mainCurrency, rates = SV.rates();
+    const parts = ['pre', 'trip', 'post'].map((k) => ({ k: k, list: list.filter((e) => phaseOf(e) === k) })).filter((x) => x.list.length);
+    if (!parts.length) return '';
+    return UI.section('Antes y durante el viaje', '<div class="phases">' + parts.map(function (x) {
+      const sum = C.moneySum(x.list), days = x.k === 'trip' ? new Set(x.list.map((e) => e.date)).size : 0;
+      return '<div class="phase card--tap" role="button" tabindex="0" data-act="expFilter" data-k="phase" data-v="' + x.k + '">' +
+        '<span class="phase__head">' + PHASE[x.k][0] + ' ' + PHASE[x.k][1] + '</span><strong class="phase__v mono">' + esc(sum.text) + '</strong>' +
+        '<small class="muted">' + x.list.length + (x.list.length === 1 ? ' gasto' : ' gastos') + (total ? ' · ' + C.pctText(sum.total, total) + ' del total' : '') + (days ? ' · ' + U.money(sum.total / days, main) + '/día' : '') + '</small>' +
+        C.catStack(x.list, 3) + '</div>';
+    }).join('') + '</div>', '<small class="faint">toca para ver sus gastos</small>');
+  }
+
+  /* ── Dinero recibido: lo que te pagan personas de fuera del viaje (regalos, devoluciones…) ──
+     Salda tus gastos: el total sigue siendo lo gastado y aparte ves lo recibido y el neto (lo que pones tú).
+     Puede ir ligado a un gasto (lo marca como «cubierto») o ser general. Lo que te paga otro viajero va en Reparto. */
+  const REFUND_KIND = { gift: ['Regalo', '🎁'], refund: ['Devolución', '↩️'], other: ['Otro', '💶'] };
+  function refundsTotal() {
+    const s = S.get(), main = s.trip.mainCurrency, rates = SV.rates();
+    return Object.values(s.refunds || {}).reduce((a, r) => { const v = U.convert(r.amount, r.currency || main, main, rates); return a + (v || 0); }, 0);
+  }
+  /** Lo cubierto de un gasto (en su moneda) y por quién. */
+  function coveredOf(e) {
+    const rs = Object.values(S.get().refunds || {}).filter((r) => r.expenseId === e.id);
+    if (!rs.length) return null;
+    const amt = rs.reduce((a, r) => { const v = r.currency === e.currency ? r.amount : U.convert(r.amount, r.currency, e.currency, SV.rates()); return a + (v || 0); }, 0);
+    return { amount: amt, full: amt >= e.amount - 0.5, from: Array.from(new Set(rs.map((r) => r.from).filter(Boolean))).join(', '), list: rs };
+  }
+  C.coveredOf = coveredOf;
+  /* Con varios viajeros, el total es lo que cuesta el viaje a todos. Aparte, «Tú»: lo que has puesto de tu bolsillo
+     (lo que pagaste + lo que diste a otros − lo que te devolvieron − lo que te pagaron de fuera) y tu parte del viaje. */
+  function netLine(total) {
+    const s = S.get(), main = s.trip.mainCurrency, rates = SV.rates(), rec = refundsTotal(), mi = meInfo();
+    if (mi.multi && mi.id) {
+      const ids = Object.keys(s.travelers);
+      const setts = Object.values(s.settlements || {}).map((x) => ({ fromId: x.fromId, toId: x.toId, value: U.convert(x.amount, x.currency || main, main, rates) }));
+      const r = L.balances(Object.values(s.expenses), ids, (e) => U.convert(e.amount, e.currency, main, rates), setts);
+      const b = r.list.find((x) => x.id === mi.id);
+      if (!b) return '';
+      const pocket = b.paid + b.sent - b.got - rec;
+      const debt = b.balance > 0.5 ? 'te deben ' + U.money(b.balance, main) : b.balance < -0.5 ? 'debes ' + U.money(-b.balance, main) : 'estáis en paz';
+      return '<div class="you"><small class="eyebrow muted block">TÚ · ' + esc((mi.me.name || '').toUpperCase()) + '</small><div class="stats">' +
+        UI.stat('Has puesto tú', U.money(pocket, main), b.got || rec ? 'ya restado lo que te han pagado' : 'de tu bolsillo', true) +
+        UI.stat('Tu parte del viaje', U.money(b.share, main), debt) + '</div>' +
+        (b.got || rec ? '<small class="muted">Te han pagado ' + U.money(b.got + rec, main) + (b.got ? ' (' + U.money(b.got, main) + ' otros viajeros' + (rec ? ', ' + U.money(rec, main) + ' de fuera' : '') + ')' : ' de fuera del viaje') + '.</small>' : '') + '</div>';
+    }
+    if (!rec) return '';
+    return '<div class="stats net">' + UI.stat('Te han pagado', U.money(rec, main), 'regalos y devoluciones') + UI.stat('Neto (lo que pones tú)', U.money(total - rec, main), '', true) + '</div>';
+  }
+  function refundsSection() {
+    const s = S.get(), main = s.trip.mainCurrency, list = Object.values(s.refunds || {}).sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
+    const rows = list.map(function (r) {
+      const k = REFUND_KIND[r.kind] || REFUND_KIND.other, e = r.expenseId && s.expenses[r.expenseId];
+      return '<button type="button" class="suica__row" data-act="editRefund" data-id="' + r.id + '"><span class="mono faint">' + U.fmtShort(r.date) + '</span><span class="grow">' + k[1] + ' ' + esc(r.from || k[0]) +
+        '<small class="muted block">' + esc(e ? 'Para «' + (e.description || (D.EXPENSE[e.category] || ['gasto'])[0]) + '»' : k[0] + ' · general') + (r.note ? ' · ' + esc(r.note) : '') + '</small></span><strong class="mono success">+' + U.money(r.amount, r.currency || main) + '</strong></button>';
+    }).join('');
+    return UI.section('Dinero recibido', (list.length ? UI.card(rows + '<div class="row row--between tf__total"><strong>Total recibido</strong><strong class="mono success">' + U.money(refundsTotal(), main) + '</strong></div>', { cls: 'card--list' })
+      : '<p class="muted small">¿Alguien te ha pagado algo o te lo ha regalado? Apúntalo y verás lo que pones tú de verdad.</p>'),
+      UI.btn('Apuntar', { icon: 'plus', size: 'sm', variant: 'ghost', data: { act: 'newRefund' } }));
+  }
+  A.newRefund = (el) => F.refund(null, el && el.dataset && el.dataset.exp ? { expenseId: el.dataset.exp } : null);
+  A.editRefund = (el) => F.refund(el.dataset.id);
+  F.refund = function (id, def) {
+    const s = S.get(), ex = id ? s.refunds[id] : null, main = s.trip.mainCurrency, t = S.today();
+    const base = def && def.expenseId && s.expenses[def.expenseId];
+    const cov = base ? coveredOf(base) : null;
+    const x = ex || { currency: base ? base.currency : main, date: t.now.date, kind: 'gift', expenseId: base ? base.id : '', amount: base ? Math.max(0, base.amount - (cov ? cov.amount : 0)) : undefined };
+    const froms = Array.from(new Set(Object.values(s.refunds || {}).map((r) => r.from).filter(Boolean))).sort();
+    const exps = Object.values(s.expenses).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 80);
+    const body = '<form id="fRefund" class="stack" novalidate>' +
+      '<label class="field"><span class="field__label">Importe recibido</span><input class="input input--lg" name="amount" inputmode="decimal" placeholder="0" value="' + esc(x.amount ? String(x.amount).replace('.', ',') : '') + '" autocomplete="off"><span class="field__hint" id="refConv"></span></label>' +
+      UI.chips('currency', D.CURRENCIES.map((c) => ({ value: c, label: c })), x.currency || main) +
+      UI.field('Qué es', UI.chips('kind', Object.keys(REFUND_KIND).map((k) => ({ value: k, label: REFUND_KIND[k][1] + ' ' + REFUND_KIND[k][0] })), x.kind || 'gift')) +
+      UI.field('De quién', '<input class="input" name="from" list="refFrom" value="' + esc(x.from || '') + '" placeholder="p.ej. Los abuelos, Ana…" autocomplete="off"><datalist id="refFrom">' + froms.map((f) => '<option value="' + esc(f) + '">').join('') + '</datalist>', { optional: true }) +
+      UI.field('Para qué gasto', '<select class="input" name="expenseId"><option value="">— General (no es de un gasto concreto)</option>' + exps.map((e) => '<option value="' + e.id + '"' + (e.id === x.expenseId ? ' selected' : '') + '>' + esc(U.fmtShort(e.date) + ' · ' + (e.description || (D.EXPENSE[e.category] || ['Gasto'])[0]) + ' · ' + U.money(e.amount, e.currency)) + '</option>').join('') + '</select>', { optional: true, hint: 'Si es de un gasto, ese gasto sale como «cubierto».' }) +
+      UI.field('Fecha', UI.input('date', x.date, { type: 'date' })) +
+      UI.field('Nota', UI.input('note', x.note || '', { placeholder: 'p.ej. Por Bizum, en mano…' }), { optional: true }) +
+      '<small class="faint">Para lo que te pagan personas de fuera del viaje. Lo que te paga otro viajero va en Gastos → Reparto → «Saldado».</small>' +
+      '<p class="error" hidden></p></form>';
+    const close = UI.sheet({
+      title: ex ? 'Editar dinero recibido' : 'Dinero recibido', body: body,
+      footer: '<div class="row">' + (ex ? UI.btn('Eliminar', { variant: 'danger', icon: 'trash', data: { del: '1' } }) : '') + UI.btn('Guardar', { type: 'submit', form: 'fRefund', block: true }) + '</div>',
+      onMount: function (root) {
+        const form = root.querySelector('#fRefund'), conv = root.querySelector('#refConv');
+        const upd = () => { const f = UI.formData(form), v = U.parseAmount(f.amount); conv.textContent = v && f.currency !== 'EUR' ? C.eurOf(v, f.currency) : ''; };
+        form.addEventListener('input', upd); form.addEventListener('change', upd); upd();
+        const del = root.querySelector('[data-del]');
+        if (del) del.addEventListener('click', async () => { if (await UI.confirm('¿Eliminar este dinero recibido?', U.money(ex.amount, ex.currency || main))) { S.remove('refunds', ex.id); close(); } });
+        form.addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          const f = UI.formData(form), err = form.querySelector('.error'), amount = U.parseAmount(f.amount);
+          const problem = !amount ? 'Introduce un importe' : !U.isISODate(f.date) ? 'Fecha no válida' : '';
+          if (problem) { err.textContent = problem; err.hidden = false; return; }
+          const data = { amount: amount, currency: f.currency || main, kind: f.kind || 'other', from: (f.from || '').trim() || undefined, expenseId: f.expenseId || undefined, date: f.date, note: f.note || undefined };
+          if (ex) S.update('refunds', ex.id, data); else S.create('refunds', data);
+          close();
+          UI.toast('💝 ' + U.money(amount, data.currency) + ' recibidos' + (data.from ? ' de ' + data.from : ''));
+        });
+      }
+    });
+  };
 
   /** Durante el viaje: al ritmo de gasto de los días ya vividos, cuánto acabarás gastando (comparado con el presupuesto). */
   function forecast(list, totalNow) {
@@ -120,18 +250,53 @@
 
   const PAY_TONE = { cash: 'amber', card: 'blue', ic: 'green', mobile: 'violet', other: 'slate', none: 'slate' };
 
-  /* Filtro de la lista: al tocar una categoría (en la barra de colores o en las barras) o una forma de pago. */
+  /* ── Filtros de la lista de gastos (se pueden combinar) ──
+     Cuándo, ciudad, día, categoría, forma de pago, quién pagó, tax free, «te lo han pagado» y búsqueda por texto.
+     Al tocar una barra del Resumen (categoría, forma de pago, ciudad, día, antes/durante) se abre la lista con ese filtro. */
+  const FILTER_LABEL = { phase: 'Cuándo', cityId: 'Ciudad', date: 'Día', category: 'Categoría', paymentMethod: 'Pagado con', paidById: 'Pagó', taxFree: 'Tax free', covered: 'Te lo han pagado', q: 'Busca' };
+  function filtersOf() { const st = JT.uiState.expenses; if (st.filter) { st.filters = { [st.filter.k]: st.filter.v }; st.filter = null; } return (st.filters = st.filters || {}); }
+  function filterValueLabel(k, v) {
+    const s = S.get();
+    if (k === 'category') return D.EXPENSE[v] ? D.EXPENSE[v][1] + ' ' + D.EXPENSE[v][0] : v;
+    if (k === 'paymentMethod') return v ? (D.PAYMENT[v] ? D.PAYMENT[v][1] + ' ' + D.PAYMENT[v][0] : v) : 'Sin forma de pago';
+    if (k === 'paidById') return v && s.travelers[v] ? s.travelers[v].name : 'Sin indicar quién pagó';
+    if (k === 'cityId') return v && s.cities[v] ? s.cities[v].name : 'Sin ciudad';
+    if (k === 'phase') return PHASE[v] ? PHASE[v][0] + ' ' + PHASE[v][1] : v;
+    if (k === 'date') return U.fmtDay(v);
+    if (k === 'taxFree') return '🛍️ Sólo tax free';
+    if (k === 'covered') return '💝 Sólo los que te han pagado';
+    if (k === 'q') return '«' + v + '»';
+    return v;
+  }
+  function applyFilters(list, f) {
+    const s = S.get(), q = f.q ? U.normalize(f.q) : '';
+    return list.filter(function (e) {
+      if (f.phase !== undefined && phaseOf(e) !== f.phase) return false;
+      for (const k of ['cityId', 'date', 'category', 'paymentMethod', 'paidById']) if (f[k] !== undefined && (e[k] || '') !== f[k]) return false;
+      if (f.taxFree && !e.taxFree) return false;
+      if (f.covered && !coveredOf(e)) return false;
+      if (q) {
+        const c = D.EXPENSE[e.category], city = e.cityId && s.cities[e.cityId];
+        if (U.normalize([e.description, e.placeName, e.notes, c && c[0], city && city.name].filter(Boolean).join(' ')).indexOf(q) < 0) return false;
+      }
+      return true;
+    });
+  }
+  /** Desde el Resumen (o cualquier botón con data-k / data-v): la lista con ese único filtro. */
   A.expFilter = function (el) {
     const st = JT.uiState.expenses;
-    st.filter = { k: el.dataset.k, v: el.dataset.v || '' };
+    st.filter = null;
+    st.filters = { [el.dataset.k]: el.dataset.v || '' };
     st.tab = 'list';
     if (location.hash.indexOf('#/expenses') === 0) JT.app.render(); else JT.go('expenses');
     window.scrollTo(0, 0);
   };
-  A.expFilterClear = () => { JT.uiState.expenses.filter = null; JT.app.render(); };
+  A.expFilterClear = () => { const st = JT.uiState.expenses; st.filter = null; st.filters = {}; JT.app.render(); };
+  A.expFilterDel = (el) => { const f = filtersOf(); delete f[el.dataset.k]; JT.app.render(); };
+  JT.changes.expSearch = function (el) { const f = filtersOf(); if (el.value.trim()) f.q = el.value; else delete f.q; JT.app.render({ keepFocus: true }); };
   A.expAll = function () {
     const st = JT.uiState.expenses;
-    st.filter = null; st.tab = 'list';
+    st.filter = null; st.filters = {}; st.tab = 'list';
     if (location.hash.indexOf('#/expenses') === 0) JT.app.render(); else JT.go('expenses');
   };
   A.expSummary = function () {
@@ -139,19 +304,59 @@
     if (location.hash.indexOf('#/expenses') === 0) JT.app.render(); else JT.go('expenses');
   };
 
+  /** Hoja de filtros: chips por grupo (sólo con lo que existe en tus gastos); se combinan. */
+  A.expFilters = function () {
+    const s = S.get(), all = Object.values(s.expenses), f = Object.assign({}, filtersOf());
+    const uniq = (fn) => Array.from(new Set(all.map(fn)));
+    const group = (k, title, opts) => (opts.length ? '<div class="fgroup"><span class="field__label">' + title + '</span><div class="chips">' + opts.map((o) =>
+      '<button type="button" class="chip chip--btn' + (f[k] === o[0] ? ' is-on' : '') + '" data-fk="' + k + '" data-fv="' + esc(o[0]) + '"><span>' + esc(o[1]) + '</span></button>').join('') + '</div></div>' : '');
+    const order = S.sortedDays().map((d) => d.cityId).filter((v, i, a) => v && a.indexOf(v) === i);
+    const cities = uniq((e) => e.cityId || '').sort((a, b) => (a ? order.indexOf(a) : 999) - (b ? order.indexOf(b) : 999));
+    const body = '<div class="stack">' +
+      group('phase', 'Cuándo', ['pre', 'trip', 'post'].filter((k) => all.some((e) => phaseOf(e) === k)).map((k) => [k, PHASE[k][0] + ' ' + PHASE[k][1]])) +
+      group('cityId', 'Ciudad', cities.map((c) => [c, filterValueLabel('cityId', c)])) +
+      group('category', 'Categoría', uniq((e) => e.category).filter((c) => D.EXPENSE[c]).map((c) => [c, filterValueLabel('category', c)])) +
+      group('paymentMethod', 'Pagado con', uniq((e) => e.paymentMethod || '').map((p) => [p, filterValueLabel('paymentMethod', p)])) +
+      (Object.keys(s.travelers).length > 1 ? group('paidById', 'Quién pagó', uniq((e) => e.paidById || '').map((p) => [p, filterValueLabel('paidById', p)])) : '') +
+      (function () {
+        const others = (all.some((e) => e.taxFree) ? '<button type="button" class="chip chip--btn' + (f.taxFree ? ' is-on' : '') + '" data-fk="taxFree" data-fv="1"><span>🛍️ Tax free</span></button>' : '') +
+          (all.some((e) => coveredOf(e)) ? '<button type="button" class="chip chip--btn' + (f.covered ? ' is-on' : '') + '" data-fk="covered" data-fv="1"><span>💝 Te lo han pagado</span></button>' : '');
+        return others ? '<div class="fgroup"><span class="field__label">Otros</span><div class="chips">' + others + '</div></div>' : '';
+      })() +
+      '<p class="muted small" id="fCount"></p></div>';
+    const close = UI.sheet({
+      title: 'Filtrar gastos', body: body,
+      footer: '<div class="row">' + UI.btn('Quitar todo', { variant: 'secondary', data: { fclear: '1' } }) + UI.btn('Ver gastos', { block: true, data: { fapply: '1' } }) + '</div>',
+      onMount: function (root) {
+        const count = () => { const n = applyFilters(all, f).length; root.querySelector('#fCount').textContent = n + (n === 1 ? ' gasto' : ' gastos') + ' con estos filtros'; };
+        count();
+        root.addEventListener('click', function (ev) {
+          const chip = ev.target.closest('[data-fk]');
+          if (chip) {
+            const k = chip.dataset.fk, v = chip.dataset.fv;
+            if (f[k] === v || (k === 'taxFree' || k === 'covered') && f[k]) delete f[k]; else f[k] = k === 'taxFree' || k === 'covered' ? true : v;
+            chip.closest('.chips').querySelectorAll('[data-fk]').forEach((c) => c.classList.toggle('is-on', f[c.dataset.fk] !== undefined && (f[c.dataset.fk] === c.dataset.fv || f[c.dataset.fk] === true)));
+            count();
+          }
+          if (ev.target.closest('[data-fclear]')) { Object.keys(f).forEach((k) => { if (k !== 'q') delete f[k]; }); root.querySelectorAll('[data-fk]').forEach((c) => c.classList.remove('is-on')); count(); }
+          if (ev.target.closest('[data-fapply]')) { JT.uiState.expenses.filters = f; close(); JT.app.render(); }
+        });
+      }
+    });
+  };
+
   function expenseList(list) {
     const main = S.get().trip.mainCurrency, rates = SV.rates(), groups = {};
-    const f = JT.uiState.expenses.filter;
-    let head = '';
-    if (f) {
-      list = list.filter((e) => (e[f.k] || '') === f.v);
-      const trv = S.get().travelers;
-      const lbl = f.k === 'category' ? (D.EXPENSE[f.v] ? D.EXPENSE[f.v][1] + ' ' + D.EXPENSE[f.v][0] : f.v)
-        : f.k === 'paidById' ? (f.v && trv[f.v] ? trv[f.v].name : 'Sin indicar quién pagó')
-        : f.v ? (D.PAYMENT[f.v] ? D.PAYMENT[f.v][1] + ' ' + D.PAYMENT[f.v][0] : f.v) : 'Sin forma de pago';
-      head = '<div class="filter-on"><span class="grow"><small class="muted block">' + (f.k === 'category' ? 'Categoría' : f.k === 'paidById' ? 'Pagó' : 'Pagado con') + '</small><strong>' + esc(lbl) + '</strong> · <span class="mono">' + C.moneySum(list).text + '</span> · ' + list.length + (list.length === 1 ? ' gasto' : ' gastos') + '</span>' +
-        UI.btn('Quitar filtro', { icon: 'x', size: 'sm', variant: 'ghost', data: { act: 'expFilterClear' } }) + '</div>';
-      if (!list.length) return head + '<p class="muted center">No hay gastos con este filtro.</p>';
+    const f = filtersOf(), keys = Object.keys(f).filter((k) => f[k] !== undefined && k !== 'q'), nAll = list.length;
+    list = applyFilters(list, f);
+    // Barra: búsqueda + «Filtros», y los filtros activos como chips que se quitan tocándolos.
+    let head = '<div class="fbar"><label class="search grow"><span class="search__icon">' + U.icon('search', 16) + '</span><input class="input" type="search" placeholder="Buscar gasto, lugar o nota…" value="' + esc(f.q || '') + '" data-input="expSearch" aria-label="Buscar gastos" autocomplete="off" enterkeyhint="search"></label>' +
+      UI.btn('Filtros' + (keys.length ? ' · ' + keys.length : ''), { icon: 'list', size: 'sm', variant: keys.length ? 'primary' : 'secondary', data: { act: 'expFilters' } }) + '</div>';
+    if (keys.length || f.q) {
+      head += '<div class="filter-on"><div class="grow"><div class="fchips">' + keys.map((k) => '<button type="button" class="fchip" data-act="expFilterDel" data-k="' + k + '"><small>' + esc(FILTER_LABEL[k] || k) + '</small> ' + esc(filterValueLabel(k, f[k])) + ' ✕</button>').join('') + '</div>' +
+        '<strong class="mono ftotal">' + C.moneySum(list).text + '</strong><small class="muted block">' + list.length + ' de ' + nAll + (nAll === 1 ? ' gasto' : ' gastos') + '</small></div>' +
+        UI.btn('Quitar', { icon: 'x', size: 'sm', variant: 'ghost', data: { act: 'expFilterClear' } }) + '</div>';
+      if (!list.length) return head + '<p class="muted center">No hay gastos con estos filtros.</p>';
     }
     list.forEach((e) => (groups[e.date] = (groups[e.date] || []).concat(e)));
     return head + Object.keys(groups).sort().reverse().map((date) => UI.section(U.fmtDay(date),
@@ -183,10 +388,11 @@
       return '<div class="card bal stack-sm"><div class="row row--between">' + who(b.id) + '<span class="pill pill--' + (b.balance > 0.5 ? 'success' : b.balance < -0.5 ? 'accent' : 'neutral') + '">' + st + '</span></div>' +
         line('Ha pagado', U.money(b.paid, main)) + line('Le corresponde (su parte)', U.money(b.share, main)) +
         (b.sent ? line('Pagos hechos a otros', '+' + U.money(b.sent, main)) : '') + (b.got ? line('Pagos recibidos', '−' + U.money(b.got, main)) : '') +
-        '<div class="row row--between bal__total"><strong>' + (b.balance > 0.5 ? 'Le deben' : b.balance < -0.5 ? 'Debe' : 'Saldo') + '</strong><strong class="mono ' + (b.balance > 0.5 ? 'success' : b.balance < -0.5 ? 'accent' : 'muted') + '">' + U.money(Math.abs(round(b.balance)), main) + '</strong></div></div>';
+        '<div class="row row--between bal__total"><strong>' + (b.balance > 0.5 ? 'Le deben' : b.balance < -0.5 ? 'Debe' : 'Saldo') + '</strong><strong class="mono ' + (b.balance > 0.5 ? 'success' : b.balance < -0.5 ? 'accent' : 'muted') + '">' + U.money(Math.abs(round(b.balance)), main) + '</strong></div>' +
+        '<div class="row row--end">' + UI.btn('Ver lo que pagó', { size: 'sm', variant: 'ghost', data: { act: 'expFilter', k: 'paidById', v: b.id } }) + '</div></div>';
     }).join(''));
     // 3) Pagos entre vosotros (deudas saldadas): tocar para corregir o borrar.
-    if (setts.length) html += UI.section('Pagos entre vosotros', UI.card(setts.map((x) => '<button type="button" class="suica__row" data-act="editSettle" data-id="' + x.id + '"><span class="mono faint">' + U.fmtShort(x.date) + '</span><span class="grow">' + esc(tr(x.fromId).name) + ' → ' + esc(tr(x.toId).name) + (x.note ? '<small class="muted block">' + esc(x.note) + '</small>' : '') + '</span><strong class="mono">' + U.money(x.amount, x.currency || main) + '</strong></button>').join(''), { cls: 'card--list' }));
+    if (setts.length) html += UI.section('Pagos entre vosotros', UI.card(setts.map((x) => '<button type="button" class="suica__row" data-act="editSettle" data-id="' + x.id + '"><span class="mono faint">' + U.fmtShort(x.date) + '</span><span class="grow">' + esc(tr(x.fromId).name) + ' → ' + esc(tr(x.toId).name) + (x.method === 'cash' ? ' · 💴' : x.method === 'transfer' ? ' · 📱' : '') + (x.note ? '<small class="muted block">' + esc(x.note) + '</small>' : '') + '</span><strong class="mono">' + U.money(x.amount, x.currency || main) + '</strong></button>').join(''), { cls: 'card--list' }));
     // 4) Gastos compartidos, con lo que le toca a cada uno.
     const shared = list.filter((e) => e.paidById && s.travelers[e.paidById] && (e.splitWithIds || []).filter((id) => s.travelers[id]).length && ((e.splitWithIds || []).length > 1 || e.splitWithIds[0] !== e.paidById));
     if (shared.length) html += UI.section('Gastos compartidos · ' + shared.length, UI.card(shared.slice(0, 60).map(function (e) {
@@ -212,8 +418,11 @@
       UI.field('Quién paga', UI.chips('fromId', people, x.fromId)) + UI.field('A quién', UI.chips('toId', people, x.toId)) +
       '<label class="field"><span class="field__label">Importe</span><input class="input input--lg" name="amount" inputmode="decimal" placeholder="0" value="' + esc(x.amount ? String(x.amount).replace('.', ',') : '') + '" autocomplete="off"><span class="field__hint">' + (def && def.amount ? 'Es lo que falta para quedar en paz. Si sólo pagó una parte, cámbialo.' : '') + '</span></label>' +
       UI.chips('currency', D.CURRENCIES.map((c) => ({ value: c, label: c })), x.currency || main) +
+      // Cómo se pagó: en efectivo y en yenes, cambia tu efectivo de la Cartera (entra si te pagan, sale si pagas tú).
+      UI.field('Cómo se pagó', UI.chips('method', [{ value: 'cash', label: '💴 Efectivo' }, { value: 'transfer', label: '📱 Bizum / transferencia' }, { value: 'other', label: 'Otro' }], ex ? ex.method || '' : 'cash', { allowNone: !!ex && !ex.method, noneLabel: '—' }),
+        { hint: 'En efectivo y en yenes, entra (o sale) de tu efectivo en la Cartera. No es un gasto ni cambia el total del viaje: sólo salda la deuda.' }) +
       UI.field('Fecha', UI.input('date', x.date, { type: 'date' })) +
-      UI.field('Nota', UI.input('note', x.note || '', { placeholder: 'p.ej. Bizum, en efectivo…' }), { optional: true }) +
+      UI.field('Nota', UI.input('note', x.note || '', { placeholder: 'p.ej. En el hotel, por la cena…' }), { optional: true }) +
       '<p class="error" hidden></p></form>';
     const close = UI.sheet({
       title: ex ? 'Editar pago' : 'Deuda saldada', body: body,
@@ -226,10 +435,11 @@
           const f = UI.formData(form), err = form.querySelector('.error'), amount = U.parseAmount(f.amount);
           const problem = !f.fromId || !f.toId ? 'Elige quién paga y a quién' : f.fromId === f.toId ? 'Tienen que ser dos personas distintas' : !amount ? 'Introduce un importe' : !U.isISODate(f.date) ? 'Fecha no válida' : '';
           if (problem) { err.textContent = problem; err.hidden = false; return; }
-          const data = { fromId: f.fromId, toId: f.toId, amount: amount, currency: f.currency || main, date: f.date, note: f.note || undefined };
+          const data = { fromId: f.fromId, toId: f.toId, amount: amount, currency: f.currency || main, method: f.method || undefined, date: f.date, note: f.note || undefined };
           if (ex) S.update('settlements', ex.id, data); else S.create('settlements', data);
           close();
-          UI.toast('Pago apuntado: ' + s.travelers[f.fromId].name + ' → ' + s.travelers[f.toId].name + ' ' + U.money(amount, data.currency));
+          const cash = walletInfo('cash'), mi = meInfo(), touchesMe = data.method === 'cash' && data.currency === 'JPY' && (data.toId === mi.id || data.fromId === mi.id);
+          UI.toast('Pago apuntado: ' + s.travelers[f.fromId].name + ' → ' + s.travelers[f.toId].name + ' ' + U.money(amount, data.currency) + (touchesMe && cash.active ? ' · tu efectivo: ' + U.money(cash.balance, 'JPY') : ''));
         });
       }
     });
@@ -277,7 +487,7 @@
         (travelers.length > 1 ? UI.field('Pagó', UI.chips('paidById', travelers.map((x) => ({ value: x.id, label: x.name })), e.paidById)) +
           UI.field('Para quién', UI.chipsMulti('split', travelers.map((x) => ({ value: x.id, label: x.name })), e.splitWithIds), { hint: 'Marca a todos los que comparten el gasto.' }) : '') +
         UI.field('Notas', UI.textarea('notes', e.notes), { optional: true }), !!ex) +
-      '<div class="row row--end">' + UI.btn('☆ Guardar como frecuente', { size: 'sm', variant: 'ghost', data: { 'save-q': '1' } }) + '</div>' +
+      '<div class="row row--end row--wrap">' + (ex ? UI.btn('💝 Me lo han pagado', { size: 'sm', variant: 'ghost', data: { act: 'newRefund', exp: ex.id } }) : '') + UI.btn('☆ Guardar como frecuente', { size: 'sm', variant: 'ghost', data: { 'save-q': '1' } }) + '</div>' +
       '<p class="error" hidden></p></form>';
     const close = UI.sheet({
       title: ex ? 'Editar gasto' : 'Nuevo gasto', body: body,
@@ -375,21 +585,32 @@
   }
   C.rateCompare = rateCompare;
   function toJpy(e) { return e.currency === 'JPY' ? Number(e.amount) || 0 : U.convert(e.amount, e.currency, 'JPY', SV.rates()); }
+  /** Tu id de viajero (el marcado «Yo») y si hay más de uno. */
+  function meInfo() {
+    const tr = Object.values(S.get().travelers), me = tr.find((p) => p.isMe) || tr[0];
+    return { id: me && me.id, multi: tr.length > 1, me: me };
+  }
+  C.meInfo = meInfo;
   function walletInfo(w) {
-    const s = S.get(), cfg = WALLETS[w];
+    const s = S.get(), cfg = WALLETS[w], mi = meInfo();
     const moves = Object.values(s[cfg.coll] || {});
+    // La cartera es la tuya: con varios viajeros sólo cuenta lo que pagaste tú (o sin «quién pagó»).
     // En efectivo sólo cuentan los pagos en yenes (lo pagado en euros en España no sale de tu cartera de yenes).
-    const spent = Object.values(s.expenses).filter((e) => e.paymentMethod === cfg.pay && (!cfg.jpyOnly || e.currency === 'JPY'));
+    const spent = Object.values(s.expenses).filter((e) => e.paymentMethod === cfg.pay && (!cfg.jpyOnly || e.currency === 'JPY') && (!mi.multi || !e.paidById || e.paidById === mi.id));
     const toSuica = w === 'cash' ? Object.values(s.suicaMoves || {}).filter((m) => m.kind !== 'adjust' && m.from === 'cash') : [];
-    let ins = 0, adjust = 0, used = 0, unconv = 0, out = 0;
+    // Deudas saldadas en efectivo y en yenes con otro viajero: lo que te dan entra en tu efectivo; lo que das, sale.
+    const setts = w === 'cash' && mi.multi ? Object.values(s.settlements || {}).filter((x) => x.method === 'cash' && (x.currency || 'JPY') === 'JPY' && (x.toId === mi.id || x.fromId === mi.id)) : [];
+    let ins = 0, adjust = 0, used = 0, unconv = 0, out = 0, settIn = 0, settOut = 0;
     moves.forEach((m) => { if (m.kind === 'adjust') adjust += Number(m.amount) || 0; else ins += Number(m.amount) || 0; });
     spent.forEach((e) => { const v = toJpy(e); if (v === null) unconv++; else used += v; });
     toSuica.forEach((m) => { out += Number(m.amount) || 0; });
+    setts.forEach((x) => { if (x.toId === mi.id) settIn += Number(x.amount) || 0; else settOut += Number(x.amount) || 0; });
+    ins += settIn; out += settOut;
     // Recargas o retiradas apuntadas como gasto: se pueden pasar a la cartera para no contarlas dos veces.
     const asExpense = Object.values(s.expenses).filter((e) => e.paymentMethod !== cfg.pay && cfg.re.test(e.description || ''));
     const name = cfg.name();
     return { w: w, cfg: cfg, name: name, balance: Math.round(ins + adjust - used - out), ins: ins, used: used, out: out, unconv: unconv,
-      moves: moves, spent: spent, toSuica: toSuica, asExpense: asExpense,
+      moves: moves, spent: spent, toSuica: toSuica, asExpense: asExpense, setts: setts, meId: mi.id,
       // El efectivo sólo cuenta cuando apuntas lo que llevas (todo el mundo paga algo en efectivo).
       active: moves.length > 0 || (w === 'ic' && spent.length > 0), welcome: w === 'ic' && /welcome/i.test(name) };
   }
@@ -433,6 +654,10 @@
     const x = walletInfo(w), cfg = x.cfg;
     const sign = (v) => (v >= 0 ? '+' : '−') + U.money(Math.abs(v), 'JPY');
     const rows = x.moves.map((m) => ({ date: m.date, ts: m.createdAt || 0, html: '<button type="button" class="suica__row" data-w-move="' + m.id + '"><span class="mono faint">' + U.fmtShort(m.date) + '</span><span class="grow">' + esc(m.note || (m.kind === 'adjust' ? 'Ajuste al saldo real' : cfg.inNote)) + (m.from === 'cash' ? ' · 💴' : m.from === 'card' ? ' · 💳' : '') + (m.eur > 0 && m.amount > 0 ? '<small class="muted block">' + U.money(m.eur, 'EUR') + ' → 1 € = ' + (m.amount / m.eur).toFixed(1).replace('.', ',') + ' ¥</small>' : '') + '</span><strong class="mono ' + ((Number(m.amount) || 0) >= 0 ? 'success' : 'accent') + '">' + sign(Number(m.amount) || 0) + '</strong></button>' }))
+      .concat((x.setts || []).map(function (st) {
+        const s2 = S.get(), inn = st.toId === x.meId, other = s2.travelers[inn ? st.fromId : st.toId];
+        return { date: st.date, ts: st.createdAt || 0, html: '<button type="button" class="suica__row" data-w-sett="' + st.id + '"><span class="mono faint">' + U.fmtShort(st.date) + '</span><span class="grow">↔️ ' + (inn ? 'Te pagó ' : 'Pagaste a ') + esc(other ? other.name : '?') + '<small class="muted block">Deuda saldada en efectivo</small></span><strong class="mono ' + (inn ? 'success' : 'accent') + '">' + sign(inn ? st.amount : -st.amount) + '</strong></button>' };
+      }))
       .concat(x.toSuica.map((m) => ({ date: m.date, ts: m.createdAt || 0, html: '<button type="button" class="suica__row" data-w-ic="' + m.id + '"><span class="mono faint">' + U.fmtShort(m.date) + '</span><span class="grow">🚃 Recarga de la Suica</span><strong class="mono accent">' + sign(-(Number(m.amount) || 0)) + '</strong></button>' })))
       .concat(x.spent.map(function (e) {
         const v = toJpy(e), c = D.EXPENSE[e.category];
@@ -453,9 +678,10 @@
       title: x.name, body: body,
       onMount: function (root) {
         root.addEventListener('click', function (ev) {
-          const go = ev.target.closest('[data-w-go]'), mv = ev.target.closest('[data-w-move]'), exp = ev.target.closest('[data-w-exp]'), icm = ev.target.closest('[data-w-ic]');
-          if (!go && !mv && !exp && !icm) return;
+          const go = ev.target.closest('[data-w-go]'), mv = ev.target.closest('[data-w-move]'), exp = ev.target.closest('[data-w-exp]'), icm = ev.target.closest('[data-w-ic]'), sett = ev.target.closest('[data-w-sett]');
+          if (!go && !mv && !exp && !icm && !sett) return;
           close();
+          if (sett) return F.settlement(sett.dataset.wSett);
           if (go) ({ in: () => F.walletMove(w), adjust: () => walletAdjust(w), convert: () => walletConvert(w), expense: () => F.expense(null, { paymentMethod: 'ic', currency: 'JPY' }) })[go.dataset.wGo]();
           else if (mv) F.walletMove(w, mv.dataset.wMove);
           else if (icm) F.walletMove('ic', icm.dataset.wIc);
@@ -697,7 +923,9 @@
       '<div class="xv__rows">' + row('Categoría', esc(c[1] + ' ' + c[0])) + row('Pagado con', pay ? esc(pay[1] + ' ' + pay[0]) : '') + row('Ciudad', city ? esc(city.name) : '') + row('Lugar', e.placeName ? esc(e.placeName) : '') +
         row('Pagó', multi && e.paidById && s.travelers[e.paidById] ? esc(s.travelers[e.paidById].name) : '') +
         row('Para quién', multi && parts.length ? parts.map((x) => esc(s.travelers[x].name) + ' <span class="mono">' + U.money(e.amount / parts.length, e.currency) + '</span>').join('<br>') : '') +
-        row('Tax free', e.taxFree ? '🛍️ Sí' : '') + row('Notas', e.notes ? '<span class="pre">' + esc(e.notes) + '</span>' : '') + '</div>' +
+        row('Tax free', e.taxFree ? '🛍️ Sí' : '') + row('Notas', e.notes ? '<span class="pre">' + esc(e.notes) + '</span>' : '') +
+        (function () { const cv = coveredOf(e); return cv ? row('Te lo han pagado', '💝 ' + (cv.full ? 'Todo' : U.money(cv.amount, e.currency)) + (cv.from ? ' · ' + esc(cv.from) : '')) : ''; })() + '</div>' +
+      '<div class="row row--center">' + UI.btn('💝 Me lo han pagado', { size: 'sm', variant: 'ghost', data: { act: 'newRefund', exp: e.id } }) + '</div>' +
       '<p class="xv__lock small muted">🔒 Es de un día anterior: está bloqueado para no cambiarlo sin querer.</p></div>';
     const close = UI.sheet({
       title: 'Gasto', body: body,

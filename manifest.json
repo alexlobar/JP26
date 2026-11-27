@@ -1,7 +1,7 @@
 {
   "name": "Japón Travel",
   "short_name": "Japón",
-  "description": "Planificador personal para un viaje a Japón: itinerario, Modo viaje, restaurantes cerca y gastos. Offline.",
+  "description": "Planificador personal para un viaje a Japón: itinerario, Modo viaje, gastos, conversor y frases. Funciona sin conexión.",
   "lang": "es",
   "dir": "ltr",
   "start_url": "./index.html",
@@ -16,6 +16,11 @@
     "method": "GET",
     "params": { "title": "title", "text": "text", "url": "url" }
   },
+  "shortcuts": [
+    { "name": "Conversor ¥ → €", "short_name": "¥ → €", "description": "Pasar yenes a euros", "url": "./index.html#/convert", "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }] },
+    { "name": "Nuevo gasto", "short_name": "Gasto", "description": "Apuntar un gasto", "url": "./index.html#/expenses?add=1", "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }] },
+    { "name": "Frases", "short_name": "Frases", "description": "Frases en japonés", "url": "./index.html#/phrases", "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }] }
+  ],
   "icons": [
     {
       "src": "icon.svg",

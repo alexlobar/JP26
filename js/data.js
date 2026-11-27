@@ -339,7 +339,7 @@ JT.data = (function () {
   function emptyCollections() {
     return {
       travelers: {}, cities: {}, days: {}, activities: {}, places: {}, restaurants: {}, expenses: {}, notes: {},
-      reservations: {}, transports: {}, checklists: {}, checklistItems: {}, infoArticles: {}, phrases: {}, docs: {}, gifts: {}, foods: {}, suicaMoves: {}, cashMoves: {}, quickExpenses: {}, lockers: {}, settlements: {}, stamps: {}, shipments: {}
+      reservations: {}, transports: {}, checklists: {}, checklistItems: {}, infoArticles: {}, phrases: {}, docs: {}, gifts: {}, foods: {}, suicaMoves: {}, cashMoves: {}, quickExpenses: {}, lockers: {}, settlements: {}, stamps: {}, shipments: {}, refunds: {}
     };
   }
 
