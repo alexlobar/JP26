@@ -547,6 +547,12 @@ strong > .eur, b > .eur, .stat__value > .eur, .wcard__bal > .eur, .exp__amount .
 .accent > .eur, .success > .eur, .warn > .eur { color: var(--faint); }
 .suica__row .grow small.block { white-space: normal; }
 .amt, .eur { cursor: pointer; }
+/* ── v1.24.0 ── */
+.cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cmp .input { font-size: 18px; }
+.cmp__out { margin: 0; font-size: 15px; font-weight: 700; line-height: 1.4; }
+.sumcity { margin-bottom: 12px; }
+.dclose__bk { gap: 8px; padding-top: 6px; border-top: 1px dashed var(--border); flex-wrap: wrap; }
 /* ── v1.23.0 ── */
 /* Filtros de gastos */
 .fbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }

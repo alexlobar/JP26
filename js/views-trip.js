@@ -239,7 +239,9 @@
     // Copia de seguridad: los datos sólo viven en este navegador.
     const last = SV.lastExport(), daysAgo = last ? Math.floor((Date.now() - last) / 86400000) : null;
     const own = ['activities', 'reservations', 'transports', 'expenses', 'places', 'restaurants', 'notes'].some((c) => Object.values(s[c]).some((x) => !x.isSample));
-    if (own && (daysAgo === null || daysAgo >= 7))
+    // Durante el viaje, cada 2 días (cada día apuntas más cosas); antes y después, cada semana.
+    const every = t.phase === 'during' ? 2 : 7;
+    if (own && (daysAgo === null || daysAgo >= every))
       out.push(UI.banner('warn', 'download', 'Haz una copia de seguridad', daysAgo === null ? 'Aún no has exportado ninguna. Tus datos sólo están en este móvil.' : 'La última es de hace ' + daysAgo + ' días.',
         { action: UI.btn('Exportar', { size: 'sm', variant: 'secondary', data: { act: 'exportJson' } }) }));
     if (Object.values(s.expenses).some((e) => e.currency !== s.trip.mainCurrency) && !SV.rates())
@@ -764,7 +766,10 @@
     Object.values(s.expenses).filter((e) => e.date >= s.trip.startDate && e.date <= day.date).forEach((e) => { const v = U.convert(e.amount, e.currency, main, rates); if (v !== null) byDay[e.date] = (byDay[e.date] || 0) + v; });
     const top = Object.keys(byDay).sort((a, b) => byDay[b] - byDay[a])[0];
     const topTxt = top ? (top === day.date ? '🔺 Hoy es el día más caro del viaje' : 'Día más caro: ' + U.fmtShort(top) + ' · ' + U.money(byDay[top], main)) : '';
-    return '<div class="dclose"><div class="dclose__row">' + tiles.join('') + '</div>' + (topTxt ? '<small class="muted">' + esc(topTxt) + '</small>' : '') + '</div>';
+    // Copia de seguridad: durante el viaje, si la última tiene 2 días o más, aquí mismo con su botón.
+    const last = SV.lastExport(), ago = last ? Math.floor((Date.now() - last) / 86400000) : null;
+    const backup = ago === null || ago >= 2 ? '<div class="row row--between dclose__bk"><small class="warn">💾 ' + (ago === null ? 'Aún no has hecho ninguna copia de seguridad' : 'Última copia hace ' + ago + ' días') + '</small>' + UI.btn('Hacer copia', { icon: 'download', size: 'sm', variant: 'secondary', data: { act: 'exportJson' } }) + '</div>' : '';
+    return '<div class="dclose"><div class="dclose__row">' + tiles.join('') + '</div>' + (topTxt ? '<small class="muted">' + esc(topTxt) + '</small>' : '') + backup + '</div>';
   }
 
   /** Tarjeta «¿Qué tal hoy?»: por la noche en Inicio y en el Modo viaje. */

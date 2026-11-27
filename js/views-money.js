@@ -35,10 +35,41 @@
       html: UI.header({ back: true, title: 'Conversor', subtitle: st.dir === 'jpy' ? 'Yenes → ' + (other === 'EUR' ? 'euros' : other) : (other === 'EUR' ? 'Euros' : other) + ' → yenes' }) +
         '<div class="convpage">' + C.quickConverter() +
         (rates ? '<div class="chips convpage__quick">' + quick.map((v) => '<button type="button" class="chip chip--btn" data-act="convQuick" data-v="' + v + '"><span>' + (st.dir === 'jpy' ? U.money(v, 'JPY') : U.money(v, other)) + '</span></button>').join('') + '</div>' : '') +
+        (rates ? cmpCard() : '') +
         '<small class="faint center block">' + (rates ? (rates.source === 'manual' ? 'Tipo manual' : 'Tipo del BCE' + (rates.date ? ' del ' + U.fmtShort(rates.date) : '') + (rates.rounding ? ' · yen a la baja ' + (rates.rounding === 'down2' ? '−2' : '−1') : '')) + '. Funciona sin conexión.' : '') + '</small></div>',
       mount: function (root) { const i = root.querySelector('.conv__in'); if (i && !st.value) setTimeout(() => i.focus(), 50); }
     };
   };
+  /** «Apuntar este gasto»: abre el gasto con el importe del conversor, en la moneda que escribiste. */
+  A.convToExpense = function () {
+    const st = JT.uiState.conv || {}, n = U.parseAmount(st.value || '');
+    if (!n) return UI.toast('Escribe primero un importe en el conversor');
+    const main = S.get().trip.mainCurrency, other = main === 'JPY' ? 'EUR' : main;
+    F.expense(null, { amount: n, currency: st.dir === 'jpy' ? 'JPY' : other });
+  };
+
+  /* Comparar con España: precio aquí (¥) frente a lo que costaría allí (€). */
+  function cmpResult() {
+    const c = JT.uiState.cmp || {}, jp = U.parseAmount(c.jp || ''), es = U.parseAmount(c.es || '');
+    if (!jp || !es) return 'Escribe los dos precios y te digo dónde sale más barato.';
+    const jpEur = U.convert(jp, 'JPY', 'EUR', SV.rates());
+    if (jpEur === null) return 'Sin tipo de cambio guardado.';
+    const diff = es - jpEur, pct = Math.round(Math.abs(diff) / es * 100);
+    if (Math.abs(diff) < 0.01 * es) return '≈ Lo mismo: ' + U.money(jpEur, 'EUR') + ' aquí frente a ' + U.money(es, 'EUR') + ' en España.';
+    return diff > 0 ? '✅ Aquí te ahorras un ' + pct + ' % (' + U.money(diff, 'EUR') + '): ' + U.money(jpEur, 'EUR') + ' frente a ' + U.money(es, 'EUR') + ' en España.'
+      : '⚠️ Aquí es un ' + pct + ' % más caro (' + U.money(-diff, 'EUR') + ' más): ' + U.money(jpEur, 'EUR') + ' frente a ' + U.money(es, 'EUR') + ' en España.';
+  }
+  function cmpCard() {
+    const c = JT.uiState.cmp || (JT.uiState.cmp = {}), conv = JT.uiState.conv || {};
+    if (!c.jp && conv.dir === 'jpy' && conv.value) c.jp = conv.value;
+    return UI.card('<small class="eyebrow muted">COMPARAR CON ESPAÑA</small>' +
+      '<div class="cmp"><label class="field"><span class="field__label">Precio aquí (¥)</span><input class="input" inputmode="decimal" placeholder="3000" value="' + esc(c.jp || '') + '" data-input="cmpJp" autocomplete="off"></label>' +
+      '<label class="field"><span class="field__label">En España (€)</span><input class="input" inputmode="decimal" placeholder="25" value="' + esc(c.es || '') + '" data-input="cmpEs" autocomplete="off"></label></div>' +
+      '<p class="cmp__out" id="cmpOut" data-noeur>' + esc(cmpResult()) + '</p>', { cls: 'stack-sm' });
+  }
+  JT.changes.cmpJp = (el) => { (JT.uiState.cmp = JT.uiState.cmp || {}).jp = el.value; const o = document.getElementById('cmpOut'); if (o) o.textContent = cmpResult(); };
+  JT.changes.cmpEs = (el) => { (JT.uiState.cmp = JT.uiState.cmp || {}).es = el.value; const o = document.getElementById('cmpOut'); if (o) o.textContent = cmpResult(); };
+
   A.convQuick = function (el) {
     const i = document.querySelector('.conv__in');
     if (!i) return;
@@ -77,9 +108,17 @@
     try { await SV.fetchRates(S.get().trip.mainCurrency); UI.toast('Tipo de cambio actualizado'); JT.app.render(); } catch (e) { UI.toast(e.message); }
   };
 
-  function summary(list) {
-    const s = S.get(), main = s.trip.mainCurrency, rates = SV.rates(), t = S.today();
-    const total = C.moneySum(list), budget = s.trip.totalBudget;
+  /* Resumen por ciudad: los chips de arriba cambian TODO el resumen a esa ciudad (no sólo la lista). */
+  A.sumCity = (el) => { JT.uiState.expenses.sumCity = el.dataset.value || ''; JT.app.render(); };
+  function summary(listAll) {
+    const s = S.get(), main = s.trip.mainCurrency, rates = SV.rates(), t = S.today(), st = JT.uiState.expenses;
+    const order = S.sortedDays().map((d) => d.cityId).filter((v, i, a) => v && s.cities[v] && a.indexOf(v) === i);
+    const withExp = order.filter((id) => listAll.some((e) => e.cityId === id)), hasNone = listAll.some((e) => !e.cityId || !s.cities[e.cityId]);
+    const sel = st.sumCity && (st.sumCity === 'none' ? hasNone : withExp.indexOf(st.sumCity) > -1) ? st.sumCity : '';
+    const list = !sel ? listAll : listAll.filter((e) => (sel === 'none' ? !e.cityId || !s.cities[e.cityId] : e.cityId === sel));
+    const cityChips = withExp.length > 1 || (withExp.length && hasNone) ? UI.filterChips([{ value: '', label: 'Todo el viaje' }].concat(withExp.map((id) => ({ value: id, label: s.cities[id].name }))).concat(hasNone ? [{ value: 'none', label: 'Sin ciudad / antes' }] : []), sel, 'sumCity') : '';
+    const selName = sel === 'none' ? 'Sin ciudad / antes del viaje' : sel ? s.cities[sel].name : '';
+    const total = C.moneySum(list), budget = sel ? (sel !== 'none' && s.cities[sel].budget) || 0 : s.trip.totalBudget;
     const inTrip = list.filter((e) => e.date >= s.trip.startDate && e.date <= s.trip.endDate);
     const nDays = new Set(inTrip.map((e) => e.date)).size;
     const avg = nDays ? C.moneySum(inTrip).total / nDays : 0;
@@ -90,13 +129,16 @@
     };
     const byCat = C.byCategory(list), byCity = group((e) => e.cityId || 'none');
     const byDay = group((e) => (e.date >= s.trip.startDate && e.date <= s.trip.endDate ? e.date : undefined)).sort((a, b) => a[0].localeCompare(b[0]));
-    let html = UI.card('<div class="stats">' + UI.stat(meInfo().multi ? 'Total del viaje (todos)' : 'Total gastado', total.text, '', true) + (budget ? UI.stat('Restante', U.money(budget - total.total, main), Math.round((total.total / budget) * 100) + '% del presupuesto') : '') + '</div>' +
+    let html = (cityChips ? '<div class="sumcity">' + cityChips + '</div>' : '') +
+      UI.card((sel ? '<small class="eyebrow muted">RESUMEN DE ' + esc(selName.toUpperCase()) + '</small>' : '') +
+      '<div class="stats">' + UI.stat(sel ? 'Gastado en ' + selName : meInfo().multi ? 'Total del viaje (todos)' : 'Total gastado', total.text, sel ? list.length + (list.length === 1 ? ' gasto' : ' gastos') : '', true) + (budget ? UI.stat('Restante', U.money(budget - total.total, main), Math.round((total.total / budget) * 100) + '% del presupuesto' + (sel ? ' de la ciudad' : '')) : '') + '</div>' +
       (budget ? UI.progress(total.total / budget, total.total > budget ? 'accent' : 'info') : '') +
       '<div class="stats">' + UI.stat('Hoy', C.moneySum(list.filter((e) => e.date === t.now.date)).text) + UI.stat('Media diaria', U.money(avg, main), nDays ? nDays + ' días con gastos' : 'en el viaje') + '</div>' +
-      (total.extra ? '<small class="warn">Sin convertir: ' + esc(total.extra) + '</small>' : '') + netLine(total.total) + forecast(list, total.total), { cls: 'stack' });
+      (total.extra ? '<small class="warn">Sin convertir: ' + esc(total.extra) + '</small>' : '') + (sel ? '' : netLine(total.total) + forecast(list, total.total)) +
+      (sel ? UI.btn('Ver sus gastos en la lista', { icon: 'list', size: 'sm', variant: 'ghost', data: { act: 'expFilter', k: 'cityId', v: sel === 'none' ? '' : sel } }) : ''), { cls: 'stack' });
     html += ratesInfo(list);
     html += phaseSection(list, total.total);
-    html += refundsSection();
+    if (!sel) html += refundsSection();
     // Reparto de un vistazo (barra de colores) y, debajo, cada categoría con su color y su %.
     const catTotal = byCat.reduce((a, x) => a + x[1], 0);
     html += UI.section('Por categoría', UI.card('<div class="stack">' + C.catStack(list) +
@@ -111,7 +153,7 @@
     // Por ciudad, con la media por día de estancia (para ver qué ciudad sale más cara).
     const daysIn = {};
     S.sortedDays().forEach((d) => { if (d.cityId) daysIn[d.cityId] = (daysIn[d.cityId] || 0) + 1; });
-    html += UI.section('Por ciudad', UI.card(UI.bars(byCity.map(function (x) {
+    if (!sel) html += UI.section('Por ciudad', UI.card(UI.bars(byCity.map(function (x) {
       const c = s.cities[x[0]], nd = c ? daysIn[c.id] : 0;
       return { label: (c ? c.name : 'Sin ciudad / antes del viaje') + (nd ? ' · ' + nd + (nd === 1 ? ' día' : ' días') : ''), value: x[1],
         display: U.money(x[1], main) + (nd ? ' · ' + U.money(x[1] / nd, main) + '/día' : '') + (c && c.budget ? ' / ' + U.money(c.budget, main, true) : ''),

@@ -540,7 +540,9 @@ JT.cards = (function () {
         '<input class="input input--lg conv__in" inputmode="decimal" placeholder="' + (from === 'JPY' ? '1000' : '10') + '" value="' + esc(st.value || '') + '" data-input="quickConv" data-rate="' + rate + '" data-to="' + to + '" aria-label="Importe en ' + from + '" autocomplete="off">' +
         UI.iconBtn('swap', 'Cambiar ' + from + ' ⇄ ' + to, { act: 'convSwap' }) + '</div>' +
       '<div class="conv__out" id="qconvOut">' + (n ? '≈ ' + esc(U.money(n * rate, to)) : 'Escribe un importe en ' + from) + '</div>' +
-      '<div class="conv__ja" id="qconvJa">' + jaPrice(from === 'JPY' ? n : n * rate) + '</div>', { cls: 'stack-sm' });
+      '<div class="conv__ja" id="qconvJa">' + jaPrice(from === 'JPY' ? n : n * rate) + '</div>' +
+      // Lo que acabas de convertir, a Gastos sin volver a escribirlo.
+      '<div class="row row--end">' + UI.btn('Apuntar este gasto', { icon: 'plus', size: 'sm', variant: 'secondary', data: { act: 'convToExpense' } }) + '</div>', { cls: 'stack-sm' });
   }
   JT.changes = JT.changes || {};
   JT.changes.quickConv = function (el) {

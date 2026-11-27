@@ -1115,8 +1115,9 @@
   function syncChecks() {
     const s = S.get(), e = s.emergency || {}, out = [];
     const last = SV.lastExport(), days = last ? Math.floor((Date.now() - last) / 86400000) : null;
-    out.push({ id: 'backup', title: 'Copia de seguridad', ok: days !== null && days < 7,
-      sub: days === null ? 'Aún no has exportado ninguna. Guárdala fuera del móvil (Drive, correo…).' : days < 7 ? 'Hecha hace ' + (days === 0 ? 'menos de un día' : days + (days === 1 ? ' día' : ' días')) + '.' : 'La última es de hace ' + days + ' días.',
+    const every = S.today().phase === 'during' ? 2 : 7; // durante el viaje, cada 2 días
+    out.push({ id: 'backup', title: 'Copia de seguridad', ok: days !== null && days < every,
+      sub: days === null ? 'Aún no has exportado ninguna. Guárdala fuera del móvil (Drive, correo…).' : days < every ? 'Hecha hace ' + (days === 0 ? 'menos de un día' : days + (days === 1 ? ' día' : ' días')) + '.' : 'La última es de hace ' + days + ' días.',
       action: UI.btn('Exportar', { size: 'sm', variant: 'secondary', data: { act: 'exportJson' } }) });
     const filled = (e.allergies && e.allergies.length) || e.allergyOther || e.conditions || e.meds || e.blood || e.insurer || e.contactName;
     out.push({ id: 'sos', title: 'Ficha de emergencia', ok: !!filled, sub: filled ? (e.insurer ? 'Con seguro' : 'Sin seguro apuntado') + (e.contactName ? ' · con contacto' : ' · sin contacto') + '.' : 'Alergias, seguro y a quién avisar, en japonés.',
